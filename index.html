@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_104.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_106.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2943,100 +2943,17 @@ function showLoading(on) {
 const DB = {
   currentUser: null,
   users: [
-    { id:1, username:'admin', password:'1234', name:'Ahmad Dahlan', role:'admin', initials:'AD', active:true },
-    { id:2, username:'manager', password:'1234', name:'Siti Rahimah', role:'manager', initials:'SR', active:true },
-    { id:3, username:'staff', password:'1234', name:'Ali Hassan', role:'staff', initials:'AH', active:true }
+    { id:1, username:'admin', password:'1234', name:'Admin', role:'admin', initials:'AD', active:true }
   ],
-  expenses: [
-    {id:1,date:'2026-04-10',desc:'Substrate bags (1000 units)',cat:'Supplies',amount:780,paid:'Maybank Current',account:'Maybank Current',status:'paid',supplier:'AgriSupply KL',notes:'From AgriSupply KL'},
-    {id:2,date:'2026-04-10',desc:'Electricity bill — grow room',cat:'Utilities',amount:620,paid:'Maybank Current',account:'Maybank Current',status:'paid',supplier:'',notes:''},
-    {id:3,date:'2026-04-09',desc:'Staff wages — Week 14',cat:'Payroll',amount:6800,paid:'Maybank Current',account:'Maybank Current',status:'paid',supplier:'',notes:'14 staff'},
-    {id:4,date:'2026-04-08',desc:'PP bags (2000 pcs)',cat:'Supplies',amount:340,paid:'Cash',account:'Cash',status:'paid',supplier:'PackPro Malaysia',notes:''},
-    {id:5,date:'2026-04-07',desc:'Water bill',cat:'Utilities',amount:180,paid:'Maybank Current',account:'Maybank Current',status:'paid',supplier:'',notes:''},
-    {id:6,date:'2026-04-06',desc:'Delivery van fuel',cat:'Transport',amount:220,paid:'Cash',account:'Cash',status:'paid',supplier:'',notes:'3 trips to KL'},
-    {id:7,date:'2026-04-05',desc:'Calcium carbonate (50kg)',cat:'Supplies',amount:165,paid:'Cash',account:'Cash',status:'paid',supplier:'AgriChem KL',notes:''},
-    {id:8,date:'2026-04-04',desc:'Grow room fan repair',cat:'Maintenance',amount:280,paid:'Cash',account:'Cash',status:'paid',supplier:'FarmEquip MY',notes:'Unit 3 fan'},
-    {id:9,date:'2026-03-31',desc:'Substrate bags (500 units)',cat:'Supplies',amount:390,paid:'Maybank Current',account:'Maybank Current',status:'paid',supplier:'AgriSupply KL',notes:''},
-    {id:10,date:'2026-03-29',desc:'Electricity bill',cat:'Utilities',amount:590,paid:'Maybank Current',account:'Maybank Current',status:'paid',supplier:'',notes:''},
-    {id:11,date:'2026-03-28',desc:'Staff wages — Week 13',cat:'Payroll',amount:6800,paid:'Maybank Current',account:'Maybank Current',status:'paid',supplier:'',notes:''},
-    {id:12,date:'2026-03-25',desc:'Shiitake spawn (20 bags)',cat:'Supplies',amount:600,paid:'Maybank Current',account:'Maybank Current',status:'paid',supplier:'MycoFarm Supplies',notes:''},
-  ],
-  sales: [
-    {id:1,date:'2026-04-10',customer:'Mydin Wholesale',product:'Oyster Mushroom',qty:160,price:20,total:3200,type:'Wholesale',payment:'Maybank Current',account:'Maybank Current',notes:''},
-    {id:2,date:'2026-04-09',customer:'Green Garden Restaurant',product:'Shiitake Mushroom',qty:30,price:45,total:1350,type:'Restaurant',payment:'Maybank Current',account:'Maybank Current',notes:'Inv #INV-2026-014'},
-    {id:3,date:'2026-04-08',customer:'Aeon Mall Market',product:'Mixed Pack',qty:50,price:25,total:1250,type:'Market',payment:'Cash',account:'Cash',notes:'Weekend market'},
-    {id:4,date:'2026-04-07',customer:'The Farm Table',product:'King Oyster',qty:20,price:55,total:1100,type:'Restaurant',payment:'Maybank Current',account:'Maybank Current',notes:''},
-    {id:5,date:'2026-04-06',customer:'Local Retailer (Chow Kit)',product:'Oyster Mushroom',qty:40,price:22,total:880,type:'Retail',payment:'Cash',account:'Cash',notes:''},
-    {id:6,date:'2026-04-05',customer:'Giant Hypermarket',product:'Oyster Mushroom',qty:200,price:18,total:3600,type:'Wholesale',payment:'Maybank Current',account:'Maybank Current',notes:'Inv #INV-2026-013'},
-    {id:7,date:'2026-04-04',customer:'Harvest Moon Café',product:'Lion\'s Mane',qty:10,price:80,total:800,type:'Restaurant',payment:'Maybank Current',account:'Maybank Current',notes:''},
-    {id:8,date:'2026-04-03',customer:'Online Order #220',product:'Dried Mushroom',qty:15,price:60,total:900,type:'Retail',payment:'Maybank Current',account:'Maybank Current',notes:''},
-    {id:9,date:'2026-03-31',customer:'Mydin Wholesale',product:'Oyster Mushroom',qty:150,price:20,total:3000,type:'Wholesale',payment:'Maybank Current',account:'Maybank Current',notes:''},
-    {id:10,date:'2026-03-28',customer:'Green Garden Restaurant',product:'Shiitake Mushroom',qty:25,price:45,total:1125,type:'Restaurant',payment:'Maybank Current',account:'Maybank Current',notes:''},
-  ],
-  invoices: [
-    {id:1,no:'INV-2026-014',date:'2026-04-09',due:'2026-04-23',customer:'Green Garden Restaurant',address:'Jalan Bukit Bintang, KL',product:'Shiitake Mushroom',qty:30,unit:45,total:1350,status:'Pending',notes:'Net 14 days'},
-    {id:2,no:'INV-2026-013',date:'2026-04-05',due:'2026-04-19',customer:'Giant Hypermarket',address:'Mid Valley Megamall, KL',product:'Oyster Mushroom',qty:200,unit:18,total:3600,status:'Pending',notes:'Net 14 days'},
-    {id:3,no:'INV-2026-012',date:'2026-03-28',due:'2026-04-11',customer:'The Farm Table',address:'Bangsar, KL',product:'King Oyster',qty:80,unit:55,total:4400,status:'Overdue',notes:''},
-    {id:4,no:'INV-2026-011',date:'2026-03-20',due:'2026-04-03',customer:'Sunway Pyramid Grocer',address:'Sunway, Selangor',product:'Oyster Mushroom',qty:300,unit:19,total:5700,status:'Paid',account:'Maybank Current',notes:''},
-    {id:5,no:'INV-2026-010',date:'2026-03-15',due:'2026-03-29',customer:'Harvest Moon Café',address:'Damansara, KL',product:'Lion\'s Mane',qty:30,unit:80,total:2400,status:'Paid',account:'Maybank Current',notes:''},
-    {id:6,no:'INV-2026-009',date:'2026-03-01',due:'2026-03-15',customer:'Parkson F&B',address:'KLCC, KL',product:'Dried Mushroom',qty:50,unit:60,total:3000,status:'Paid',account:'Maybank Current',notes:''},
-    {id:7,no:'INV-2026-008',date:'2026-02-20',due:'2026-03-06',customer:'Green Garden Restaurant',address:'Jalan Bukit Bintang, KL',product:'Shiitake Mushroom',qty:40,unit:45,total:1800,status:'Paid',account:'Maybank Current',notes:''},
-  ],
-  inventory: [
-    {id:1,name:'Oyster Mushroom Spawn',cat:'Spawn',unit:'bags',stock:42,reorder:20,cost:18,supplier:'MycoFarm Supplies'},
-    {id:2,name:'Shiitake Spawn',cat:'Spawn',unit:'bags',stock:8,reorder:15,cost:22,supplier:'MycoFarm Supplies'},
-    {id:3,name:'Straw Substrate',cat:'Substrate',unit:'kg',stock:180,reorder:100,cost:1.2,supplier:'AgriSupply KL'},
-    {id:4,name:'Sawdust Substrate',cat:'Substrate',unit:'kg',stock:95,reorder:80,cost:0.8,supplier:'AgriSupply KL'},
-    {id:5,name:'Polypropylene Bags (17cm)',cat:'Packaging',unit:'pcs',stock:320,reorder:500,cost:0.45,supplier:'PackPro Malaysia'},
-    {id:6,name:'Polypropylene Bags (25cm)',cat:'Packaging',unit:'pcs',stock:680,reorder:400,cost:0.55,supplier:'PackPro Malaysia'},
-    {id:7,name:'Retail Packing Trays',cat:'Packaging',unit:'pcs',stock:1200,reorder:500,cost:0.30,supplier:'PackPro Malaysia'},
-    {id:8,name:'Calcium Carbonate',cat:'Chemicals',unit:'kg',stock:0,reorder:20,cost:3.2,supplier:'AgriChem KL'},
-    {id:9,name:'Hydrated Lime',cat:'Chemicals',unit:'kg',stock:35,reorder:20,cost:2.5,supplier:'AgriChem KL'},
-    {id:10,name:'Pasteurization Drum',cat:'Equipment',unit:'pcs',stock:3,reorder:1,cost:850,supplier:'FarmEquip MY'},
-    {id:11,name:'Grow Bags (1kg)',cat:'Packaging',unit:'pcs',stock:850,reorder:300,cost:0.60,supplier:'PackPro Malaysia'},
-    {id:12,name:'King Oyster Spawn',cat:'Spawn',unit:'bags',stock:15,reorder:10,cost:28,supplier:'MycoFarm Supplies'},
-  ],
-  staff: [
-    {id:1,name:'Ahmad Dahlan',role:'Farm Manager',dept:'Administration',salary:4500,ic:'840512-01-XXXX',phone:'+60 12-345 6789',join:'2020-01-15',type:'Full-time'},
-    {id:2,name:'Siti Rahimah',role:'Operations Manager',dept:'Administration',salary:3800,ic:'880923-05-XXXX',phone:'+60 11-234 5678',join:'2021-03-01',type:'Full-time'},
-    {id:3,name:'Raju Suppiah',role:'Senior Farm Worker',dept:'Production',salary:2200,ic:'900615-08-XXXX',phone:'+60 16-789 0123',join:'2020-06-10',type:'Full-time'},
-    {id:4,name:'Nurul Huda',role:'Farm Worker',dept:'Production',salary:1800,ic:'960303-04-XXXX',phone:'+60 17-456 7890',join:'2022-01-05',type:'Full-time'},
-    {id:5,name:'Chong Wei Liang',role:'Harvest Supervisor',dept:'Harvesting',salary:2500,ic:'870710-10-XXXX',phone:'+60 12-678 9012',join:'2020-09-20',type:'Full-time'},
-    {id:6,name:'Fatimah Zahra',role:'Harvest Worker',dept:'Harvesting',salary:1700,ic:'990820-06-XXXX',phone:'+60 18-567 8901',join:'2023-04-10',type:'Full-time'},
-    {id:7,name:'Kannan Pillai',role:'Packaging Worker',dept:'Packaging',salary:1700,ic:'920115-07-XXXX',phone:'+60 14-345 6789',join:'2021-11-15',type:'Full-time'},
-    {id:8,name:'Azrina Mat',role:'Packaging Worker',dept:'Packaging',salary:1700,ic:'950430-02-XXXX',phone:'+60 19-234 5678',join:'2022-06-01',type:'Part-time'},
-    {id:9,name:'Hamid Ramli',role:'Delivery Driver',dept:'Delivery',salary:80,payType:'trip',ic:'850228-14-XXXX',phone:'+60 11-890 1234',join:'2021-07-20',type:'Full-time'},
-    {id:10,name:'Tan Ah Kow',role:'Farm Worker',dept:'Production',salary:1800,ic:'910615-12-XXXX',phone:'+60 16-012 3456',join:'2023-01-10',type:'Full-time'},
-  ],
-  customers: [
-    {id:1,name:'Mydin Wholesale',type:'Wholesale',contact:'Encik Farid',phone:'+60 3-7626 0000',email:'procurement@mydin.com.my',address:'Mydin Hypermarket, Jalan Masjid India, KL',notes:'Net 30 payment terms. Orders every 2 weeks.'},
-    {id:2,name:'Green Garden Restaurant',type:'Restaurant',contact:'Chef Ahmad',phone:'+60 12-388 7766',email:'chef@greengarden.my',address:'Lot 12, Jalan Bukit Bintang, 55100 KL',notes:'Prefers fresh delivery Tuesday & Friday mornings.'},
-    {id:3,name:'The Farm Table',type:'Restaurant',contact:'Ms. Lena',phone:'+60 16-223 4455',email:'orders@farmtable.my',address:'29 Jalan Telawi 3, Bangsar, 59100 KL',notes:'Premium buyer. Pays promptly.'},
-    {id:4,name:'Giant Hypermarket',type:'Wholesale',contact:'Mr. David Tan',phone:'+60 3-2282 8888',email:'fvprocure@giant.com.my',address:'Mid Valley Megamall, 58000 KL',notes:'Net 14. Requires delivery note with every order.'},
-    {id:5,name:'Harvest Moon Café',type:'Restaurant',contact:'Owner: Priya',phone:'+60 17-980 1122',email:'priya@harvestmoon.my',address:'18 Jalan SS2/75, Petaling Jaya, 47300 Selangor',notes:'Small but loyal. Lion\'s Mane specialist.'},
-    {id:6,name:'Aeon Mall Market',type:'Market',contact:'Market Coordinator',phone:'+60 3-7726 8888',email:'market@aeon.com.my',address:'AEON Mall, Jalan Bukit Tinggi, 41000 Klang',notes:'Weekend market booth only.'},
-    {id:7,name:'Sunway Pyramid Grocer',type:'Retail',contact:'Ms. Sarah',phone:'+60 3-5637 8888',email:'produce@sunwaygrocer.my',address:'Sunway Pyramid, Bandar Sunway, 47500 Selangor',notes:'Requires food-grade packaging with labels.'},
-    {id:8,name:'Parkson F&B',type:'Wholesale',contact:'Procurement Team',phone:'+60 3-2610 6688',email:'fb@parkson.com.my',address:'KLCC, Jalan Ampang, 50450 KL',notes:'Quarterly contract. Net 30.'},
-  ],
-  products: [
-    {id:1,name:'Oyster Mushroom',cat:'Fresh',unit:'kg',priceWholesale:18,priceRetail:25,priceRestaurant:22,priceMarket:24,desc:'Grey oyster, Grade A. Harvest-to-delivery within 24h.',status:'Active'},
-    {id:2,name:'Shiitake Mushroom',cat:'Fresh',unit:'kg',priceWholesale:38,priceRetail:50,priceRestaurant:45,priceMarket:48,desc:'Premium shiitake, thick cap.',status:'Active'},
-    {id:3,name:'King Oyster',cat:'Fresh',unit:'kg',priceWholesale:45,priceRetail:65,priceRestaurant:55,priceMarket:58,desc:'Pleurotus eryngii, firm texture.',status:'Active'},
-    {id:4,name:'Lion\'s Mane',cat:'Fresh',unit:'kg',priceWholesale:60,priceRetail:90,priceRestaurant:80,priceMarket:85,desc:'Specialty mushroom, limited stock.',status:'Active'},
-    {id:5,name:'Dried Oyster Mushroom',cat:'Dried',unit:'kg',priceWholesale:55,priceRetail:75,priceRestaurant:65,priceMarket:70,desc:'Sun-dried, 10:1 ratio to fresh.',status:'Active'},
-    {id:6,name:'Mixed Mushroom Pack',cat:'Bundle',unit:'pack',priceWholesale:18,priceRetail:28,priceRestaurant:24,priceMarket:26,desc:'500g pack: oyster + shiitake mix.',status:'Active'},
-  ],
-  accounts: [
-    {id:1, name:'Cash', type:'cash', description:'Cash on hand / petty cash'},
-    {id:2, name:'Maybank Current', type:'bank', description:'Maybank account ending 4821'},
-  ],
-  suppliers: [
-    {id:1,name:'AgriSupply KL',cat:'Substrate',contact:'Encik Razak',phone:'+60 3-6250 1188',email:'sales@agrisupply.com.my',address:'Jalan Kepong, 52100 KL',terms:'Cash on delivery',notes:'Main substrate supplier. Delivers Mon & Thu.'},
-    {id:2,name:'MycoFarm Supplies',cat:'Spawn',contact:'Mr. Lim',phone:'+60 12-334 5678',email:'order@mycofarm.my',address:'Puchong Industrial Park, Selangor',terms:'Net 14',notes:'Best price on oyster spawn. Min order 20 bags.'},
-    {id:3,name:'PackPro Malaysia',cat:'Packaging',contact:'Ms. Wong',phone:'+60 3-8961 2200',email:'sales@packpro.com.my',address:'Shah Alam, Selangor',terms:'Net 30',notes:'PP bags, grow bags, retail trays.'},
-    {id:4,name:'AgriChem KL',cat:'Chemicals',contact:'Encik Hafiz',phone:'+60 3-6277 9900',email:'info@agrichem.my',address:'Segambut, KL',terms:'Cash',notes:'Calcium carbonate and hydrated lime.'},
-    {id:5,name:'FarmEquip MY',cat:'Equipment',contact:'David',phone:'+60 11-2233 4455',email:'david@farmequip.my',address:'Klang, Selangor',terms:'Net 7',notes:'Pasteurization drums, fans, shelving.'},
-  ],
+  expenses: [],
+  sales: [],
+  invoices: [],
+  inventory: [],
+  staff: [],
+  customers: [],
+  products: [],
+  accounts: [],
+  suppliers: [],
   payrollRuns: [],
   wageAdvances: [],
   transfers: [],
@@ -3054,7 +2971,7 @@ const DB = {
   maintenance: [],
   trips: [],
   routeRates: [],
-  nextIds: { expenses:13, sales:11, invoices:8, inventory:13, staff:11, customers:9, products:7, accounts:3, users:4, suppliers:6, payrollRuns:1, wageAdvances:1, transfers:1, cashflowItems:1, loans:1, claims:1, recurringExpenses:1, batches:1, harvests:1, packings:1, packingRates:1, salesOrders:1, lorries:1, refuels:1, maintenance:1, trips:1, routeRates:1 }
+  nextIds: { expenses:1, sales:1, invoices:1, inventory:1, staff:1, customers:1, products:1, accounts:1, users:2, suppliers:1, payrollRuns:1, wageAdvances:1, transfers:1, cashflowItems:1, loans:1, claims:1, recurringExpenses:1, batches:1, harvests:1, packings:1, packingRates:1, salesOrders:1, lorries:1, refuels:1, maintenance:1, trips:1, routeRates:1 }
 };
 
 // ============================================================
