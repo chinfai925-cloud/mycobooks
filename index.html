@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_106.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_108.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -237,14 +237,14 @@ tr:hover td { background:var(--bg); }
     </div>
     <div class="login-field">
       <label>Username</label>
-      <input type="text" id="login-user" placeholder="Enter username" value="admin">
+      <input type="text" id="login-user" placeholder="Username" autocomplete="off">
     </div>
     <div class="login-field">
       <label>Password</label>
-      <input type="password" id="login-pass" placeholder="Enter password" value="1234">
+      <input type="password" id="login-pass" placeholder="Password" autocomplete="off">
     </div>
     <button class="login-btn" onclick="doLogin()">Sign In</button>
-    <p class="login-hint">Quick login — select a role</p>
+
 
   </div>
 </div>
@@ -2942,9 +2942,7 @@ function showLoading(on) {
 // ============================================================
 const DB = {
   currentUser: null,
-  users: [
-    { id:1, username:'admin', password:'1234', name:'Admin', role:'admin', initials:'AD', active:true }
-  ],
+  users: [],
   expenses: [],
   sales: [],
   invoices: [],
@@ -2971,7 +2969,7 @@ const DB = {
   maintenance: [],
   trips: [],
   routeRates: [],
-  nextIds: { expenses:1, sales:1, invoices:1, inventory:1, staff:1, customers:1, products:1, accounts:1, users:2, suppliers:1, payrollRuns:1, wageAdvances:1, transfers:1, cashflowItems:1, loans:1, claims:1, recurringExpenses:1, batches:1, harvests:1, packings:1, packingRates:1, salesOrders:1, lorries:1, refuels:1, maintenance:1, trips:1, routeRates:1 }
+  nextIds: { expenses:1, sales:1, invoices:1, inventory:1, staff:1, customers:1, products:1, accounts:1, users:1, suppliers:1, payrollRuns:1, wageAdvances:1, transfers:1, cashflowItems:1, loans:1, claims:1, recurringExpenses:1, batches:1, harvests:1, packings:1, packingRates:1, salesOrders:1, lorries:1, refuels:1, maintenance:1, trips:1, routeRates:1 }
 };
 
 // ============================================================
