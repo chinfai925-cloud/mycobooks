@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_110.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_111.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -215,30 +215,29 @@ tr:hover td { background:var(--bg); }
 
 /* RESPONSIVE: Mobile */
 @media (max-width: 768px) {
+  #app { flex-direction:column; }
   .sidebar { position:fixed; left:-220px; z-index:100; transition:left 0.25s; top:0; height:100vh; }
   .sidebar.open { left:0; box-shadow:4px 0 20px rgba(0,0,0,0.3); }
-  .sidebar-overlay { display:block !important; }
-  .main-content { margin-left:0; }
-  .metrics-grid { grid-template-columns:1fr 1fr; }
+  .sidebar-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:99; }
+  .sidebar-overlay.active { display:block; }
+  .main-content { margin-left:0; padding-top:0; width:100%; }
+  .mobile-topbar { display:flex !important; }
+  .metrics-grid { grid-template-columns:1fr 1fr; gap:8px; }
   .grid-2 { grid-template-columns:1fr; }
   .form-grid-2 { grid-template-columns:1fr; }
   .form-grid-3 { grid-template-columns:1fr; }
   .page { padding:12px; }
   .page-header { flex-direction:column; align-items:flex-start; gap:10px; margin-bottom:14px; }
   .page-header .flex-row { flex-wrap:wrap; gap:6px; }
-  .mobile-topbar { display:flex !important; }
   .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
-  .modal { width:95vw !important; max-width:95vw !important; max-height:90vh; overflow-y:auto; }
+  .modal { width:95vw !important; max-width:95vw !important; max-height:88vh; overflow-y:auto; }
   .form-grid { grid-template-columns:1fr; }
   .customers-grid { grid-template-columns:1fr; }
-  .metrics-grid { gap:8px; }
-  .metric-card { padding:12px; }
-  .btn { font-size:12px; padding:7px 12px; }
   .card-head { flex-wrap:wrap; gap:8px; }
 }
-.sidebar-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:99; }
-.mobile-topbar { display:none; align-items:center; gap:12px; padding:10px 14px; background:var(--surface); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:10; }
-.hamburger { background:none; border:none; cursor:pointer; padding:4px; color:var(--text); font-size:20px; line-height:1; }
+.mobile-topbar { display:none; align-items:center; gap:12px; padding:10px 14px; background:#1a2e1e; border-bottom:1px solid #2d4a32; position:sticky; top:0; z-index:50; flex-shrink:0; }
+.hamburger { background:none; border:none; cursor:pointer; padding:4px 6px; color:#d4e8d8; font-size:22px; line-height:1; }
+.mobile-topbar-title { font-size:15px; font-weight:600; color:#fff; }
 </style>
 </head>
 <body>
@@ -267,13 +266,13 @@ tr:hover td { background:var(--bg); }
 
 <!-- MAIN APP -->
 <div id="app">
-  <!-- Mobile overlay -->
-  <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
   <!-- Mobile top bar -->
   <div class="mobile-topbar">
     <button class="hamburger" onclick="toggleSidebar()">☰</button>
-    <span style="font-size:15px;font-weight:600;color:var(--green);">🍄 MycoBooks</span>
+    <span class="mobile-topbar-title">🍄 MycoBooks</span>
   </div>
+  <!-- Mobile overlay -->
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
   <!-- SIDEBAR -->
   <div class="sidebar" id="sidebar">
     <div class="sidebar-brand">
@@ -3132,13 +3131,13 @@ function toggleSidebar() {
   const s = document.getElementById('sidebar');
   const o = document.getElementById('sidebar-overlay');
   s.classList.toggle('open');
-  if (o) o.style.display = s.classList.contains('open') ? 'block' : 'none';
+  if (o) o.classList.toggle('active', s.classList.contains('open'));
 }
 function closeSidebar() {
   const s = document.getElementById('sidebar');
   const o = document.getElementById('sidebar-overlay');
   s.classList.remove('open');
-  if (o) o.style.display = 'none';
+  if (o) o.classList.remove('active');
 }
 
 function navigate(page, el) {
