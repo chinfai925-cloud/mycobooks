@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0045)file:///C:/Users/CFL/Downloads/mycobooks.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_103.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2854,7 +2854,9 @@ async function sbSaveAll() {
       const cols = COLS[key] || null;
 
       // Delete all existing rows first
-      await fetch(`${SUPABASE_URL}/rest/v1/${tbl}?id=neq.-1`, { method:'DELETE', headers:hdrs });
+      // Delete all existing rows first
+      const delRes = await fetch(`${SUPABASE_URL}/rest/v1/${tbl}?id=neq.-1`, { method:'DELETE', headers:hdrs });
+      if (!delRes.ok) console.warn(`DELETE ${tbl}:`, await delRes.text());
 
       if (records.length === 0) continue;
 
@@ -2886,8 +2888,9 @@ async function sbSaveAll() {
         });
         if (!res.ok) {
           const txt = await res.text();
+          console.error(`Insert ${tbl} error:`, txt);
           errCount++;
-          errTables.push(`${tbl}: ${txt.slice(0,150)}`);
+          errTables.push(`${tbl}: ${txt.slice(0,200)}`);
           break;
         }
       }
