@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_115.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_116.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -225,6 +225,16 @@ tr:hover td { background:var(--bg); }
   .metrics-grid { grid-template-columns:1fr 1fr !important; gap:8px; }
   /* Per lorry stats */
   div[style*="repeat(auto-fill,minmax(130px"] { grid-template-columns:1fr 1fr !important; }
+  /* Hide less important table columns on mobile */
+  .hide-mobile { display:none !important; }
+  /* Compact table cells */
+  table td, table th { padding:6px 6px !important; font-size:11px !important; }
+  /* Payroll grid stacks */
+  .grid-2 { grid-template-columns:1fr !important; }
+  /* User management permissions table - scrollable */
+  #perm-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  /* Loans and cashflow - wrap action buttons */
+  .flex-row .btn { font-size:11px; padding:5px 8px; }
   .grid-2 { grid-template-columns:1fr; }
   .form-grid-2 { grid-template-columns:1fr; }
   .form-grid-3 { grid-template-columns:1fr; }
@@ -1241,6 +1251,7 @@ tr:hover td { background:var(--bg); }
         <div class="card">
           <div class="card-head"><span class="card-title">Role Permissions</span></div>
           <div class="card-body" style="padding:0;">
+            <div id="perm-table-wrap" class="table-wrap">
             <table style="width:100%;border-collapse:collapse;font-size:12px;">
               <thead><tr>
                 <th style="padding:8px 12px;background:var(--bg);border-bottom:1px solid var(--border);text-align:left;font-size:11px;color:var(--text2);">Permission</th>
@@ -1252,6 +1263,7 @@ tr:hover td { background:var(--bg); }
               </tr></thead>
               <tbody id="perm-table-body"></tbody>
             </table>
+            </div>
           </div>
         </div>
       </div>
