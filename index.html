@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_116.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_117.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1243,7 +1243,7 @@ tr:hover td { background:var(--bg); }
         </div>
         <button class="btn btn-primary" onclick="openUserModal()">+ Add User</button>
       </div>
-      <div class="grid-2">
+      <div style="display:flex;flex-direction:column;gap:16px;">
         <div class="card">
           <div class="card-head"><span class="card-title">Users</span></div>
           <div id="users-list"></div>
@@ -9153,18 +9153,19 @@ function renderUsers() {
 
   // Users list
   document.getElementById('users-list').innerHTML = DB.users.map(u => `
-    <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);">
-      <div class="avatar" style="background:var(--green-light);color:var(--green);font-size:11px;width:34px;height:34px;">
-        ${u.initials || u.name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}
-      </div>
-      <div style="flex:1;">
-        <div style="font-weight:500;font-size:13px;">${u.name} ${u.id === DB.currentUser.id ? '<span style="font-size:10px;color:var(--green);">(you)</span>' : ''}</div>
-        <div style="font-size:11px;color:var(--text2);">@${u.username} · <span class="badge ${roleBadge[u.role]||'badge-gray'}" style="font-size:10px;padding:1px 7px;">${roleLabel[u.role]||u.role}</span></div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span class="badge ${u.active!==false?'badge-green':'badge-red'}" style="font-size:10px;">${u.active!==false?'Active':'Inactive'}</span>
-        <button class="btn btn-outline btn-sm" onclick="openUserModal(${u.id})">Edit</button>
-        ${u.id !== DB.currentUser.id ? `<button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id})">Del</button>` : ''}
+    <div style="padding:12px 16px;border-bottom:1px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="avatar" style="background:var(--green-light);color:var(--green);font-size:11px;width:34px;height:34px;flex-shrink:0;">
+          ${u.initials || u.name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:500;font-size:13px;">${u.name} ${u.id === DB.currentUser.id ? '<span style="font-size:10px;color:var(--green);">(you)</span>' : ''}</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px;">@${u.username} · <span class="badge ${roleBadge[u.role]||'badge-gray'}" style="font-size:10px;padding:1px 7px;">${roleLabel[u.role]||u.role}</span> · <span class="badge ${u.active!==false?'badge-green':'badge-red'}" style="font-size:10px;">${u.active!==false?'Active':'Inactive'}</span></div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button class="btn btn-outline btn-sm" onclick="openUserModal(${u.id})">Edit</button>
+          ${u.id !== DB.currentUser.id ? `<button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id})">Del</button>` : ''}
+        </div>
       </div>
     </div>
   `).join('');
