@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_111.html -->
-<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-
+<html lang="en">
+<head>
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MycoBooks — Mushroom Farm Finance</title>
-<link href="./index_files/css2" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
   --bg: #f5f4f0;
@@ -229,6 +229,11 @@ tr:hover td { background:var(--bg); }
   .page { padding:12px; }
   .page-header { flex-direction:column; align-items:flex-start; gap:10px; margin-bottom:14px; }
   .page-header .flex-row { flex-wrap:wrap; gap:6px; }
+  .flex-row { flex-wrap:wrap; }
+  .search-bar { width:100% !important; }
+  .select-filter { flex:1; min-width:100px; }
+  .card-body .flex-row { gap:6px; }
+  .card-body .flex-row > * { flex:1; min-width:120px; }
   .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
   .modal { width:95vw !important; max-width:95vw !important; max-height:88vh; overflow-y:auto; }
   .form-grid { grid-template-columns:1fr; }
@@ -291,88 +296,88 @@ tr:hover td { background:var(--bg); }
     </div>
     <nav>
       <div class="nav-section-label">Overview</div>
-      <div class="nav-link active" data-page="dashboard" onclick="navigate(&#39;dashboard&#39;,this)">
-        <svg viewBox="0 0 15 15" fill="none"><rect x="1" y="1" width="5.5" height="5.5" rx="1" fill="currentColor"></rect><rect x="8.5" y="1" width="5.5" height="5.5" rx="1" fill="currentColor" opacity=".5"></rect><rect x="1" y="8.5" width="5.5" height="5.5" rx="1" fill="currentColor" opacity=".5"></rect><rect x="8.5" y="8.5" width="5.5" height="5.5" rx="1" fill="currentColor" opacity=".5"></rect></svg>
+      <div class="nav-link active" data-page="dashboard" onclick="navigate('dashboard',this)">
+        <svg viewBox="0 0 15 15" fill="none"><rect x="1" y="1" width="5.5" height="5.5" rx="1" fill="currentColor"/><rect x="8.5" y="1" width="5.5" height="5.5" rx="1" fill="currentColor" opacity=".5"/><rect x="1" y="8.5" width="5.5" height="5.5" rx="1" fill="currentColor" opacity=".5"/><rect x="8.5" y="8.5" width="5.5" height="5.5" rx="1" fill="currentColor" opacity=".5"/></svg>
         Dashboard
       </div>
       <div class="nav-section-label">Finance</div>
-      <div class="nav-link" data-page="expenses" onclick="navigate(&#39;expenses&#39;,this)">
-        <svg viewBox="0 0 15 15" fill="none"><path d="M2 4h11M2 8h7M2 12h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>
+      <div class="nav-link" data-page="expenses" onclick="navigate('expenses',this)">
+        <svg viewBox="0 0 15 15" fill="none"><path d="M2 4h11M2 8h7M2 12h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         Daily Expenses
       </div>
-      <div class="nav-link" data-page="sales" onclick="navigate(&#39;sales&#39;,this)">
-        <svg viewBox="0 0 15 15" fill="none"><path d="M1 13L5 7l3 3 3-4 3 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      <div class="nav-link" data-page="sales" onclick="navigate('sales',this)">
+        <svg viewBox="0 0 15 15" fill="none"><path d="M1 13L5 7l3 3 3-4 3 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Sales
       </div>
-      <div class="nav-link" data-page="orders" onclick="navigate(&#39;orders&#39;,this)">
-        <svg viewBox="0 0 15 15" fill="none"><rect x="1" y="2" width="13" height="11" rx="1" stroke="currentColor"></rect><path d="M1 6h13M5 2v4M10 2v4M4 9h3M4 11.5h5" stroke="currentColor" stroke-linecap="round"></path></svg>
+      <div class="nav-link" data-page="orders" onclick="navigate('orders',this)">
+        <svg viewBox="0 0 15 15" fill="none"><rect x="1" y="2" width="13" height="11" rx="1" stroke="currentColor"/><path d="M1 6h13M5 2v4M10 2v4M4 9h3M4 11.5h5" stroke="currentColor" stroke-linecap="round"/></svg>
         Sales Orders
       </div>
-      <div class="nav-link" data-page="invoices" onclick="navigate(&#39;invoices&#39;,this)">
-        <svg viewBox="0 0 15 15" fill="none"><path d="M4 1h7a1 1 0 011 1v11a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="currentColor"></path><path d="M5 5h5M5 8h5M5 11h3" stroke="currentColor" stroke-linecap="round"></path></svg>
+      <div class="nav-link" data-page="invoices" onclick="navigate('invoices',this)">
+        <svg viewBox="0 0 15 15" fill="none"><path d="M4 1h7a1 1 0 011 1v11a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="currentColor"/><path d="M5 5h5M5 8h5M5 11h3" stroke="currentColor" stroke-linecap="round"/></svg>
         Invoices
       </div>
-      <div class="nav-link" data-page="customers" onclick="navigate(&#39;customers&#39;,this)">
-        <svg viewBox="0 0 15 15" fill="none"><circle cx="5.5" cy="5" r="2.5" stroke="currentColor"></circle><path d="M1 13c0-2.5 2-4.5 4.5-4.5M9 10l1.5 1.5L13 9" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      <div class="nav-link" data-page="customers" onclick="navigate('customers',this)">
+        <svg viewBox="0 0 15 15" fill="none"><circle cx="5.5" cy="5" r="2.5" stroke="currentColor"/><path d="M1 13c0-2.5 2-4.5 4.5-4.5M9 10l1.5 1.5L13 9" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Customers
       </div>
       <div class="nav-section-label">Operations</div>
-      <div class="nav-link" data-page="suppliers" onclick="navigate(&#39;suppliers&#39;,this)">
-        <svg viewBox="0 0 15 15" fill="none"><path d="M1 4h13M1 4l2 8h9l2-8M1 4l1.5-2h9L13 4" stroke="currentColor" stroke-linejoin="round"></path><circle cx="5" cy="13" r="1" fill="currentColor"></circle><circle cx="10" cy="13" r="1" fill="currentColor"></circle></svg>
+      <div class="nav-link" data-page="suppliers" onclick="navigate('suppliers',this)">
+        <svg viewBox="0 0 15 15" fill="none"><path d="M1 4h13M1 4l2 8h9l2-8M1 4l1.5-2h9L13 4" stroke="currentColor" stroke-linejoin="round"/><circle cx="5" cy="13" r="1" fill="currentColor"/><circle cx="10" cy="13" r="1" fill="currentColor"/></svg>
         Suppliers
       </div>
-      <div class="nav-link" data-page="products" onclick="navigate(&#39;products&#39;,this)">
-        <svg viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="5.5" r="3" stroke="currentColor"></circle><ellipse cx="7.5" cy="11" rx="5" ry="2.5" stroke="currentColor"></ellipse></svg>
+      <div class="nav-link" data-page="products" onclick="navigate('products',this)">
+        <svg viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="5.5" r="3" stroke="currentColor"/><ellipse cx="7.5" cy="11" rx="5" ry="2.5" stroke="currentColor"/></svg>
         Products
       </div>
-      <div class="nav-link" data-page="inventory" onclick="navigate(&#39;inventory&#39;,this)">
-        <svg viewBox="0 0 15 15" fill="none"><path d="M2 5l5.5-3L13 5v6l-5.5 3L2 11V5z" stroke="currentColor" stroke-linejoin="round"></path><path d="M7.5 2v12M2 5l5.5 3 5.5-3" stroke="currentColor"></path></svg>
+      <div class="nav-link" data-page="inventory" onclick="navigate('inventory',this)">
+        <svg viewBox="0 0 15 15" fill="none"><path d="M2 5l5.5-3L13 5v6l-5.5 3L2 11V5z" stroke="currentColor" stroke-linejoin="round"/><path d="M7.5 2v12M2 5l5.5 3 5.5-3" stroke="currentColor"/></svg>
         Inventory
       </div>
-      <div class="nav-link" data-page="production" onclick="navigate(&#39;production&#39;,this)">
-        <svg viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="7.5" r="5.5" stroke="currentColor"></circle><path d="M7.5 4v3.5l2.5 1.5" stroke="currentColor" stroke-linecap="round"></path></svg>
+      <div class="nav-link" data-page="production" onclick="navigate('production',this)">
+        <svg viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="7.5" r="5.5" stroke="currentColor"/><path d="M7.5 4v3.5l2.5 1.5" stroke="currentColor" stroke-linecap="round"/></svg>
         Production
       </div>
-      <div class="nav-link" data-page="harvest" onclick="navigate(&#39;harvest&#39;,this)">
-        <svg viewBox="0 0 15 15" fill="none"><path d="M7.5 2C5 2 2.5 4 2.5 7c0 2.5 2 4.5 5 5.5 3-1 5-3 5-5.5C12.5 4 10 2 7.5 2z" stroke="currentColor" stroke-linejoin="round"></path><path d="M7.5 7.5V13" stroke="currentColor" stroke-linecap="round"></path></svg>
+      <div class="nav-link" data-page="harvest" onclick="navigate('harvest',this)">
+        <svg viewBox="0 0 15 15" fill="none"><path d="M7.5 2C5 2 2.5 4 2.5 7c0 2.5 2 4.5 5 5.5 3-1 5-3 5-5.5C12.5 4 10 2 7.5 2z" stroke="currentColor" stroke-linejoin="round"/><path d="M7.5 7.5V13" stroke="currentColor" stroke-linecap="round"/></svg>
         Harvest
       </div>
-      <div class="nav-link" data-page="fleet" onclick="navigate(&#39;fleet&#39;,this)">
-        <svg viewBox="0 0 15 15" fill="none"><rect x="1" y="5" width="13" height="6" rx="1" stroke="currentColor"></rect><path d="M3 11v2M12 11v2M1 8h13" stroke="currentColor" stroke-linecap="round"></path><circle cx="3.5" cy="12.5" r="1" stroke="currentColor"></circle><circle cx="11.5" cy="12.5" r="1" stroke="currentColor"></circle><path d="M1 8V6l2-3h8l2 3v2" stroke="currentColor" stroke-linejoin="round"></path></svg>
+      <div class="nav-link" data-page="fleet" onclick="navigate('fleet',this)">
+        <svg viewBox="0 0 15 15" fill="none"><rect x="1" y="5" width="13" height="6" rx="1" stroke="currentColor"/><path d="M3 11v2M12 11v2M1 8h13" stroke="currentColor" stroke-linecap="round"/><circle cx="3.5" cy="12.5" r="1" stroke="currentColor"/><circle cx="11.5" cy="12.5" r="1" stroke="currentColor"/><path d="M1 8V6l2-3h8l2 3v2" stroke="currentColor" stroke-linejoin="round"/></svg>
         Fleet
       </div>
-      <div class="nav-link" data-page="payroll" onclick="navigate(&#39;payroll&#39;,this)">
-        <svg viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="5" r="3" stroke="currentColor"></circle><path d="M2 14c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" stroke-linecap="round"></path></svg>
+      <div class="nav-link" data-page="payroll" onclick="navigate('payroll',this)">
+        <svg viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="5" r="3" stroke="currentColor"/><path d="M2 14c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" stroke-linecap="round"/></svg>
         Payroll
       </div>
       <div class="nav-section-label">Reports</div>
-      <div class="nav-link" data-page="reports" onclick="navigate(&#39;reports&#39;,this)">
-        <svg viewBox="0 0 15 15" fill="none"><path d="M3 13V7M7.5 13V3M12 13V9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>
-        P&amp;L Report
+      <div class="nav-link" data-page="reports" onclick="navigate('reports',this)">
+        <svg viewBox="0 0 15 15" fill="none"><path d="M3 13V7M7.5 13V3M12 13V9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        P&L Report
       </div>
-      <div class="nav-link" data-page="cashflow" onclick="navigate(&#39;cashflow&#39;,this)">
-        <svg viewBox="0 0 15 15" fill="none"><path d="M2 11l3-3 2.5 2.5L11 5M13 8V2H7" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      <div class="nav-link" data-page="cashflow" onclick="navigate('cashflow',this)">
+        <svg viewBox="0 0 15 15" fill="none"><path d="M2 11l3-3 2.5 2.5L11 5M13 8V2H7" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Cashflow
       </div>
-      <div class="nav-link" data-page="loans" onclick="navigate(&#39;loans&#39;,this)">
-        <svg viewBox="0 0 15 15" fill="none"><rect x="1" y="4" width="13" height="8" rx="1" stroke="currentColor"></rect><path d="M4 4V3a3 3 0 016 0v1" stroke="currentColor" stroke-linecap="round"></path><path d="M7.5 8v1M5.5 8.5h4" stroke="currentColor" stroke-linecap="round"></path></svg>
+      <div class="nav-link" data-page="loans" onclick="navigate('loans',this)">
+        <svg viewBox="0 0 15 15" fill="none"><rect x="1" y="4" width="13" height="8" rx="1" stroke="currentColor"/><path d="M4 4V3a3 3 0 016 0v1" stroke="currentColor" stroke-linecap="round"/><path d="M7.5 8v1M5.5 8.5h4" stroke="currentColor" stroke-linecap="round"/></svg>
         Loans
       </div>
-      <div class="nav-link" data-page="claims" onclick="navigate(&#39;claims&#39;,this)">
-        <svg viewBox="0 0 15 15" fill="none"><path d="M3 2h9a1 1 0 011 1v9a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor"></path><path d="M5 5h5M5 7.5h5M5 10h3" stroke="currentColor" stroke-linecap="round"></path></svg>
+      <div class="nav-link" data-page="claims" onclick="navigate('claims',this)">
+        <svg viewBox="0 0 15 15" fill="none"><path d="M3 2h9a1 1 0 011 1v9a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor"/><path d="M5 5h5M5 7.5h5M5 10h3" stroke="currentColor" stroke-linecap="round"/></svg>
         Claims
       </div>
-      <div class="nav-link" data-page="statement" onclick="navigate(&#39;statement&#39;,this)">
-        <svg viewBox="0 0 15 15" fill="none"><rect x="2" y="2" width="11" height="11" rx="1" stroke="currentColor"></rect><path d="M5 5h5M5 7.5h5M5 10h3" stroke="currentColor" stroke-linecap="round"></path></svg>
+      <div class="nav-link" data-page="statement" onclick="navigate('statement',this)">
+        <svg viewBox="0 0 15 15" fill="none"><rect x="2" y="2" width="11" height="11" rx="1" stroke="currentColor"/><path d="M5 5h5M5 7.5h5M5 10h3" stroke="currentColor" stroke-linecap="round"/></svg>
         Account Statement
       </div>
       <div class="nav-section-label">Settings</div>
-      <div class="nav-link" data-page="settings" onclick="navigate(&#39;settings&#39;,this)">
-        <svg viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="7.5" r="2" stroke="currentColor"></circle><path d="M7.5 1v1.5M7.5 12.5V14M1 7.5h1.5M12.5 7.5H14M2.9 2.9l1.1 1.1M11 11l1.1 1.1M2.9 12.1L4 11M11 4l1.1-1.1" stroke="currentColor" stroke-linecap="round"></path></svg>
+      <div class="nav-link" data-page="settings" onclick="navigate('settings',this)">
+        <svg viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="7.5" r="2" stroke="currentColor"/><path d="M7.5 1v1.5M7.5 12.5V14M1 7.5h1.5M12.5 7.5H14M2.9 2.9l1.1 1.1M11 11l1.1 1.1M2.9 12.1L4 11M11 4l1.1-1.1" stroke="currentColor" stroke-linecap="round"/></svg>
         Settings
       </div>
-      <div class="nav-link admin-only" data-page="users" onclick="navigate(&#39;users&#39;,this)" style="display:none;">
-        <svg viewBox="0 0 15 15" fill="none"><circle cx="5" cy="4.5" r="2" stroke="currentColor"></circle><path d="M1 13c0-2.2 1.8-4 4-4M9.5 9l1 1 2.5-2.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      <div class="nav-link admin-only" data-page="users" onclick="navigate('users',this)" style="display:none;">
+        <svg viewBox="0 0 15 15" fill="none"><circle cx="5" cy="4.5" r="2" stroke="currentColor"/><path d="M1 13c0-2.2 1.8-4 4-4M9.5 9l1 1 2.5-2.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg>
         User Management
       </div>
     </nav>
@@ -404,21 +409,21 @@ tr:hover td { background:var(--bg); }
       <div class="grid-2">
         <div>
           <div class="card">
-            <div class="card-head"><span class="card-title">Recent Transactions</span><button class="btn btn-outline btn-sm" onclick="navigate(&#39;expenses&#39;,document.querySelector(&#39;[data-page=expenses]&#39;))">View All</button></div>
+            <div class="card-head"><span class="card-title">Recent Transactions</span><button class="btn btn-outline btn-sm" onclick="navigate('expenses',document.querySelector('[data-page=expenses]'))">View All</button></div>
             <div class="card-body" style="padding:0;" id="dash-recent-tx"></div>
           </div>
         </div>
         <div>
           <div class="card">
-            <div class="card-head"><span class="card-title">📅 Upcoming Cashflow <span style="font-size:11px;color:var(--text3);font-weight:400;">next 30 days</span></span><button class="btn btn-outline btn-sm" onclick="navigate(&#39;cashflow&#39;,document.querySelector(&#39;[data-page=cashflow]&#39;))">View All</button></div>
+            <div class="card-head"><span class="card-title">📅 Upcoming Cashflow <span style="font-size:11px;color:var(--text3);font-weight:400;">next 30 days</span></span><button class="btn btn-outline btn-sm" onclick="navigate('cashflow',document.querySelector('[data-page=cashflow]'))">View All</button></div>
             <div class="card-body" style="padding:0;" id="dash-cashflow"></div>
           </div>
           <div class="card">
-            <div class="card-head"><span class="card-title">Inventory Alerts</span><button class="btn btn-outline btn-sm" onclick="navigate(&#39;inventory&#39;,document.querySelector(&#39;[data-page=inventory]&#39;))">View All</button></div>
+            <div class="card-head"><span class="card-title">Inventory Alerts</span><button class="btn btn-outline btn-sm" onclick="navigate('inventory',document.querySelector('[data-page=inventory]'))">View All</button></div>
             <div class="card-body" style="padding:0;" id="dash-inv-alerts"></div>
           </div>
           <div class="card">
-            <div class="card-head"><span class="card-title">Pending Invoices</span><button class="btn btn-outline btn-sm" onclick="navigate(&#39;invoices&#39;,document.querySelector(&#39;[data-page=invoices]&#39;))">View All</button></div>
+            <div class="card-head"><span class="card-title">Pending Invoices</span><button class="btn btn-outline btn-sm" onclick="navigate('invoices',document.querySelector('[data-page=invoices]'))">View All</button></div>
             <div class="card-body" style="padding:0;" id="dash-pending-inv"></div>
           </div>
         </div>
@@ -433,7 +438,7 @@ tr:hover td { background:var(--bg); }
           <div class="page-subtitle">Record and track all farm expenditures</div>
         </div>
         <div class="flex-row">
-          <button id="btn-add-expense" class="btn btn-primary" onclick="resetExpModal();addExpLine();populateSuppDatalist();openModal(&#39;modal-expense&#39;)">+ Add Expense</button>
+          <button id="btn-add-expense" class="btn btn-primary" onclick="resetExpModal();addExpLine();populateSuppDatalist();openModal('modal-expense')">+ Add Expense</button>
         </div>
       </div>
 
@@ -502,7 +507,7 @@ tr:hover td { background:var(--bg); }
           <div class="page-title">Sales</div>
           <div class="page-subtitle">Daily sales records and revenue tracking</div>
         </div>
-        <button id="btn-add-sale" class="btn btn-primary" onclick="openModal(&#39;modal-sale&#39;)">+ Record Sale</button>
+        <button id="btn-add-sale" class="btn btn-primary" onclick="openModal('modal-sale')">+ Record Sale</button>
       </div>
       <div class="card" style="margin-bottom:16px;">
         <div class="card-body" style="padding:12px 16px;">
@@ -535,7 +540,7 @@ tr:hover td { background:var(--bg); }
       <!-- Tabs -->
       <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border);">
         <button id="so-tab-1" onclick="switchSoTab(1)" class="btn btn-outline" style="border-bottom:2px solid var(--green);color:var(--green);border-radius:var(--radius-sm) var(--radius-sm) 0 0;">All Orders</button>
-        <button id="so-tab-2" onclick="switchSoTab(2)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">📋 Dispatch Board</button>
+        <button id="so-tab-2" onclick="switchSoTab(2)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;" class="so-dispatch-tab">📋 Dispatch Board</button>
       </div>
 
       <!-- Tab 1: All Orders -->
@@ -572,8 +577,8 @@ tr:hover td { background:var(--bg); }
                 <option value="all">All open orders</option>
               </select>
               <div style="margin-left:auto;display:flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:3px;">
-                <button id="so-view-orders" onclick="setSoDispatchView(&#39;orders&#39;)" class="btn btn-primary btn-sm" style="font-size:11px;padding:4px 10px;">By Order</button>
-                <button id="so-view-teams" onclick="setSoDispatchView(&#39;teams&#39;)" class="btn btn-outline btn-sm" style="font-size:11px;padding:4px 10px;background:transparent;border:none;">By Team</button>
+                <button id="so-view-orders" onclick="setSoDispatchView('orders')" class="btn btn-primary btn-sm" style="font-size:11px;padding:4px 10px;">By Order</button>
+                <button id="so-view-teams" onclick="setSoDispatchView('teams')" class="btn btn-outline btn-sm" style="font-size:11px;padding:4px 10px;background:transparent;border:none;">By Team</button>
               </div>
             </div>
           </div>
@@ -589,7 +594,7 @@ tr:hover td { background:var(--bg); }
           <div class="page-title">Invoices</div>
           <div class="page-subtitle">Create and manage customer invoices</div>
         </div>
-        <button id="btn-add-invoice" class="btn btn-primary" onclick="resetInvModal();openModal(&#39;modal-invoice&#39;)">+ New Invoice</button>
+        <button id="btn-add-invoice" class="btn btn-primary" onclick="resetInvModal();openModal('modal-invoice')">+ New Invoice</button>
       </div>
       <div class="card" style="margin-bottom:16px;">
         <div class="card-body" style="padding:12px 16px;">
@@ -652,8 +657,8 @@ tr:hover td { background:var(--bg); }
             </select>
             <span id="supp-count" style="margin-left:auto;font-size:13px;color:var(--text2);"></span>
             <div style="display:flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:3px;margin-left:8px;">
-              <button id="supp-view-grid" onclick="setSuppView(&#39;grid&#39;)" class="btn btn-primary btn-sm" style="font-size:11px;padding:3px 10px;" title="Grid view">⊞</button>
-              <button id="supp-view-list" onclick="setSuppView(&#39;list&#39;)" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 10px;background:transparent;border:none;" title="List view">☰</button>
+              <button id="supp-view-grid" onclick="setSuppView('grid')" class="btn btn-primary btn-sm" style="font-size:11px;padding:3px 10px;" title="Grid view">⊞</button>
+              <button id="supp-view-list" onclick="setSuppView('list')" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 10px;background:transparent;border:none;" title="List view">☰</button>
             </div>
           </div>
         </div>
@@ -668,7 +673,7 @@ tr:hover td { background:var(--bg); }
           <div class="page-title">Customers</div>
           <div class="page-subtitle">Manage your buyer and client list</div>
         </div>
-        <button id="btn-add-customer" class="btn btn-primary" onclick="openModal(&#39;modal-customer&#39;)">+ Add Customer</button>
+        <button id="btn-add-customer" class="btn btn-primary" onclick="openModal('modal-customer')">+ Add Customer</button>
       </div>
       <div class="card" style="margin-bottom:16px;">
         <div class="card-body" style="padding:12px 16px;">
@@ -680,8 +685,8 @@ tr:hover td { background:var(--bg); }
             </select>
             <span id="cust-count" style="margin-left:auto;font-size:13px;color:var(--text2);"></span>
             <div style="display:flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:3px;margin-left:8px;">
-              <button id="cust-view-grid" onclick="setCustView(&#39;grid&#39;)" class="btn btn-primary btn-sm" style="font-size:11px;padding:3px 10px;" title="Grid view">⊞</button>
-              <button id="cust-view-list" onclick="setCustView(&#39;list&#39;)" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 10px;background:transparent;border:none;" title="List view">☰</button>
+              <button id="cust-view-grid" onclick="setCustView('grid')" class="btn btn-primary btn-sm" style="font-size:11px;padding:3px 10px;" title="Grid view">⊞</button>
+              <button id="cust-view-list" onclick="setCustView('list')" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 10px;background:transparent;border:none;" title="List view">☰</button>
             </div>
           </div>
         </div>
@@ -693,10 +698,10 @@ tr:hover td { background:var(--bg); }
     <div class="page" id="page-inventory">
       <div class="page-header">
         <div>
-          <div class="page-title">Inventory &amp; Supplies</div>
+          <div class="page-title">Inventory & Supplies</div>
           <div class="page-subtitle">Track stock levels and reorder points</div>
         </div>
-        <button id="btn-add-inventory" class="btn btn-primary" onclick="openModal(&#39;modal-inventory&#39;)">+ Add Item</button>
+        <button id="btn-add-inventory" class="btn btn-primary" onclick="openModal('modal-inventory')">+ Add Item</button>
       </div>
       <div class="metrics-grid" id="inv-metrics" style="grid-template-columns:repeat(3,1fr);"></div>
       <div class="card" style="margin-bottom:16px;">
@@ -1038,7 +1043,7 @@ tr:hover td { background:var(--bg); }
         </div>
         <div class="card">
           <div class="card-head">
-            <span class="card-title">Attendance &amp; Deductions</span>
+            <span class="card-title">Attendance & Deductions</span>
             <span style="font-size:11px;color:var(--text3);">Working days this month: <span id="att-workdays"></span></span>
           </div>
           <div class="table-wrap" id="att-table"></div>
@@ -1166,7 +1171,7 @@ tr:hover td { background:var(--bg); }
     <div class="page" id="page-reports">
       <div class="page-header">
         <div>
-          <div class="page-title">Profit &amp; Loss Report</div>
+          <div class="page-title">Profit & Loss Report</div>
           <div class="page-subtitle">Monthly financial summary</div>
         </div>
         <div class="flex-row">
@@ -1260,7 +1265,7 @@ tr:hover td { background:var(--bg); }
               <span class="card-title">Payment Accounts</span>
               <div style="display:flex;gap:8px;">
                 <button class="btn btn-outline btn-sm" onclick="openTransferModal()">⇄ Transfer</button>
-                <button id="btn-add-account" class="btn btn-primary btn-sm" onclick="openModal(&#39;modal-account&#39;)">+ Add Account</button>
+                <button id="btn-add-account" class="btn btn-primary btn-sm" onclick="openModal('modal-account')">+ Add Account</button>
               </div>
             </div>
             <div id="accounts-list"></div>
@@ -1305,7 +1310,7 @@ tr:hover td { background:var(--bg); }
     </div>
 
   </div><!-- end main-content -->
-<!-- end app -->
+</div><!-- end app -->
 
 <!-- MODALS -->
 <!-- Sales Order Modal -->
@@ -1313,7 +1318,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:740px;">
     <div class="modal-head">
       <span class="modal-title" id="so-modal-title">New Sales Order</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-order&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-order')">×</button>
     </div>
     <div class="modal-body">
       <!-- Header fields -->
@@ -1343,11 +1348,11 @@ tr:hover td { background:var(--bg); }
       <div style="display:flex;justify-content:flex-end;margin-top:10px;">
         <div style="padding:10px 16px;background:var(--green-light);border-radius:var(--radius-sm);display:flex;justify-content:space-between;align-items:center;gap:24px;min-width:260px;">
           <span style="font-weight:600;font-size:13px;color:var(--green);">Order Total</span>
-          <span style="font-family:&#39;DM Mono&#39;,monospace;font-weight:700;font-size:15px;color:var(--green);" id="so-order-total">RM 0.00</span>
+          <span style="font-family:'DM Mono',monospace;font-weight:700;font-size:15px;color:var(--green);" id="so-order-total">RM 0.00</span>
         </div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-order&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-order')">Cancel</button>
         <button class="btn btn-primary" id="so-save-btn" onclick="saveOrder()">Submit Order</button>
       </div>
     </div>
@@ -1359,7 +1364,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:560px;">
     <div class="modal-head">
       <span class="modal-title">Dispatch to Packing Teams</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-dispatch&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-dispatch')">×</button>
     </div>
     <div class="modal-body">
       <div id="so-dispatch-order-summary" style="background:var(--bg);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px;font-size:13px;"></div>
@@ -1380,7 +1385,7 @@ tr:hover td { background:var(--bg); }
       </div>
       <div id="so-dispatch-teams"></div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-dispatch&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-dispatch')">Cancel</button>
         <button class="btn btn-primary" onclick="saveDispatch()">Confirm Dispatch</button>
       </div>
     </div>
@@ -1392,7 +1397,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:580px;">
     <div class="modal-head">
       <span class="modal-title" id="rr-modal-title">Manage Route Rates</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-route-rate&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-route-rate')">×</button>
     </div>
     <div class="modal-body">
       <!-- Existing routes -->
@@ -1413,7 +1418,7 @@ tr:hover td { background:var(--bg); }
         <tbody id="rr-rows"></tbody>
       </table>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-route-rate&#39;)">Done</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-route-rate')">Done</button>
         <button class="btn btn-primary" onclick="saveAllRouteRows()">Save New Routes</button>
       </div>
     </div>
@@ -1425,7 +1430,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:600px;">
     <div class="modal-head">
       <span class="modal-title" id="trip-modal-title">New Trip</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-trip&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-trip')">×</button>
     </div>
     <div class="modal-body">
       <!-- Header fields -->
@@ -1460,9 +1465,9 @@ tr:hover td { background:var(--bg); }
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
         <label style="font-size:12px;font-weight:500;color:var(--text2);">Trip Expenses <span style="font-weight:400;color:var(--text3);">(diesel, toll, etc.)</span></label>
         <div style="display:flex;gap:6px;">
-          <button class="btn btn-outline btn-sm" onclick="addTripExpLine(&#39;Diesel&#39;)">+ Diesel</button>
-          <button class="btn btn-outline btn-sm" onclick="addTripExpLine(&#39;Toll&#39;)">+ Toll</button>
-          <button class="btn btn-outline btn-sm" onclick="addTripExpLine(&#39;Other&#39;)">+ Other</button>
+          <button class="btn btn-outline btn-sm" onclick="addTripExpLine('Diesel')">+ Diesel</button>
+          <button class="btn btn-outline btn-sm" onclick="addTripExpLine('Toll')">+ Toll</button>
+          <button class="btn btn-outline btn-sm" onclick="addTripExpLine('Other')">+ Other</button>
         </div>
       </div>
       <div id="trip-exp-body"></div>
@@ -1470,7 +1475,7 @@ tr:hover td { background:var(--bg); }
       <!-- Total summary -->
       <div id="trip-cost-summary" style="background:var(--bg);border-radius:var(--radius-sm);padding:10px 14px;margin-top:10px;margin-bottom:14px;font-size:12px;display:flex;gap:20px;flex-wrap:wrap;"></div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-trip&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-trip')">Cancel</button>
         <button class="btn btn-primary" onclick="saveTrip()">Save Trip</button>
       </div>
     </div>
@@ -1482,7 +1487,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:460px;">
     <div class="modal-head">
       <span class="modal-title">Manage Lorries</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-lorry&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-lorry')">×</button>
     </div>
     <div class="modal-body">
       <div id="lorry-list" style="margin-bottom:16px;"></div>
@@ -1513,7 +1518,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:460px;">
     <div class="modal-head">
       <span class="modal-title" id="refuel-modal-title">Record Refuel</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-refuel&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-refuel')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid form-grid-2">
@@ -1525,7 +1530,7 @@ tr:hover td { background:var(--bg); }
           <input type="number" id="refuel-odometer" placeholder="Current reading" min="0" oninput="calcRefuelKm()">
         </div>
         <div class="form-group"><label>Distance Since Last Refuel</label>
-          <input type="number" id="refuel-km" placeholder="km" readonly="" style="background:var(--bg);">
+          <input type="number" id="refuel-km" placeholder="km" readonly style="background:var(--bg);">
         </div>
         <div class="form-group"><label>Litres Filled</label>
           <input type="number" id="refuel-litres" placeholder="0.0" min="0" step="0.1" oninput="calcRefuelEfficiency()">
@@ -1534,10 +1539,10 @@ tr:hover td { background:var(--bg); }
           <input type="number" id="refuel-cost" placeholder="0.00" min="0" step="0.01" oninput="calcRefuelEfficiency()">
         </div>
         <div class="form-group"><label>Price per Litre (RM)</label>
-          <input type="number" id="refuel-ppl" placeholder="auto" readonly="" style="background:var(--bg);">
+          <input type="number" id="refuel-ppl" placeholder="auto" readonly style="background:var(--bg);">
         </div>
         <div class="form-group"><label>Fuel Efficiency</label>
-          <input type="text" id="refuel-efficiency" placeholder="km/L" readonly="" style="background:var(--bg);">
+          <input type="text" id="refuel-efficiency" placeholder="km/L" readonly style="background:var(--bg);">
         </div>
         <div class="form-group"><label>Driver <span style="font-weight:400;color:var(--text3);">(optional)</span></label>
           <select id="refuel-driver" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
@@ -1550,7 +1555,7 @@ tr:hover td { background:var(--bg); }
         </div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-refuel&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-refuel')">Cancel</button>
         <button class="btn btn-primary" onclick="saveRefuel()">Save</button>
       </div>
     </div>
@@ -1562,7 +1567,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:480px;">
     <div class="modal-head">
       <span class="modal-title" id="maint-modal-title">Add Maintenance Record</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-maintenance&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-maintenance')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid form-grid-2">
@@ -1594,7 +1599,7 @@ tr:hover td { background:var(--bg); }
         <div class="form-group" style="grid-column:1/-1;"><label>Notes <span style="font-weight:400;color:var(--text3);">(optional)</span></label><input type="text" id="maint-notes" placeholder="Parts replaced, warranty info..."></div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-maintenance&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-maintenance')">Cancel</button>
         <button class="btn btn-primary" onclick="saveMaintenance()">Save</button>
       </div>
     </div>
@@ -1606,7 +1611,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:380px;">
     <div class="modal-head">
       <span class="modal-title" id="pkrate-modal-title">Add Packing Rate</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-packing-rate&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-packing-rate')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid">
@@ -1626,7 +1631,7 @@ tr:hover td { background:var(--bg); }
         </div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-packing-rate&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-packing-rate')">Cancel</button>
         <button class="btn btn-primary" onclick="savePackingRate()">Save Rate</button>
       </div>
     </div>
@@ -1638,7 +1643,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:740px;">
     <div class="modal-head">
       <span class="modal-title" id="pk-modal-title">Record Packing</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-packing&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-packing')">×</button>
     </div>
     <div class="modal-body">
       <!-- Header row -->
@@ -1677,12 +1682,12 @@ tr:hover td { background:var(--bg); }
       <div style="display:flex;justify-content:flex-end;margin-top:10px;margin-bottom:4px;">
         <div style="width:260px;padding:10px 14px;background:var(--green-light);border-radius:var(--radius-sm);display:flex;justify-content:space-between;align-items:center;">
           <span style="font-weight:600;font-size:13px;color:var(--green);">Grand Total</span>
-          <span style="font-family:&#39;DM Mono&#39;,monospace;font-weight:700;font-size:15px;color:var(--green);" id="pk-grand-total">0 packs · 0.00 kg</span>
+          <span style="font-family:'DM Mono',monospace;font-weight:700;font-size:15px;color:var(--green);" id="pk-grand-total">0 packs · 0.00 kg</span>
         </div>
       </div>
 
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-packing&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-packing')">Cancel</button>
         <button class="btn btn-primary" onclick="savePacking()">Save Packing Record</button>
       </div>
     </div>
@@ -1694,7 +1699,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:520px;">
     <div class="modal-head">
       <span class="modal-title" id="hv-modal-title">Record Harvest</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-harvest&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-harvest')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid form-grid-2">
@@ -1703,7 +1708,7 @@ tr:hover td { background:var(--bg); }
           <select id="hv-batch" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;" onchange="onHvBatchChange()"></select>
         </div>
         <div class="form-group"><label>Mushroom Type</label>
-          <input type="text" id="hv-type" readonly="" style="background:var(--bg);">
+          <input type="text" id="hv-type" readonly style="background:var(--bg);">
         </div>
         <div class="form-group"><label>Flush No.</label>
           <select id="hv-flush" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
@@ -1732,7 +1737,7 @@ tr:hover td { background:var(--bg); }
             <div class="form-group"><label>Customer</label><input type="text" id="hv-sale-customer" placeholder="Customer name"></div>
             <div class="form-group"><label>Price / kg (RM)</label><input type="number" id="hv-sale-price" placeholder="0.00" step="0.01" oninput="calcHvSaleTotal()"></div>
             <div class="form-group"><label>Qty Sold (kg)</label><input type="number" id="hv-sale-qty" placeholder="0.0" step="0.1" oninput="calcHvSaleTotal()"></div>
-            <div class="form-group"><label>Sale Total (RM)</label><input type="number" id="hv-sale-total" readonly="" style="background:var(--bg2);"></div>
+            <div class="form-group"><label>Sale Total (RM)</label><input type="number" id="hv-sale-total" readonly style="background:var(--bg2);"></div>
             <div class="form-group"><label>Received Into</label>
               <select id="hv-sale-account" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
             </div>
@@ -1746,7 +1751,7 @@ tr:hover td { background:var(--bg); }
         <div class="form-group" style="grid-column:1/-1;"><label>Notes <span style="font-weight:400;color:var(--text3);">(optional)</span></label><input type="text" id="hv-notes" placeholder="e.g. Good quality, slight contamination in block 12..."></div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-harvest&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-harvest')">Cancel</button>
         <button class="btn btn-primary" onclick="saveHarvest()">Save Harvest</button>
       </div>
     </div>
@@ -1758,13 +1763,13 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:560px;">
     <div class="modal-head">
       <span class="modal-title" id="batch-modal-title">New Production Batch</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-batch&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-batch')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid form-grid-2">
         <div class="form-group">
           <label>Batch No.</label>
-          <input type="text" id="batch-no" placeholder="e.g. B-2026-001" readonly="" style="background:var(--bg);font-family:&#39;DM Mono&#39;,monospace;">
+          <input type="text" id="batch-no" placeholder="e.g. B-2026-001" readonly style="background:var(--bg);font-family:'DM Mono',monospace;">
         </div>
         <div class="form-group">
           <label>Mushroom Type</label>
@@ -1818,7 +1823,7 @@ tr:hover td { background:var(--bg); }
         </div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-batch&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-batch')">Cancel</button>
         <button class="btn btn-primary" onclick="saveBatch()">Save Batch</button>
       </div>
     </div>
@@ -1830,7 +1835,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:480px;">
     <div class="modal-head">
       <span class="modal-title" id="recur-modal-title">Add Recurring Expense</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-recurring&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-recurring')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid form-grid-2">
@@ -1854,7 +1859,7 @@ tr:hover td { background:var(--bg); }
         <div class="form-group" style="grid-column:1/-1;"><label>Notes <span style="font-weight:400;color:var(--text3);">(optional)</span></label><input type="text" id="recur-notes" placeholder="e.g. Office unit A-12-3"></div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-recurring&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-recurring')">Cancel</button>
         <button class="btn btn-primary" onclick="saveRecurring()">Save</button>
       </div>
     </div>
@@ -1866,7 +1871,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:700px;">
     <div class="modal-head">
       <span class="modal-title">Add Expenses</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-expense&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-expense')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid form-grid-2" style="margin-bottom:14px;">
@@ -1902,7 +1907,7 @@ tr:hover td { background:var(--bg); }
         </div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-expense&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-expense')">Cancel</button>
         <button class="btn btn-primary" onclick="saveExpenses()">Save All Expenses</button>
       </div>
     </div>
@@ -1914,7 +1919,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal">
     <div class="modal-head">
       <span class="modal-title">Record Sale</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-sale&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-sale')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid form-grid-2">
@@ -1925,7 +1930,7 @@ tr:hover td { background:var(--bg); }
         </div>
         <div class="form-group"><label>Quantity (kg)</label><input type="number" id="sale-qty" placeholder="0"></div>
         <div class="form-group"><label>Unit Price (RM/kg)</label><input type="number" id="sale-price" placeholder="0.00" oninput="calcSaleTotal()"></div>
-        <div class="form-group"><label>Total (RM)</label><input type="number" id="sale-total-input" placeholder="0.00" readonly="" style="background:var(--bg);"></div>
+        <div class="form-group"><label>Total (RM)</label><input type="number" id="sale-total-input" placeholder="0.00" readonly style="background:var(--bg);"></div>
         <div class="form-group"><label>Sale Type</label>
           <select id="sale-type"><option>Wholesale</option><option>Retail</option><option>Restaurant</option><option>Market</option></select>
         </div>
@@ -1935,7 +1940,7 @@ tr:hover td { background:var(--bg); }
         <div class="form-group" style="grid-column:1/-1"><label>Notes</label><input type="text" id="sale-notes" placeholder="Optional notes..."></div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-sale&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-sale')">Cancel</button>
         <button class="btn btn-primary" onclick="saveSale()">Save Sale</button>
       </div>
     </div>
@@ -1947,11 +1952,11 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:640px;">
     <div class="modal-head">
       <span class="modal-title" id="inv-modal-heading">New Invoice</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-invoice&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-invoice')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid form-grid-2" style="margin-bottom:16px;">
-        <div class="form-group"><label>Invoice No.</label><input type="text" id="inv-no" readonly="" style="background:var(--bg);"></div>
+        <div class="form-group"><label>Invoice No.</label><input type="text" id="inv-no" readonly style="background:var(--bg);"></div>
         <div class="form-group"><label>Date</label><input type="date" id="inv-date"></div>
         <div class="form-group" style="grid-column:1/-1">
           <label>Customer Name</label>
@@ -2007,7 +2012,7 @@ tr:hover td { background:var(--bg); }
       </div>
 
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-invoice&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-invoice')">Cancel</button>
         <button class="btn btn-primary" onclick="saveInvoice()">Create Invoice</button>
       </div>
     </div>
@@ -2019,7 +2024,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal">
     <div class="modal-head">
       <span class="modal-title" id="inv-modal-title">Add Inventory Item</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-inventory&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-inventory')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid form-grid-2">
@@ -2036,7 +2041,7 @@ tr:hover td { background:var(--bg); }
         <div class="form-group"><label>Supplier</label><input type="text" id="item-supplier" placeholder="Supplier name"></div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-inventory&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-inventory')">Cancel</button>
         <button class="btn btn-primary" onclick="saveInventoryItem()">Save Item</button>
       </div>
     </div>
@@ -2048,7 +2053,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:420px;">
     <div class="modal-head">
       <span class="modal-title">Record Wage Advance</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-wage-advance&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-wage-advance')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid form-grid-2">
@@ -2071,7 +2076,7 @@ tr:hover td { background:var(--bg); }
         <div class="form-group" style="grid-column:1/-1"><label>Reason / Notes</label><input type="text" id="adv-notes" placeholder="e.g. Emergency, school fees..."></div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-wage-advance&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-wage-advance')">Cancel</button>
         <button class="btn btn-primary" onclick="saveWageAdvance()">Save Advance</button>
       </div>
     </div>
@@ -2083,12 +2088,12 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:520px;">
     <div class="modal-head">
       <span class="modal-title">Payslip</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-payslip&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-payslip')">×</button>
     </div>
     <div class="modal-body" id="payslip-content" style="padding:24px;"></div>
     <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;">
       <button class="btn btn-outline" onclick="window.print()">🖨 Print</button>
-      <button class="btn btn-outline" onclick="closeModal(&#39;modal-payslip&#39;)">Close</button>
+      <button class="btn btn-outline" onclick="closeModal('modal-payslip')">Close</button>
     </div>
   </div>
 </div>
@@ -2098,7 +2103,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal">
     <div class="modal-head">
       <span class="modal-title" id="staff-modal-title">Add Staff Member</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-staff&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-staff')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid form-grid-2">
@@ -2126,20 +2131,20 @@ tr:hover td { background:var(--bg); }
           <label style="margin-bottom:8px;display:block;">Statutory Contributions</label>
           <div style="display:flex;gap:16px;flex-wrap:wrap;">
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;cursor:pointer;">
-              <input type="checkbox" id="staff-epf" checked="" style="width:14px;height:14px;"> EPF (Emp 11% / Employer 13%)
+              <input type="checkbox" id="staff-epf" checked style="width:14px;height:14px;"> EPF (Emp 11% / Employer 13%)
             </label>
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;cursor:pointer;">
-              <input type="checkbox" id="staff-socso" checked="" style="width:14px;height:14px;"> SOCSO (Both schemes)
+              <input type="checkbox" id="staff-socso" checked style="width:14px;height:14px;"> SOCSO (Both schemes)
             </label>
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;cursor:pointer;">
-              <input type="checkbox" id="staff-eis" checked="" style="width:14px;height:14px;"> EIS (0.2% each)
+              <input type="checkbox" id="staff-eis" checked style="width:14px;height:14px;"> EIS (0.2% each)
             </label>
           </div>
           <div style="font-size:11px;color:var(--text3);margin-top:5px;">Uncheck for foreign workers, pensioners, or self-employed contractors.</div>
         </div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-staff&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-staff')">Cancel</button>
         <button class="btn btn-primary" id="staff-save-btn" onclick="saveStaff()">Add Staff</button>
       </div>
     </div>
@@ -2151,7 +2156,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:560px;max-height:80vh;">
     <div class="modal-head">
       <span class="modal-title" id="receipt-modal-title">Receipt / Bill</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-receipt&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-receipt')">×</button>
     </div>
     <div class="modal-body" style="padding:12px;overflow-y:auto;max-height:calc(80vh - 60px);">
       <div id="receipt-viewer" style="text-align:center;"></div>
@@ -2168,7 +2173,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:420px;">
     <div class="modal-head">
       <span class="modal-title" id="user-modal-title">Add User</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-user&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-user')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid form-grid-2">
@@ -2193,7 +2198,7 @@ tr:hover td { background:var(--bg); }
         </div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-user&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-user')">Cancel</button>
         <button class="btn btn-primary" onclick="saveUser()">Save User</button>
       </div>
     </div>
@@ -2205,7 +2210,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:380px;">
     <div class="modal-head">
       <span class="modal-title">Mark Invoice as Paid</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-mark-paid&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-mark-paid')">×</button>
     </div>
     <div class="modal-body">
       <input type="hidden" id="pay-inv-id">
@@ -2215,7 +2220,7 @@ tr:hover td { background:var(--bg); }
         <select id="pay-inv-account" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
       </div>
       <div class="form-actions" style="margin-top:16px;">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-mark-paid&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-mark-paid')">Cancel</button>
         <button class="btn btn-primary" onclick="confirmMarkPaid()">Confirm Payment</button>
       </div>
     </div>
@@ -2227,7 +2232,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:380px;">
     <div class="modal-head">
       <span class="modal-title">Mark Expense as Paid</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-mark-exp-paid&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-mark-exp-paid')">×</button>
     </div>
     <div class="modal-body">
       <input type="hidden" id="pay-exp-id">
@@ -2237,7 +2242,7 @@ tr:hover td { background:var(--bg); }
         <select id="pay-exp-account" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
       </div>
       <div class="form-actions" style="margin-top:16px;">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-mark-exp-paid&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-mark-exp-paid')">Cancel</button>
         <button class="btn btn-primary" onclick="confirmExpensePaid()">Confirm Payment</button>
       </div>
     </div>
@@ -2249,7 +2254,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:400px;">
     <div class="modal-head">
       <span class="modal-title">Transfer Between Accounts</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-transfer&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-transfer')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid">
@@ -2277,7 +2282,7 @@ tr:hover td { background:var(--bg); }
         <div id="xfr-warning" style="display:none;padding:8px 12px;background:var(--amber-light);border-radius:var(--radius-sm);font-size:12px;color:var(--amber);"></div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-transfer&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-transfer')">Cancel</button>
         <button class="btn btn-primary" onclick="saveTransfer()">Confirm Transfer</button>
       </div>
     </div>
@@ -2289,7 +2294,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:760px;">
     <div class="modal-head">
       <span class="modal-title" id="claim-modal-title">Submit Claim</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-claim&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-claim')">×</button>
     </div>
     <div class="modal-body">
       <!-- Header: claimant + date -->
@@ -2342,7 +2347,7 @@ tr:hover td { background:var(--bg); }
       </div>
 
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-claim&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-claim')">Cancel</button>
         <button class="btn btn-primary" onclick="submitClaim()">Submit All Claims</button>
       </div>
     </div>
@@ -2354,7 +2359,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:420px;">
     <div class="modal-head">
       <span class="modal-title">Review Claim</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-claim-review&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-claim-review')">×</button>
     </div>
     <div class="modal-body">
       <input type="hidden" id="review-claim-id">
@@ -2364,10 +2369,10 @@ tr:hover td { background:var(--bg); }
         <input type="text" id="review-notes" placeholder="Reason for approval or rejection...">
       </div>
       <div class="form-actions" style="justify-content:space-between;">
-        <button class="btn btn-danger" onclick="reviewClaim(&#39;Rejected&#39;)">✕ Reject</button>
+        <button class="btn btn-danger" onclick="reviewClaim('Rejected')">✕ Reject</button>
         <div style="display:flex;gap:8px;">
-          <button class="btn btn-outline" onclick="closeModal(&#39;modal-claim-review&#39;)">Cancel</button>
-          <button class="btn btn-primary" onclick="reviewClaim(&#39;Approved&#39;)">✓ Approve</button>
+          <button class="btn btn-outline" onclick="closeModal('modal-claim-review')">Cancel</button>
+          <button class="btn btn-primary" onclick="reviewClaim('Approved')">✓ Approve</button>
         </div>
       </div>
     </div>
@@ -2379,7 +2384,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:400px;">
     <div class="modal-head">
       <span class="modal-title">Pay Claim</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-claim-pay&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-claim-pay')">×</button>
     </div>
     <div class="modal-body">
       <input type="hidden" id="pay-claim-id">
@@ -2391,7 +2396,7 @@ tr:hover td { background:var(--bg); }
         </div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-claim-pay&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-claim-pay')">Cancel</button>
         <button class="btn btn-primary" onclick="payClaim()">Confirm Payment</button>
       </div>
     </div>
@@ -2403,7 +2408,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:460px;">
     <div class="modal-head">
       <span class="modal-title">Pay Selected Claims</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-bulk-pay&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-bulk-pay')">×</button>
     </div>
     <div class="modal-body">
       <div id="bulk-pay-summary" style="background:var(--bg);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px;max-height:200px;overflow-y:auto;font-size:12px;"></div>
@@ -2415,10 +2420,10 @@ tr:hover td { background:var(--bg); }
       </div>
       <div style="padding:10px 14px;background:var(--green-light);border-radius:var(--radius-sm);margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">
         <span style="font-size:13px;font-weight:500;color:var(--green);">Total to Pay</span>
-        <span style="font-family:&#39;DM Mono&#39;,monospace;font-weight:700;font-size:16px;color:var(--green);" id="bulk-pay-total"></span>
+        <span style="font-family:'DM Mono',monospace;font-weight:700;font-size:16px;color:var(--green);" id="bulk-pay-total"></span>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-bulk-pay&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-bulk-pay')">Cancel</button>
         <button class="btn btn-primary" onclick="confirmBulkPay()">Confirm Payment</button>
       </div>
     </div>
@@ -2430,7 +2435,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:480px;">
     <div class="modal-head">
       <span class="modal-title" id="loan-modal-title">Add Loan</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-loan&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-loan')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid form-grid-2">
@@ -2450,7 +2455,7 @@ tr:hover td { background:var(--bg); }
         <div class="form-group" style="grid-column:1/-1;"><label>Notes <span style="font-weight:400;color:var(--text3);">(optional)</span></label><input type="text" id="loan-notes" placeholder="e.g. For lorry purchase, collateral, etc."></div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-loan&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-loan')">Cancel</button>
         <button class="btn btn-primary" onclick="saveLoan()">Save Loan</button>
       </div>
     </div>
@@ -2462,7 +2467,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:400px;">
     <div class="modal-head">
       <span class="modal-title">Record Payment</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-loan-payment&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-loan-payment')">×</button>
     </div>
     <div class="modal-body">
       <input type="hidden" id="lp-loan-id">
@@ -2476,7 +2481,7 @@ tr:hover td { background:var(--bg); }
         <div class="form-group" style="grid-column:1/-1;"><label>Notes</label><input type="text" id="lp-notes" placeholder="e.g. Month 6 installment"></div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-loan-payment&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-loan-payment')">Cancel</button>
         <button class="btn btn-primary" onclick="recordLoanPayment()">Record Payment</button>
       </div>
     </div>
@@ -2488,7 +2493,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:440px;">
     <div class="modal-head">
       <span class="modal-title" id="cf-modal-title">Add Cashflow Item</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-cashflow-item&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-cashflow-item')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid form-grid-2">
@@ -2496,11 +2501,11 @@ tr:hover td { background:var(--bg); }
           <label>Type</label>
           <div style="display:flex;gap:8px;">
             <label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px 14px;border:2px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:400;" id="cf-type-in-label">
-              <input type="radio" name="cf-type" id="cf-type-in" value="in" checked="" onchange="document.getElementById(&#39;cf-type-in-label&#39;).style.borderColor=&#39;var(--green)&#39;;document.getElementById(&#39;cf-type-out-label&#39;).style.borderColor=&#39;var(--border)&#39;" style="accent-color:var(--green);">
+              <input type="radio" name="cf-type" id="cf-type-in" value="in" checked onchange="document.getElementById('cf-type-in-label').style.borderColor='var(--green)';document.getElementById('cf-type-out-label').style.borderColor='var(--border)'" style="accent-color:var(--green);">
               <span style="color:var(--green);font-weight:500;">💰 Money In</span> <span style="color:var(--text2);font-size:11px;">receivable</span>
             </label>
             <label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px 14px;border:2px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:400;" id="cf-type-out-label">
-              <input type="radio" name="cf-type" id="cf-type-out" value="out" onchange="document.getElementById(&#39;cf-type-out-label&#39;).style.borderColor=&#39;var(--red)&#39;;document.getElementById(&#39;cf-type-in-label&#39;).style.borderColor=&#39;var(--border)&#39;" style="accent-color:var(--red);">
+              <input type="radio" name="cf-type" id="cf-type-out" value="out" onchange="document.getElementById('cf-type-out-label').style.borderColor='var(--red)';document.getElementById('cf-type-in-label').style.borderColor='var(--border)'" style="accent-color:var(--red);">
               <span style="color:var(--red);font-weight:500;">💸 Money Out</span> <span style="color:var(--text2);font-size:11px;">payable</span>
             </label>
           </div>
@@ -2524,7 +2529,7 @@ tr:hover td { background:var(--bg); }
         <div class="form-group" style="grid-column:1/-1;"><label>Notes <span style="font-weight:400;color:var(--text3);">(optional)</span></label><input type="text" id="cf-notes" placeholder="Counterparty, reference, etc."></div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-cashflow-item&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-cashflow-item')">Cancel</button>
         <button class="btn btn-primary" onclick="saveCashflowItem()">Save</button>
       </div>
     </div>
@@ -2536,7 +2541,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal" style="width:400px;">
     <div class="modal-head">
       <span class="modal-title" id="acct-modal-title">Add Payment Account</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-account&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-account')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid">
@@ -2552,7 +2557,7 @@ tr:hover td { background:var(--bg); }
         <div class="form-group"><label>Opening Balance (RM)</label><input type="number" id="acct-balance" placeholder="0.00" value="0"></div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-account&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-account')">Cancel</button>
         <button class="btn btn-primary" onclick="saveAccount()">Save Account</button>
       </div>
     </div>
@@ -2564,7 +2569,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal">
     <div class="modal-head">
       <span class="modal-title" id="supp-modal-title">Add Supplier</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-supplier&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-supplier')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid form-grid-2">
@@ -2584,7 +2589,7 @@ tr:hover td { background:var(--bg); }
         <div class="form-group" style="grid-column:1/-1"><label>Notes</label><input type="text" id="supp-notes" placeholder="e.g. min order, delivery days, special terms..."></div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-supplier&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-supplier')">Cancel</button>
         <button class="btn btn-primary" onclick="saveSupplier()">Save Supplier</button>
       </div>
     </div>
@@ -2596,7 +2601,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal">
     <div class="modal-head">
       <span class="modal-title" id="prod-modal-title">Add Product</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-product&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-product')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid form-grid-2">
@@ -2623,7 +2628,7 @@ tr:hover td { background:var(--bg); }
         </div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-product&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-product')">Cancel</button>
         <button class="btn btn-primary" onclick="saveProduct()">Save Product</button>
       </div>
     </div>
@@ -2635,7 +2640,7 @@ tr:hover td { background:var(--bg); }
   <div class="modal">
     <div class="modal-head">
       <span class="modal-title" id="cust-modal-title">Add Customer</span>
-      <button class="modal-close" onclick="closeModal(&#39;modal-customer&#39;)">×</button>
+      <button class="modal-close" onclick="closeModal('modal-customer')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-grid form-grid-2">
@@ -2650,7 +2655,7 @@ tr:hover td { background:var(--bg); }
         <div class="form-group" style="grid-column:1/-1"><label>Notes</label><input type="text" id="cust-notes" placeholder="Payment terms, preferences, etc."></div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal(&#39;modal-customer&#39;)">Cancel</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-customer')">Cancel</button>
         <button class="btn btn-primary" onclick="saveCustomer()">Save Customer</button>
       </div>
     </div>
@@ -10538,6 +10543,5 @@ function deleteTransfer(id) {
 sbInit();
 
 </script>
-
-
-</body></html>
+</body>
+</html>
