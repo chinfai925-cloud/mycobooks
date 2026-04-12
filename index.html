@@ -245,6 +245,9 @@ tr:hover td { background:var(--bg); }
 .mobile-topbar { display:none; align-items:center; gap:12px; padding:10px 14px; background:#1a2e1e; border-bottom:1px solid #2d4a32; position:sticky; top:0; z-index:50; flex-shrink:0; }
 .hamburger { background:none; border:none; cursor:pointer; padding:4px 6px; color:#d4e8d8; font-size:22px; line-height:1; }
 .mobile-topbar-title { font-size:15px; font-weight:600; color:#fff; }
+.tab-bar { display:flex; gap:4px; margin-bottom:14px; border-bottom:1px solid var(--border); overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+.tab-bar::-webkit-scrollbar { display:none; }
+.tab-bar .btn { flex-shrink:0; white-space:nowrap; }
 </style>
 </head>
 <body>
@@ -445,7 +448,7 @@ tr:hover td { background:var(--bg); }
       </div>
 
       <!-- Tabs -->
-      <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border);">
+      <div class="tab-bar">
         <button id="exp-tab-1" onclick="switchExpPage(1)" class="btn btn-outline" style="border-bottom:2px solid var(--green);color:var(--green);border-radius:var(--radius-sm) var(--radius-sm) 0 0;">All Expenses</button>
         <button id="exp-tab-2" onclick="switchExpPage(2)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">🔄 Recurring</button>
       </div>
@@ -540,7 +543,7 @@ tr:hover td { background:var(--bg); }
       <div id="so-metrics" style="display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;"></div>
 
       <!-- Tabs -->
-      <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border);">
+      <div class="tab-bar">
         <button id="so-tab-1" onclick="switchSoTab(1)" class="btn btn-outline" style="border-bottom:2px solid var(--green);color:var(--green);border-radius:var(--radius-sm) var(--radius-sm) 0 0;">All Orders</button>
         <button id="so-tab-2" onclick="switchSoTab(2)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;" class="so-dispatch-tab">📋 Dispatch Board</button>
       </div>
@@ -738,7 +741,7 @@ tr:hover td { background:var(--bg); }
       <div class="metrics-grid" id="prod-metrics" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px;"></div>
 
       <!-- Tabs -->
-      <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border);">
+      <div class="tab-bar">
         <button id="prod-tab-1" onclick="switchProdTab(1)" class="btn btn-outline" style="border-bottom:2px solid var(--green);color:var(--green);border-radius:var(--radius-sm) var(--radius-sm) 0 0;">Active Batches</button>
         <button id="prod-tab-2" onclick="switchProdTab(2)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">All Batches</button>
       </div>
@@ -777,7 +780,7 @@ tr:hover td { background:var(--bg); }
       <div class="metrics-grid" id="harvest-metrics" style="grid-template-columns:repeat(2,1fr);margin-bottom:16px;"></div>
 
       <!-- Tabs -->
-      <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border);">
+      <div class="tab-bar">
         <button id="hv-tab-1" onclick="switchHvTab(1)" class="btn btn-outline" style="border-bottom:2px solid var(--green);color:var(--green);border-radius:var(--radius-sm) var(--radius-sm) 0 0;">Daily Log</button>
         <button id="hv-tab-2" onclick="switchHvTab(2)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">By Batch / Flush</button>
         <button id="hv-tab-3" onclick="switchHvTab(3)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">📦 Packing</button>
@@ -901,7 +904,7 @@ tr:hover td { background:var(--bg); }
       <div class="metrics-grid" id="fleet-metrics" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px;"></div>
 
       <!-- Tabs -->
-      <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border);">
+      <div class="tab-bar">
         <button id="fl-tab-1" onclick="switchFleetTab(1)" class="btn btn-outline" style="border-bottom:2px solid var(--green);color:var(--green);border-radius:var(--radius-sm) var(--radius-sm) 0 0;">🚛 Trips</button>
         <button id="fl-tab-2" onclick="switchFleetTab(2)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">📊 Trip Summary</button>
         <button id="fl-tab-3" onclick="switchFleetTab(3)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">🚚 Per Lorry</button>
