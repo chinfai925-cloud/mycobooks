@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_125.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_126.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2697,6 +2697,15 @@ tr:hover td { background:var(--bg); }
             <option value="30">Net 30 days</option>
             <option value="45">Net 45 days</option>
             <option value="60">Net 60 days</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Default Price Tier</label>
+          <select id="cust-price-tier" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
+            <option value="">— No default —</option>
+            <option value="Wholesale">Wholesale Price</option>
+            <option value="Restaurant">Restaurant Price</option>
+            <option value="Retail">Retail Price</option>
+            <option value="Market">Market Price</option>
           </select>
         </div>
         <div class="form-group" style="grid-column:1/-1"><label>Notes</label><input type="text" id="cust-notes" placeholder="Preferences, delivery info, etc."></div>
@@ -7466,10 +7475,17 @@ function invLineChange(lineId, field, val) {
   if (field === 'product') {
     const prod = DB.products.find(p => p.name === val);
     if (prod) {
-      l.unitPrice = prod.priceWholesale;
-      // update the price input in-place
+      // Use customer's default price tier, fallback to wholesale
+      const tier = window._invCustPriceTier || 'Wholesale';
+      const priceMap = {
+        Wholesale:  prod.priceWholesale,
+        Restaurant: prod.priceRestaurant,
+        Retail:     prod.priceRetail,
+        Market:     prod.priceMarket,
+      };
+      l.unitPrice = priceMap[tier] || prod.priceWholesale;
       const priceInput = document.querySelector(`input[data-lineid="${lineId}"][data-field="unitPrice"]`);
-      if (priceInput) priceInput.value = prod.priceWholesale;
+      if (priceInput) priceInput.value = l.unitPrice;
       const subtotalEl = document.getElementById('inv-subtotal-' + lineId);
       if (subtotalEl) subtotalEl.textContent = fmt((parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0));
     }
@@ -9353,8 +9369,9 @@ function saveCustomer() {
     phone: document.getElementById('cust-phone').value,
     email: document.getElementById('cust-email').value,
     address: document.getElementById('cust-address').value,
-    terms:   parseInt(document.getElementById('cust-terms').value)||0,
-    notes:   document.getElementById('cust-notes').value
+    terms:     parseInt(document.getElementById('cust-terms').value)||0,
+    priceTier: document.getElementById('cust-price-tier').value,
+    notes:     document.getElementById('cust-notes').value
   };
   if (editingCustId) {
     const idx = DB.customers.findIndex(c=>c.id===editingCustId);
@@ -9370,6 +9387,7 @@ function saveCustomer() {
   renderCustomers();
   ['cust-name','cust-contact','cust-phone','cust-email','cust-address','cust-notes'].forEach(id => document.getElementById(id).value='');
   document.getElementById('cust-terms').value = '30';
+  document.getElementById('cust-price-tier').value = '';
 }
 
 function editCustomer(id) {
@@ -9382,9 +9400,10 @@ function editCustomer(id) {
   document.getElementById('cust-contact').value = c.contact||'';
   document.getElementById('cust-phone').value = c.phone||'';
   document.getElementById('cust-email').value = c.email||'';
-  document.getElementById('cust-address').value = c.address||'';
-  document.getElementById('cust-terms').value   = c.terms||0;
-  document.getElementById('cust-notes').value   = c.notes||'';
+  document.getElementById('cust-address').value    = c.address||'';
+  document.getElementById('cust-terms').value      = c.terms||0;
+  document.getElementById('cust-price-tier').value = c.priceTier||'';
+  document.getElementById('cust-notes').value      = c.notes||'';
   openModal('modal-customer');
 }
 
@@ -9429,6 +9448,8 @@ function selectCustomer(id) {
     due.setDate(due.getDate() + (c.terms||0));
     document.getElementById('inv-due').value = due.toISOString().split('T')[0];
   }
+  // Store price tier for use in line items
+  window._invCustPriceTier = c.priceTier || '';
   document.getElementById('inv-cust-dropdown').classList.remove('open');
 }
 
