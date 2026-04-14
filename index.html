@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_127.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_128.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -690,7 +690,7 @@ tr:hover td { background:var(--bg); }
           <div class="page-title">Customers</div>
           <div class="page-subtitle">Manage your buyer and client list</div>
         </div>
-        <button id="btn-add-customer" class="btn btn-primary" onclick="openModal(&#39;modal-customer&#39;)">+ Add Customer</button>
+        <button id="btn-add-customer" class="btn btn-primary" onclick="custPriceList={};renderCustPriceList();openModal(&#39;modal-customer&#39;)">+ Add Customer</button>
       </div>
       <div class="card" style="margin-bottom:16px;">
         <div class="card-body" style="padding:12px 16px;">
@@ -2704,6 +2704,13 @@ tr:hover td { background:var(--bg); }
         </div>
         <div class="form-group" style="grid-column:1/-1"><label>Notes</label><input type="text" id="cust-notes" placeholder="Preferences, delivery info, etc."></div>
       </div>
+      <!-- Custom Price List -->
+      <div style="margin-top:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <label style="font-size:12px;font-weight:500;color:var(--text2);">Custom Price List <span style="font-weight:400;color:var(--text3);">(overrides tier pricing per product)</span></label>
+        </div>
+        <div id="cust-price-list" style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:8px;"></div>
+      </div>
       <div class="form-actions">
         <button class="btn btn-outline" onclick="closeModal(&#39;modal-customer&#39;)">Cancel</button>
         <button class="btn btn-primary" onclick="saveCustomer()">Save Customer</button>
@@ -2798,7 +2805,7 @@ async function sbLoad() {
           DB[key] = rows.map(r => {
             const obj = { ...r };
             ['lines','customers','orders','expLines','items','dispatch',
-             'members','generated','statutory','payments','entries'].forEach(col => {
+             'members','generated','statutory','payments','entries','priceList'].forEach(col => {
               if (typeof obj[col] === 'string' && obj[col]) {
                 try { obj[col] = JSON.parse(obj[col]); } catch(e) {}
               }
@@ -2887,7 +2894,7 @@ const COLS = {
   invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','notes','product','qty','unit'],
   inventory:    ['id','name','cat','unit','stock','reorder','cost','supplier'],
   staff:        ['id','name','role','dept','payType','salary','ic','phone','joinDate','empType','epf','socso','eis','bank','bankAcc','notes'],
-  customers:    ['id','name','type','contact','phone','email','address','notes'],
+  customers:    ['id','name','contact','phone','email','address','terms','priceTier','priceList','notes'],
   products:     ['id','name','cat','unit','priceWholesale','priceRetail','priceRestaurant','priceMarket','desc','status'],
   accounts:     ['id','name','type','description','balance'],
   suppliers:    ['id','name','cat','contact','phone','email','address','terms','notes'],
@@ -2941,7 +2948,7 @@ async function sbSaveAll() {
       const rows = records.map(r => {
         const src = { ...r };
         ['lines','customers','orders','expLines','items','dispatch',
-         'members','generated','statutory','payments','entries'].forEach(c => {
+         'members','generated','statutory','payments','entries','priceList'].forEach(c => {
           if (src[c] && typeof src[c] === 'object') src[c] = JSON.stringify(src[c]);
         });
         if (!cols) return src;
@@ -3728,7 +3735,39 @@ function deleteMaintenance(id) {
 }
 
 // ---- RENDER ----
-// ---- ROUTE RATES ----
+// ---- CUSTOMER CUSTOM PRICE LIST ----
+let custPriceList = {}; // { productName: price }
+
+function renderCustPriceList() {
+  const el = document.getElementById('cust-price-list');
+  if (!el) return;
+  const rows = DB.products.filter(p => p.status !== 'Inactive').map(p => {
+    const customPrice = custPriceList[p.name];
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);">
+      <div style="flex:1;font-size:13px;">${p.name}</div>
+      <div style="font-size:11px;color:var(--text3);white-space:nowrap;">
+        W:${p.priceWholesale} R:${p.priceRestaurant} Ret:${p.priceRetail}
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span style="font-size:11px;color:var(--text2);">RM</span>
+        <input type="number" value="${customPrice||''}" placeholder="—" min="0" step="0.01"
+          style="width:70px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:right;"
+          oninput="setCustPrice('${p.name.replace(/'/g,"\\'")}', this.value)">
+      </div>
+    </div>`;
+  }).join('');
+  el.innerHTML = rows || '<div style="padding:10px;font-size:12px;color:var(--text3);">No products found</div>';
+}
+
+function setCustPrice(product, val) {
+  if (val === '' || val === null) {
+    delete custPriceList[product];
+  } else {
+    custPriceList[product] = parseFloat(val) || 0;
+  }
+}
+
+
 let editingRouteRateId = null;
 let rrNewRows = [];
 
@@ -7469,15 +7508,21 @@ function invLineChange(lineId, field, val) {
   if (field === 'product') {
     const prod = DB.products.find(p => p.name === val);
     if (prod) {
-      // Use customer's default price tier, fallback to wholesale
-      const tier = window._invCustPriceTier || 'Wholesale';
-      const priceMap = {
-        Wholesale:  prod.priceWholesale,
-        Restaurant: prod.priceRestaurant,
-        Retail:     prod.priceRetail,
-        Market:     prod.priceMarket,
-      };
-      l.unitPrice = priceMap[tier] || prod.priceWholesale;
+      // 1. Check customer custom price list first
+      const custPrices = window._invCustPriceList || {};
+      if (custPrices[val] !== undefined && custPrices[val] > 0) {
+        l.unitPrice = custPrices[val];
+      } else {
+        // 2. Fall back to price tier
+        const tier = window._invCustPriceTier || 'Wholesale';
+        const priceMap = {
+          Wholesale:  prod.priceWholesale,
+          Restaurant: prod.priceRestaurant,
+          Retail:     prod.priceRetail,
+          Market:     prod.priceMarket,
+        };
+        l.unitPrice = priceMap[tier] || prod.priceWholesale;
+      }
       const priceInput = document.querySelector(`input[data-lineid="${lineId}"][data-field="unitPrice"]`);
       if (priceInput) priceInput.value = l.unitPrice;
       const subtotalEl = document.getElementById('inv-subtotal-' + lineId);
@@ -9361,6 +9406,7 @@ function saveCustomer() {
     address: document.getElementById('cust-address').value,
     terms:     parseInt(document.getElementById('cust-terms').value)||0,
     priceTier: document.getElementById('cust-price-tier').value,
+    priceList: { ...custPriceList },
     notes:     document.getElementById('cust-notes').value
   };
   if (editingCustId) {
@@ -9378,6 +9424,7 @@ function saveCustomer() {
   ['cust-name','cust-contact','cust-phone','cust-email','cust-address','cust-notes'].forEach(id => document.getElementById(id).value='');
   document.getElementById('cust-terms').value = '30';
   document.getElementById('cust-price-tier').value = '';
+  custPriceList = {};
 }
 
 function editCustomer(id) {
@@ -9393,6 +9440,8 @@ function editCustomer(id) {
   document.getElementById('cust-terms').value      = c.terms||0;
   document.getElementById('cust-price-tier').value = c.priceTier||'';
   document.getElementById('cust-notes').value      = c.notes||'';
+  custPriceList = c.priceList ? { ...c.priceList } : {};
+  renderCustPriceList();
   openModal('modal-customer');
 }
 
@@ -9437,8 +9486,9 @@ function selectCustomer(id) {
     due.setDate(due.getDate() + (c.terms||0));
     document.getElementById('inv-due').value = due.toISOString().split('T')[0];
   }
-  // Store price tier for use in line items
-  window._invCustPriceTier = c.priceTier || '';
+  // Store price tier and custom price list for use in line items
+  window._invCustPriceTier  = c.priceTier || '';
+  window._invCustPriceList  = c.priceList  || {};
   document.getElementById('inv-cust-dropdown').classList.remove('open');
 }
 
