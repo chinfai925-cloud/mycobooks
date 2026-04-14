@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_123.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_124.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7516,7 +7516,8 @@ function renderInvoices() {
         <td><span class="badge ${statusMap[i.status]||'badge-gray'}">${i.status}</span>${i.status==='Paid'&&i.account?`<div style="font-size:10px;margin-top:2px;color:var(--green);font-weight:500;">${i.account}</div>`:''}</td>
         <td class="text-right mono" style="font-weight:500">${amountDisplay(i.total)}</td>
         <td style="display:flex;gap:4px;padding-top:10px;">
-          <button class="btn btn-outline btn-sm" onclick="printInvoice(${i.id})">🖨</button>
+          <button class="btn btn-outline btn-sm" onclick="printInvoice(${i.id})" title="Print Invoice">🖨 Inv</button>
+          <button class="btn btn-outline btn-sm" onclick="printDO(${i.id})" title="Print Delivery Order">📦 DO</button>
           ${can('canEdit') ? `<button class="btn btn-outline btn-sm" onclick="editInvoice(${i.id})">Edit</button>` : ''}
           ${can('canEdit') && i.status!=='Paid'?`<button class="btn btn-sm" style="background:var(--green-light);color:var(--green);font-size:11px;border:none;" onclick="markInvoicePaid(${i.id})">Mark Paid</button>`:''}
           ${can('canDelete') ? `<button class="btn btn-danger btn-sm" onclick="deleteInvoice(${i.id})">Del</button>` : ''}
@@ -7651,6 +7652,121 @@ function printInvoice(id) {
     <div class="footer">${co.footer||'Thank you for your business!'}</div>
 
     <div style="text-align:center;margin-top:24px;" class="no-print">
+      <button onclick="window.print()" style="padding:10px 28px;background:#166534;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-family:sans-serif;">🖨 Print / Save as PDF</button>
+    </div>
+  </body></html>`);
+  win.document.close();
+}
+
+function printDO(id) {
+  const i = DB.invoices.find(x=>x.id===id);
+  if (!i) return;
+  const co = DB.company || {};
+
+  // Build line items — no prices
+  let itemsHtml = '';
+  let totalQty = 0;
+  if (i.lines && i.lines.length > 0) {
+    itemsHtml = i.lines.map((l,idx) => {
+      totalQty += parseFloat(l.qty)||0;
+      return `<tr>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${idx+1}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${l.product||''}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${l.qty||''}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;"> </td>
+      </tr>`;
+    }).join('');
+  } else {
+    totalQty = i.qty||0;
+    itemsHtml = `<tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">1</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${i.product||''}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${i.qty||''}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;"> </td>
+    </tr>`;
+  }
+
+  const doNo = 'DO-' + i.no.replace('INV-','');
+  const win = window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head>
+    <title>Delivery Order ${doNo}</title>
+    <style>
+      * { margin:0; padding:0; box-sizing:border-box; }
+      body { font-family:'Segoe UI',sans-serif; font-size:13px; color:#111; padding:40px; max-width:750px; margin:0 auto; }
+      .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; border-bottom:2px solid #166534; padding-bottom:16px; }
+      .company { font-size:20px; font-weight:700; color:#166534; }
+      .do-title { font-size:26px; font-weight:700; color:#166534; text-align:right; }
+      .do-no { font-size:13px; color:#6b7280; text-align:right; }
+      .info-section { display:flex; justify-content:space-between; margin-bottom:24px; gap:20px; }
+      .info-box { flex:1; }
+      .info-box h4 { font-size:10px; text-transform:uppercase; color:#9ca3af; letter-spacing:0.05em; margin-bottom:6px; border-bottom:1px solid #e5e7eb; padding-bottom:4px; }
+      .info-box p { font-size:12px; line-height:1.7; }
+      table { width:100%; border-collapse:collapse; margin-bottom:24px; }
+      thead { background:#f0fdf4; }
+      th { padding:10px 12px; text-align:left; font-size:11px; text-transform:uppercase; color:#6b7280; letter-spacing:0.05em; border-bottom:2px solid #166534; }
+      th.center { text-align:center; }
+      .sig-section { display:flex; gap:40px; margin-top:40px; }
+      .sig-box { flex:1; border-top:1px solid #111; padding-top:8px; font-size:11px; color:#6b7280; text-align:center; }
+      .footer { margin-top:30px; text-align:center; font-size:11px; color:#9ca3af; border-top:1px solid #e5e7eb; padding-top:12px; }
+      @media print { body { padding:20px; } button { display:none; } }
+    </style>
+  </head><body>
+    <div class="header">
+      <div>
+        <div class="company">${co.name||'🍄 MycoBooks'}</div>
+        ${co.regno?`<div style="font-size:11px;color:#6b7280;">Reg: ${co.regno}</div>`:''}
+        ${co.phone?`<div style="font-size:11px;color:#6b7280;">${co.phone}</div>`:''}
+        ${co.address?`<div style="font-size:11px;color:#6b7280;max-width:220px;">${co.address}</div>`:''}
+      </div>
+      <div>
+        <div class="do-title">DELIVERY ORDER</div>
+        <div class="do-no">${doNo}</div>
+        <div style="font-size:11px;color:#6b7280;text-align:right;margin-top:4px;">Ref: ${i.no}</div>
+      </div>
+    </div>
+
+    <div class="info-section">
+      <div class="info-box">
+        <h4>Deliver To</h4>
+        <p><strong>${i.customer}</strong></p>
+        ${i.address?`<p style="color:#6b7280;">${i.address}</p>`:''}
+      </div>
+      <div class="info-box" style="max-width:200px;">
+        <h4>Details</h4>
+        <p><strong>Date:</strong> ${fmtDate(i.date)}</p>
+        <p><strong>DO No:</strong> ${doNo}</p>
+        <p><strong>Inv No:</strong> ${i.no}</p>
+      </div>
+    </div>
+
+    <table>
+      <thead><tr>
+        <th class="center" style="width:40px;">No.</th>
+        <th>Description / Product</th>
+        <th class="center" style="width:80px;">Qty</th>
+        <th class="center" style="width:100px;">Received (✓)</th>
+      </tr></thead>
+      <tbody>
+        ${itemsHtml}
+        <tr style="background:#f9fafb;font-weight:600;">
+          <td colspan="2" style="padding:8px 12px;border-top:2px solid #166534;">Total</td>
+          <td style="padding:8px 12px;text-align:center;border-top:2px solid #166534;">${totalQty}</td>
+          <td style="border-top:2px solid #166534;"></td>
+        </tr>
+      </tbody>
+    </table>
+
+    ${i.notes?`<div style="padding:10px 14px;background:#f9fafb;border-radius:6px;font-size:12px;color:#6b7280;margin-bottom:20px;"><strong>Notes:</strong> ${i.notes}</div>`:''}
+
+    <div class="sig-section">
+      <div class="sig-box">Prepared by<br><br><br>Name: ___________________<br>Date: ___________________</div>
+      <div class="sig-box">Delivered by<br><br><br>Name: ___________________<br>Date: ___________________</div>
+      <div class="sig-box">Received by<br><br><br>Name: ___________________<br>Date: ___________________</div>
+    </div>
+
+    <div class="footer">${co.footer||'Thank you for your business!'}</div>
+
+    <div style="text-align:center;margin-top:24px;">
       <button onclick="window.print()" style="padding:10px 28px;background:#166534;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-family:sans-serif;">🖨 Print / Save as PDF</button>
     </div>
   </body></html>`);
