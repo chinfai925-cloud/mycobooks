@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_121.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_122.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1274,11 +1274,29 @@ tr:hover td { background:var(--bg); }
       <div class="page-header">
         <div>
           <div class="page-title">Settings</div>
-          <div class="page-subtitle">Manage payment accounts and app preferences</div>
+          <div class="page-subtitle">Manage company profile, payment accounts and app preferences</div>
         </div>
       </div>
       <div class="grid-2">
         <div>
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-head">
+              <span class="card-title">Company Profile</span>
+              <button class="btn btn-primary btn-sm" onclick="saveCompanyProfile()">Save</button>
+            </div>
+            <div class="card-body">
+              <div class="form-grid form-grid-2">
+                <div class="form-group"><label>Company Name</label><input type="text" id="co-name" placeholder="e.g. Top Mushroom Sdn Bhd"></div>
+                <div class="form-group"><label>Registration No.</label><input type="text" id="co-regno" placeholder="e.g. 202301012345"></div>
+                <div class="form-group"><label>Phone</label><input type="text" id="co-phone" placeholder="+60 3-XXXX XXXX"></div>
+                <div class="form-group"><label>Email</label><input type="email" id="co-email" placeholder="info@company.com"></div>
+                <div class="form-group" style="grid-column:1/-1"><label>Address</label><textarea id="co-address" rows="2" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;resize:vertical;" placeholder="Full business address..."></textarea></div>
+                <div class="form-group"><label>Bank Name</label><input type="text" id="co-bank" placeholder="e.g. Maybank"></div>
+                <div class="form-group"><label>Bank Account No.</label><input type="text" id="co-bankacc" placeholder="e.g. 1234 5678 9012"></div>
+                <div class="form-group" style="grid-column:1/-1"><label>Invoice Footer / Notes</label><input type="text" id="co-footer" placeholder="e.g. Payment via bank transfer. Thank you for your business!"></div>
+              </div>
+            </div>
+          </div>
           <div class="card">
             <div class="card-head">
               <span class="card-title">Payment Accounts</span>
@@ -3025,6 +3043,7 @@ const DB = {
   maintenance: [],
   trips: [],
   routeRates: [],
+  company: { name:'', regno:'', phone:'', email:'', address:'', bank:'', bankacc:'', footer:'Thank you for your business!' },
   nextIds: { expenses:1, sales:1, invoices:1, inventory:1, staff:1, customers:1, products:1, accounts:1, users:1, suppliers:1, payrollRuns:1, wageAdvances:1, transfers:1, cashflowItems:1, loans:1, claims:1, recurringExpenses:1, batches:1, harvests:1, packings:1, packingRates:1, salesOrders:1, lorries:1, refuels:1, maintenance:1, trips:1, routeRates:1 }
 };
 
@@ -3053,6 +3072,15 @@ function doLogin() {
   populateAccountSelects();
   populateStatementAccounts();
   renderDashboard();
+  // Load company profile from localStorage
+  try {
+    const co = localStorage.getItem('mycobooks_company');
+    if (co) {
+      DB.company = JSON.parse(co);
+      const el = document.querySelector('.sidebar-brand .company');
+      if (el && DB.company.name) el.textContent = DB.company.name;
+    }
+  } catch(e) {}
   // Load all data from Supabase then re-render
   sbLoad().then(() => {
     // Keep current user from session (sbLoad overwrites DB.users)
@@ -3805,7 +3833,34 @@ function renderRrExisting() {
     </table>`;
 }
 
-function saveRouteRate() {} // legacy stub — no longer used
+function saveCompanyProfile() {
+  DB.company = {
+    name:    document.getElementById('co-name').value.trim(),
+    regno:   document.getElementById('co-regno').value.trim(),
+    phone:   document.getElementById('co-phone').value.trim(),
+    email:   document.getElementById('co-email').value.trim(),
+    address: document.getElementById('co-address').value.trim(),
+    bank:    document.getElementById('co-bank').value.trim(),
+    bankacc: document.getElementById('co-bankacc').value.trim(),
+    footer:  document.getElementById('co-footer').value.trim(),
+  };
+  // Persist to localStorage (works across sessions without Supabase)
+  try { localStorage.setItem('mycobooks_company', JSON.stringify(DB.company)); } catch(e) {}
+  // Update sidebar company name
+  const el = document.querySelector('.sidebar-brand .company');
+  if (el && DB.company.name) el.textContent = DB.company.name;
+  showToast('Company profile saved');
+}
+
+function renderCompanyProfile() {
+  const c = DB.company || {};
+  ['name','regno','phone','email','address','bank','bankacc','footer'].forEach(f => {
+    const el = document.getElementById('co-'+f);
+    if (el) el.value = c[f]||'';
+  });
+}
+
+
 
 function deleteRouteRate(id) {
   if (!confirm('Delete this route?')) return;
@@ -7502,6 +7557,7 @@ function printInvoice(id) {
   const sst = i.sst||0;
   const total = i.total||0;
 
+  const co = DB.company || {};
   const win = window.open('','_blank');
   win.document.write(`<!DOCTYPE html><html><head>
     <title>Invoice ${i.no}</title>
@@ -7540,8 +7596,11 @@ function printInvoice(id) {
   </head><body>
     <div class="header">
       <div>
-        <div class="company">🍄 MycoBooks</div>
-        <div style="font-size:12px;color:#6b7280;margin-top:4px;">Mushroom Farm</div>
+        <div class="company">${co.name||'🍄 MycoBooks'}</div>
+        ${co.regno?`<div style="font-size:11px;color:#6b7280;">Reg: ${co.regno}</div>`:''}
+        ${co.phone?`<div style="font-size:11px;color:#6b7280;">${co.phone}</div>`:''}
+        ${co.email?`<div style="font-size:11px;color:#6b7280;">${co.email}</div>`:''}
+        ${co.address?`<div style="font-size:11px;color:#6b7280;max-width:200px;line-height:1.4;">${co.address}</div>`:''}
       </div>
       <div>
         <div class="inv-title">INVOICE</div>
@@ -7587,8 +7646,9 @@ function printInvoice(id) {
     </div>
 
     ${i.notes?`<div class="notes"><strong>Notes:</strong> ${i.notes}</div>`:''}
+    ${co.bank||co.bankacc?`<div class="notes" style="margin-top:10px;"><strong>Payment Details:</strong>${co.bank?' Bank: '+co.bank:''}${co.bankacc?' · Acc: '+co.bankacc:''}</div>`:''}
 
-    <div class="footer">Thank you for your business!</div>
+    <div class="footer">${co.footer||'Thank you for your business!'}</div>
 
     <scr'+'ipt>window.onload=()=>window.print();<\/scr'+'ipt>
   </body></html>`);
@@ -8638,6 +8698,7 @@ function renderSettings() {
   const typeLabel = {cash:'Cash', bank:'Bank', ewallet:'E-wallet'};
   renderPackingRates();
   renderRouteRates();
+  renderCompanyProfile();
   // Show/hide account management buttons for admin only
   const btnAddAcct = document.getElementById('btn-add-account');
   if (btnAddAcct) btnAddAcct.style.display = can('seeUsers') ? '' : 'none';
