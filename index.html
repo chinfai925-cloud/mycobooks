@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_128.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_131.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2652,10 +2652,7 @@ tr:hover td { background:var(--bg); }
             <option>kg</option><option>g</option><option>pack</option><option>box</option><option>piece</option><option>bag</option><option>litre</option><option>bottle</option><option>tray</option>
           </datalist>
         </div>
-        <div class="form-group"><label>Wholesale Price (RM)</label><input type="number" id="prod-price-wholesale" placeholder="0.00"></div>
-        <div class="form-group"><label>Retail Price (RM)</label><input type="number" id="prod-price-retail" placeholder="0.00"></div>
-        <div class="form-group"><label>Restaurant Price (RM)</label><input type="number" id="prod-price-restaurant" placeholder="0.00"></div>
-        <div class="form-group"><label>Market Price (RM)</label><input type="number" id="prod-price-market" placeholder="0.00"></div>
+        <div class="form-group"><label>Price (RM)</label><input type="number" id="prod-price" placeholder="0.00" min="0" step="0.01"></div>
         <div class="form-group" style="grid-column:1/-1"><label>Description / Notes</label><input type="text" id="prod-desc" placeholder="e.g. Grade A, vacuum packed, 500g per pack"></div>
         <div class="form-group"><label>Status</label>
           <select id="prod-status"><option>Active</option><option>Inactive</option></select>
@@ -2691,15 +2688,6 @@ tr:hover td { background:var(--bg); }
             <option value="30">Net 30 days</option>
             <option value="45">Net 45 days</option>
             <option value="60">Net 60 days</option>
-          </select>
-        </div>
-        <div class="form-group"><label>Default Price Tier</label>
-          <select id="cust-price-tier" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
-            <option value="">— No default —</option>
-            <option value="Wholesale">Wholesale Price</option>
-            <option value="Restaurant">Restaurant Price</option>
-            <option value="Retail">Retail Price</option>
-            <option value="Market">Market Price</option>
           </select>
         </div>
         <div class="form-group" style="grid-column:1/-1"><label>Notes</label><input type="text" id="cust-notes" placeholder="Preferences, delivery info, etc."></div>
@@ -2895,7 +2883,7 @@ const COLS = {
   inventory:    ['id','name','cat','unit','stock','reorder','cost','supplier'],
   staff:        ['id','name','role','dept','payType','salary','ic','phone','joinDate','empType','epf','socso','eis','bank','bankAcc','notes'],
   customers:    ['id','name','contact','phone','email','address','terms','priceTier','priceList','notes'],
-  products:     ['id','name','cat','unit','priceWholesale','priceRetail','priceRestaurant','priceMarket','desc','status'],
+  products:     ['id','name','cat','unit','price','desc','status'],
   accounts:     ['id','name','type','description','balance'],
   suppliers:    ['id','name','cat','contact','phone','email','address','terms','notes'],
   payrollRuns:  ['id','month','processedOn','entries','totalNet'],
@@ -3745,9 +3733,7 @@ function renderCustPriceList() {
     const customPrice = custPriceList[p.name];
     return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);">
       <div style="flex:1;font-size:13px;">${p.name}</div>
-      <div style="font-size:11px;color:var(--text3);white-space:nowrap;">
-        W:${p.priceWholesale} R:${p.priceRestaurant} Ret:${p.priceRetail}
-      </div>
+      <div style="font-size:11px;color:var(--text3);">Default: RM ${(p.price||p.priceWholesale||0).toFixed(2)}</div>
       <div style="display:flex;align-items:center;gap:6px;">
         <span style="font-size:11px;color:var(--text2);">RM</span>
         <input type="number" value="${customPrice||''}" placeholder="—" min="0" step="0.01"
@@ -7513,15 +7499,8 @@ function invLineChange(lineId, field, val) {
       if (custPrices[val] !== undefined && custPrices[val] > 0) {
         l.unitPrice = custPrices[val];
       } else {
-        // 2. Fall back to price tier
-        const tier = window._invCustPriceTier || 'Wholesale';
-        const priceMap = {
-          Wholesale:  prod.priceWholesale,
-          Restaurant: prod.priceRestaurant,
-          Retail:     prod.priceRetail,
-          Market:     prod.priceMarket,
-        };
-        l.unitPrice = priceMap[tier] || prod.priceWholesale;
+        // 2. Fall back to product default price
+        l.unitPrice = prod.price || prod.priceWholesale || 0;
       }
       const priceInput = document.querySelector(`input[data-lineid="${lineId}"][data-field="unitPrice"]`);
       if (priceInput) priceInput.value = l.unitPrice;
@@ -8996,8 +8975,7 @@ function autoFillSalePrice() {
   const type = document.getElementById('sale-type').value;
   const prod = DB.products.find(p => p.name === name);
   if (!prod) return;
-  const priceMap = {Wholesale:'priceWholesale',Retail:'priceRetail',Restaurant:'priceRestaurant',Market:'priceMarket'};
-  const key = priceMap[type] || 'priceRetail';
+  const key = 'price';
   document.getElementById('sale-price').value = prod[key];
   calcSaleTotal();
 }
@@ -9006,7 +8984,7 @@ function autoFillInvPrice() {
   const name = document.getElementById('inv-product').value;
   const prod = DB.products.find(p => p.name === name);
   if (!prod) return;
-  document.getElementById('inv-unit').value = prod.priceWholesale;
+  document.getElementById('inv-unit').value = prod.price || prod.priceWholesale || 0;
   calcInvTotal();
 }
 
@@ -9038,15 +9016,12 @@ function renderProducts() {
   document.getElementById('prod-table').innerHTML = data.length === 0
     ? '<div class="empty-state"><div class="icon">🍄</div><p>No products found</p></div>'
     : `<table>
-      <thead><tr><th>Product Name</th><th>Category</th><th>Unit</th><th>Wholesale</th><th>Retail</th><th>Restaurant</th><th>Market</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Product Name</th><th>Category</th><th>Unit</th><th>Price (RM)</th><th>Status</th><th></th></tr></thead>
       <tbody>${data.map(p => `<tr>
         <td><div style="font-weight:500">${p.name}</div>${p.desc?`<div style="font-size:11px;color:var(--text3);margin-top:2px;">${p.desc}</div>`:''}</td>
         <td><span class="badge ${catColorMap[p.cat]||'badge-gray'}">${p.cat}</span></td>
         <td style="color:var(--text2)">${p.unit}</td>
-        <td class="mono">${fmt(p.priceWholesale)}</td>
-        <td class="mono">${fmt(p.priceRetail)}</td>
-        <td class="mono">${fmt(p.priceRestaurant)}</td>
-        <td class="mono">${fmt(p.priceMarket)}</td>
+        <td class="mono">${fmt(p.price||p.priceWholesale||0)}</td>
         <td><span class="badge ${p.status==='Active'?'badge-green':'badge-gray'}">${p.status}</span></td>
         <td style="display:flex;gap:4px;padding-top:10px;">
           ${can('canEdit') ? `<button class="btn btn-outline btn-sm" onclick="editProduct(${p.id})">Edit</button>` : ''}
@@ -9059,7 +9034,7 @@ function renderProducts() {
 function openProductModal() {
   editingProdId = null;
   document.getElementById('prod-modal-title').textContent = 'Add Product';
-  ['prod-name','prod-price-wholesale','prod-price-retail','prod-price-restaurant','prod-price-market','prod-desc'].forEach(id => document.getElementById(id).value = '');
+  ['prod-name','prod-price','prod-desc'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('prod-status').value = 'Active';
   openModal('modal-product');
 }
@@ -9072,10 +9047,7 @@ function editProduct(id) {
   document.getElementById('prod-name').value = p.name;
   document.getElementById('prod-cat').value = p.cat;
   document.getElementById('prod-unit').value = p.unit;
-  document.getElementById('prod-price-wholesale').value = p.priceWholesale;
-  document.getElementById('prod-price-retail').value = p.priceRetail;
-  document.getElementById('prod-price-restaurant').value = p.priceRestaurant;
-  document.getElementById('prod-price-market').value = p.priceMarket;
+  document.getElementById('prod-price').value = p.price || p.priceWholesale || '';
   document.getElementById('prod-desc').value = p.desc || '';
   document.getElementById('prod-status').value = p.status;
   openModal('modal-product');
@@ -9087,10 +9059,7 @@ function saveProduct() {
   const obj = {
     name, cat: document.getElementById('prod-cat').value,
     unit: document.getElementById('prod-unit').value,
-    priceWholesale: parseFloat(document.getElementById('prod-price-wholesale').value) || 0,
-    priceRetail: parseFloat(document.getElementById('prod-price-retail').value) || 0,
-    priceRestaurant: parseFloat(document.getElementById('prod-price-restaurant').value) || 0,
-    priceMarket: parseFloat(document.getElementById('prod-price-market').value) || 0,
+    price: parseFloat(document.getElementById('prod-price').value) || 0,
     desc: document.getElementById('prod-desc').value,
     status: document.getElementById('prod-status').value
   };
