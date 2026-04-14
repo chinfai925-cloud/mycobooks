@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_120.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_121.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7479,12 +7479,12 @@ function printInvoice(id) {
   let subtotal = 0;
   if (i.lines && i.lines.length > 0) {
     itemsHtml = i.lines.map(l => {
-      const lineTotal = (l.qty||0) * (l.price||0);
+      const lineTotal = l.subtotal || ((l.qty||0) * (l.unitPrice||l.price||0));
       subtotal += lineTotal;
       return `<tr>
         <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${l.product||l.desc||''}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${l.qty||''}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">RM ${(l.price||0).toFixed(2)}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">RM ${(l.unitPrice||l.price||0).toFixed(2)}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">RM ${lineTotal.toFixed(2)}</td>
       </tr>`;
     }).join('');
