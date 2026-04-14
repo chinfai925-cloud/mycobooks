@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_131.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_132.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2882,7 +2882,7 @@ const COLS = {
   invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','notes','product','qty','unit'],
   inventory:    ['id','name','cat','unit','stock','reorder','cost','supplier'],
   staff:        ['id','name','role','dept','payType','salary','ic','phone','joinDate','empType','epf','socso','eis','bank','bankAcc','notes'],
-  customers:    ['id','name','contact','phone','email','address','terms','priceTier','priceList','notes'],
+  customers:    ['id','name','contact','phone','email','address','terms','priceList','notes'],
   products:     ['id','name','cat','unit','price','desc','status'],
   accounts:     ['id','name','type','description','balance'],
   suppliers:    ['id','name','cat','contact','phone','email','address','terms','notes'],
@@ -9374,7 +9374,6 @@ function saveCustomer() {
     email: document.getElementById('cust-email').value,
     address: document.getElementById('cust-address').value,
     terms:     parseInt(document.getElementById('cust-terms').value)||0,
-    priceTier: document.getElementById('cust-price-tier').value,
     priceList: { ...custPriceList },
     notes:     document.getElementById('cust-notes').value
   };
@@ -9392,7 +9391,6 @@ function saveCustomer() {
   renderCustomers();
   ['cust-name','cust-contact','cust-phone','cust-email','cust-address','cust-notes'].forEach(id => document.getElementById(id).value='');
   document.getElementById('cust-terms').value = '30';
-  document.getElementById('cust-price-tier').value = '';
   custPriceList = {};
 }
 
@@ -9407,7 +9405,6 @@ function editCustomer(id) {
   document.getElementById('cust-email').value = c.email||'';
   document.getElementById('cust-address').value    = c.address||'';
   document.getElementById('cust-terms').value      = c.terms||0;
-  document.getElementById('cust-price-tier').value = c.priceTier||'';
   document.getElementById('cust-notes').value      = c.notes||'';
   custPriceList = c.priceList ? { ...c.priceList } : {};
   renderCustPriceList();
@@ -9456,7 +9453,6 @@ function selectCustomer(id) {
     document.getElementById('inv-due').value = due.toISOString().split('T')[0];
   }
   // Store price tier and custom price list for use in line items
-  window._invCustPriceTier  = c.priceTier || '';
   window._invCustPriceList  = c.priceList  || {};
   document.getElementById('inv-cust-dropdown').classList.remove('open');
 }
