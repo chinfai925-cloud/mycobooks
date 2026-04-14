@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_124.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_125.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7648,6 +7648,15 @@ function printInvoice(id) {
 
     ${i.notes?`<div class="notes"><strong>Notes:</strong> ${i.notes}</div>`:''}
     ${co.bank||co.bankacc?`<div class="notes" style="margin-top:10px;"><strong>Payment Details:</strong>${co.bank?' Bank: '+co.bank:''}${co.bankacc?' · Acc: '+co.bankacc:''}</div>`:''}
+
+    <div style="margin-top:20px;padding:14px 16px;border:1px solid #e5e7eb;border-radius:6px;font-size:11px;color:#6b7280;line-height:1.9;">
+      <div style="font-weight:600;color:#374151;margin-bottom:6px;font-size:12px;">Terms & Conditions</div>
+      <div>1. Please indicate our invoice number on your remittance.</div>
+      <div>2. Any discrepancies regarding this bill should be lodged within seven (7) days from the date hereof.</div>
+      <div>3. We reserve the right to charge interest at the rate of 1.5% per month on all overdue accounts.</div>
+      <div>4. All payments by cheques must be crossed and made in favour of <strong style="color:#111;">${co.name||'TOP MUSHROOM SDN BHD'}</strong>.</div>
+      <div>5. Bank Account No.: <strong style="color:#111;">${co.bank||'PUBLIC BANK'} ${co.bankacc||'3230197126'}</strong></div>
+    </div>
 
     <div class="footer">${co.footer||'Thank you for your business!'}</div>
 
