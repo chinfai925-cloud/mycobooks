@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_135.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_137.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2653,6 +2653,7 @@ tr:hover td { background:var(--bg); }
           </datalist>
         </div>
         <div class="form-group"><label>Price (RM)</label><input type="number" id="prod-price" placeholder="0.00" min="0" step="0.01"></div>
+        <div class="form-group"><label>Price (SGD) <span style="font-weight:400;color:var(--text3);">optional</span></label><input type="number" id="prod-price-sgd" placeholder="0.00" min="0" step="0.01"></div>
         <div class="form-group" style="grid-column:1/-1"><label>Description / Notes</label><input type="text" id="prod-desc" placeholder="e.g. Grade A, vacuum packed, 500g per pack"></div>
         <div class="form-group"><label>Status</label>
           <select id="prod-status"><option>Active</option><option>Inactive</option></select>
@@ -2688,6 +2689,12 @@ tr:hover td { background:var(--bg); }
             <option value="30">Net 30 days</option>
             <option value="45">Net 45 days</option>
             <option value="60">Net 60 days</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Invoice Currency</label>
+          <select id="cust-currency" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
+            <option value="MYR">MYR (Ringgit)</option>
+            <option value="SGD">SGD (Singapore Dollar)</option>
           </select>
         </div>
         <div class="form-group" style="grid-column:1/-1"><label>Notes</label><input type="text" id="cust-notes" placeholder="Preferences, delivery info, etc."></div>
@@ -2882,8 +2889,8 @@ const COLS = {
   invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','notes','product','qty','unit'],
   inventory:    ['id','name','cat','unit','stock','reorder','cost','supplier'],
   staff:        ['id','name','role','dept','payType','salary','ic','phone','joinDate','empType','epf','socso','eis','bank','bankAcc','notes'],
-  customers:    ['id','name','contact','phone','email','address','terms','priceList','notes'],
-  products:     ['id','name','cat','unit','price','desc','status','sort'],
+  customers:    ['id','name','contact','phone','email','address','terms','currency','priceList','notes'],
+  products:     ['id','name','cat','unit','price','priceSgd','desc','status','sort'],
   accounts:     ['id','name','type','description','balance'],
   suppliers:    ['id','name','cat','contact','phone','email','address','terms','notes'],
   payrollRuns:  ['id','month','processedOn','entries','totalNet'],
@@ -7496,10 +7503,12 @@ function invLineChange(lineId, field, val) {
     if (prod) {
       // 1. Check customer custom price list first
       const custPrices = window._invCustPriceList || {};
+      const currency   = window._invCustCurrency  || 'MYR';
       if (custPrices[val] !== undefined && custPrices[val] > 0) {
         l.unitPrice = custPrices[val];
+      } else if (currency === 'SGD' && prod.priceSgd > 0) {
+        l.unitPrice = prod.priceSgd;
       } else {
-        // 2. Fall back to product default price
         l.unitPrice = prod.price || prod.priceWholesale || 0;
       }
       const priceInput = document.querySelector(`input[data-lineid="${lineId}"][data-field="unitPrice"]`);
@@ -7574,8 +7583,8 @@ function printInvoice(id) {
       return `<tr>
         <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${l.product||l.desc||''}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${l.qty||''}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">RM ${(l.unitPrice||l.price||0).toFixed(2)}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">RM ${lineTotal.toFixed(2)}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${currSym} ${(l.unitPrice||l.price||0).toFixed(2)}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${currSym} ${lineTotal.toFixed(2)}</td>
       </tr>`;
     }).join('');
   } else {
@@ -7584,7 +7593,7 @@ function printInvoice(id) {
       <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${i.product||'Services/Goods'}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${i.qty||1}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">RM ${(i.unit||i.total||0).toFixed(2)}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">RM ${(i.total||0).toFixed(2)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${currSym} ${(i.total||0).toFixed(2)}</td>
     </tr>`;
   }
 
@@ -7593,6 +7602,9 @@ function printInvoice(id) {
   const total = i.total||0;
 
   const co = DB.company || {};
+  const cust = DB.customers.find(c => c.name === i.customer);
+  const currency = (cust && cust.currency) || 'MYR';
+  const currSym = currency === 'SGD' ? 'SGD' : 'RM';
   const win = window.open('','_blank');
   win.document.write(`<!DOCTYPE html><html><head>
     <title>Invoice ${i.no}</title>
@@ -7640,6 +7652,7 @@ function printInvoice(id) {
       <div>
         <div class="inv-title">INVOICE</div>
         <div class="inv-no">${i.no}</div>
+        <div style="font-size:11px;color:#6b7280;text-align:right;margin-top:2px;">${currency}</div>
         <div style="margin-top:8px;">
           <span class="status-badge ${i.status==='Paid'?'status-paid':i.status==='Overdue'?'status-overdue':'status-pending'}">${i.status}</span>
         </div>
@@ -7673,10 +7686,10 @@ function printInvoice(id) {
 
     <div class="totals">
       <table>
-        <tr><td style="color:#6b7280;">Subtotal</td><td>RM ${subtotal.toFixed(2)}</td></tr>
-        ${tax>0?`<tr><td style="color:#6b7280;">Tax</td><td>RM ${tax.toFixed(2)}</td></tr>`:''}
-        ${sst>0?`<tr><td style="color:#6b7280;">SST</td><td>RM ${sst.toFixed(2)}</td></tr>`:''}
-        <tr class="grand-total"><td>Total</td><td>RM ${total.toFixed(2)}</td></tr>
+        <tr><td style="color:#6b7280;">Subtotal</td><td>${currSym} ${subtotal.toFixed(2)}</td></tr>
+        ${tax>0?`<tr><td style="color:#6b7280;">Tax</td><td>${currSym} ${tax.toFixed(2)}</td></tr>`:''}
+        ${sst>0?`<tr><td style="color:#6b7280;">SST</td><td>${currSym} ${sst.toFixed(2)}</td></tr>`:''}
+        <tr class="grand-total"><td>Total</td><td>${currSym} ${total.toFixed(2)}</td></tr>
       </table>
     </div>
 
@@ -9057,7 +9070,7 @@ function renderProducts() {
 function openProductModal() {
   editingProdId = null;
   document.getElementById('prod-modal-title').textContent = 'Add Product';
-  ['prod-name','prod-price','prod-desc'].forEach(id => document.getElementById(id).value = '');
+  ['prod-name','prod-price','prod-price-sgd','prod-desc'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('prod-status').value = 'Active';
   openModal('modal-product');
 }
@@ -9071,6 +9084,7 @@ function editProduct(id) {
   document.getElementById('prod-cat').value = p.cat;
   document.getElementById('prod-unit').value = p.unit;
   document.getElementById('prod-price').value = p.price || p.priceWholesale || '';
+  document.getElementById('prod-price-sgd').value = p.priceSgd || '';
   document.getElementById('prod-desc').value = p.desc || '';
   document.getElementById('prod-status').value = p.status;
   openModal('modal-product');
@@ -9082,7 +9096,8 @@ function saveProduct() {
   const obj = {
     name, cat: document.getElementById('prod-cat').value,
     unit: document.getElementById('prod-unit').value,
-    price: parseFloat(document.getElementById('prod-price').value) || 0,
+    price:    parseFloat(document.getElementById('prod-price').value) || 0,
+    priceSgd: parseFloat(document.getElementById('prod-price-sgd').value) || 0,
     desc: document.getElementById('prod-desc').value,
     status: document.getElementById('prod-status').value
   };
@@ -9397,6 +9412,7 @@ function saveCustomer() {
     email: document.getElementById('cust-email').value,
     address: document.getElementById('cust-address').value,
     terms:     parseInt(document.getElementById('cust-terms').value)||0,
+    currency:  document.getElementById('cust-currency').value||'MYR',
     priceList: { ...custPriceList },
     notes:     document.getElementById('cust-notes').value
   };
@@ -9414,6 +9430,7 @@ function saveCustomer() {
   renderCustomers();
   ['cust-name','cust-contact','cust-phone','cust-email','cust-address','cust-notes'].forEach(id => document.getElementById(id).value='');
   document.getElementById('cust-terms').value = '30';
+  document.getElementById('cust-currency').value = 'MYR';
   custPriceList = {};
 }
 
@@ -9428,6 +9445,7 @@ function editCustomer(id) {
   document.getElementById('cust-email').value = c.email||'';
   document.getElementById('cust-address').value    = c.address||'';
   document.getElementById('cust-terms').value      = c.terms||0;
+  document.getElementById('cust-currency').value    = c.currency||'MYR';
   document.getElementById('cust-notes').value      = c.notes||'';
   custPriceList = c.priceList ? { ...c.priceList } : {};
   renderCustPriceList();
@@ -9477,6 +9495,7 @@ function selectCustomer(id) {
   }
   // Store price tier and custom price list for use in line items
   window._invCustPriceList  = c.priceList  || {};
+  window._invCustCurrency   = c.currency   || 'MYR';
   document.getElementById('inv-cust-dropdown').classList.remove('open');
 }
 
