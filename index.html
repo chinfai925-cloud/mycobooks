@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_147.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_148.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2021,7 +2021,7 @@ tr:hover td { background:var(--bg); }
             <tr style="background:var(--bg);">
               <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:left;border-bottom:1px solid var(--border);">Product</th>
               <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:80px;border-bottom:1px solid var(--border);">Qty</th>
-              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:110px;border-bottom:1px solid var(--border);">Unit Price</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:110px;border-bottom:1px solid var(--border);" id="inv-unit-price-header">Unit Price</th>
               <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:110px;border-bottom:1px solid var(--border);">Subtotal</th>
               <th style="width:36px;border-bottom:1px solid var(--border);"></th>
             </tr>
@@ -7458,7 +7458,7 @@ function renderInvLines() {
             style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:right;">
         </td>
         <td id="inv-subtotal-${l.id}" style="padding:6px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;font-weight:500;white-space:nowrap;">
-          ${fmt((parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0))}
+          ${(window._invCustCurrency||'MYR') === 'SGD' ? 'SGD' : 'RM'} ${((parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0)).toFixed(2)}
         </td>
         <td style="padding:6px 4px;text-align:center;">
           <button data-removeid="${l.id}" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;line-height:1;padding:2px 4px;" title="Remove">×</button>
@@ -7531,8 +7531,9 @@ function calcInvGrandTotal() {
   const taxPct = parseFloat(document.getElementById('inv-tax-pct').value) || 0;
   const tax = subtotal * taxPct / 100;
   const grand = subtotal + tax;
-  document.getElementById('inv-subtotal').textContent = fmt(subtotal);
-  document.getElementById('inv-grand-total').textContent = fmt(grand);
+  const cs = (window._invCustCurrency||'MYR') === 'SGD' ? 'SGD ' : 'RM ';
+  document.getElementById('inv-subtotal').textContent = cs + subtotal.toFixed(2);
+  document.getElementById('inv-grand-total').textContent = cs + grand.toFixed(2);
   return { subtotal, tax, grand };
 }
 
@@ -9516,6 +9517,12 @@ function selectCustomer(id) {
     lbl.textContent = window._invCustCurrency;
     badge.style.display = window._invCustCurrency !== 'MYR' ? 'block' : 'none';
   }
+  // Update unit price column header
+  const hdr = document.getElementById('inv-unit-price-header');
+  if (hdr) hdr.textContent = `Unit Price (${window._invCustCurrency||'MYR'})`;
+  // Re-render lines to update currency display
+  renderInvLines();
+  calcInvGrandTotal();
   document.getElementById('inv-cust-dropdown').classList.remove('open');
 }
 
