@@ -3330,10 +3330,10 @@ function renderDashboard() {
       </div>`;
   }).join('');
 
-  // Recent transactions (last 5)
+  // Recent transactions (last 6)
   const allTx = [
     ...DB.expenses.map(e => ({...e, txType:'expense', txAmt: -e.amount, txLabel: e.desc, txCat: e.cat})),
-    ...DB.sales.map(s => ({...s, txType:'sale', txAmt: s.total, txLabel: s.customer + ' — ' + s.product, txCat: s.type}))
+    ...DB.invoices.map(i => ({...i, txType:'sale', txAmt: i.total, txLabel: i.customer + ' — ' + i.no, txCat: i.status}))
   ].sort((a,b) => b.date.localeCompare(a.date)).slice(0,6);
 
   document.getElementById('dash-recent-tx').innerHTML = allTx.map(t => `
