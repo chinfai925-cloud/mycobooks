@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_132.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_134.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2883,7 +2883,7 @@ const COLS = {
   inventory:    ['id','name','cat','unit','stock','reorder','cost','supplier'],
   staff:        ['id','name','role','dept','payType','salary','ic','phone','joinDate','empType','epf','socso','eis','bank','bankAcc','notes'],
   customers:    ['id','name','contact','phone','email','address','terms','priceList','notes'],
-  products:     ['id','name','cat','unit','price','desc','status'],
+  products:     ['id','name','cat','unit','price','desc','status','sort'],
   accounts:     ['id','name','type','description','balance'],
   suppliers:    ['id','name','cat','contact','phone','email','address','terms','notes'],
   payrollRuns:  ['id','month','processedOn','entries','totalNet'],
@@ -8988,6 +8988,20 @@ function autoFillInvPrice() {
   calcInvTotal();
 }
 
+function moveProduct(id, dir) {
+  // Ensure all products have a sort value
+  DB.products.forEach((p, i) => { if (p.sort === undefined) p.sort = i; });
+  DB.products.sort((a, b) => a.sort - b.sort);
+  const idx = DB.products.findIndex(p => p.id === id);
+  const swapIdx = idx + dir;
+  if (swapIdx < 0 || swapIdx >= DB.products.length) return;
+  // Swap sort values
+  const tmp = DB.products[idx].sort;
+  DB.products[idx].sort = DB.products[swapIdx].sort;
+  DB.products[swapIdx].sort = tmp;
+  renderProducts();
+}
+
 function renderProducts() {
   const search = (document.getElementById('prod-search')||{}).value||'';
   const catF   = (document.getElementById('prod-cat-filter')||{}).value||'';
@@ -9001,10 +9015,11 @@ function renderProducts() {
       allCats.map(c => `<option ${c===current?'selected':''}>${c}</option>`).join('');
   }
 
-  const data = DB.products.filter(p =>
-    (!search || p.name.toLowerCase().includes(search.toLowerCase())) &&
-    (!catF || p.cat === catF)
-  );
+  // Sort by sort field
+  DB.products.forEach((p, i) => { if (p.sort === undefined) p.sort = i; });
+  const data = DB.products
+    .filter(p => (!search || p.name.toLowerCase().includes(search.toLowerCase())) && (!catF || p.cat === catF))
+    .sort((a, b) => (a.sort||0) - (b.sort||0));
   document.getElementById('prod-count').textContent = `${data.length} product${data.length!==1?'s':''}`;
 
   // Cycle badge colors for custom categories
@@ -9016,8 +9031,14 @@ function renderProducts() {
   document.getElementById('prod-table').innerHTML = data.length === 0
     ? '<div class="empty-state"><div class="icon">🍄</div><p>No products found</p></div>'
     : `<table>
-      <thead><tr><th>Product Name</th><th>Category</th><th>Unit</th><th>Price (RM)</th><th>Status</th><th></th></tr></thead>
-      <tbody>${data.map(p => `<tr>
+      <thead><tr><th style="width:60px;"></th><th>Product Name</th><th>Category</th><th>Unit</th><th>Price (RM)</th><th>Status</th><th></th></tr></thead>
+      <tbody id="prod-tbody">${data.map((p,idx) => `<tr data-id="${p.id}">
+        <td>
+          <div style="display:flex;flex-direction:column;gap:2px;align-items:center;">
+            <button onclick="moveProduct(${p.id},-1)" class="btn btn-outline btn-sm" style="padding:1px 6px;font-size:11px;" ${idx===0?'disabled':''}>▲</button>
+            <button onclick="moveProduct(${p.id},1)" class="btn btn-outline btn-sm" style="padding:1px 6px;font-size:11px;" ${idx===data.length-1?'disabled':''}>▼</button>
+          </div>
+        </td>
         <td><div style="font-weight:500">${p.name}</div>${p.desc?`<div style="font-size:11px;color:var(--text3);margin-top:2px;">${p.desc}</div>`:''}</td>
         <td><span class="badge ${catColorMap[p.cat]||'badge-gray'}">${p.cat}</span></td>
         <td style="color:var(--text2)">${p.unit}</td>
