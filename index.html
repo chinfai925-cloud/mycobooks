@@ -2800,7 +2800,10 @@ async function sbLoad() {
         }
         const rows = await res.json();
         if (Array.isArray(rows) && rows.length > 0) {
-          DB[key] = rows.map(r => {
+  if (key === 'customers') {
+    console.log('Raw customers from Supabase:', JSON.stringify(rows.map(r => ({name: r.name, currency: r.currency}))));
+  }
+  DB[key] = rows.map(r => {
             const obj = { ...r };
             ['lines','customers','orders','expLines','items','dispatch',
              'members','generated','statutory','payments','entries','priceList'].forEach(col => {
