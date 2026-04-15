@@ -3092,6 +3092,7 @@ function quickLogin(u, name, p) {
   document.getElementById('login-pass').value = p;
 }
 function doLogin() {
+  try {
   const u = document.getElementById('login-user').value.trim();
   const p = document.getElementById('login-pass').value;
   const user = DB.users.find(x => x.username === u && x.password === p && x.active !== false);
@@ -3130,6 +3131,7 @@ function doLogin() {
     renderDashboard();
     startAutoSave();
   });
+  } catch(e) { alert('Login error: ' + e.message + '\n' + e.stack); }
 }
 function doLogout() {
   DB.currentUser = null;
