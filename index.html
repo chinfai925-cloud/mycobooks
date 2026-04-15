@@ -322,11 +322,7 @@ tr:hover td { background:var(--bg); }
         <svg viewBox="0 0 15 15" fill="none"><path d="M2 4h11M2 8h7M2 12h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         Daily Expenses
       </div>
-      <div class="nav-link" data-page="sales" onclick="navigate('sales',this)">
-        <svg viewBox="0 0 15 15" fill="none"><path d="M1 13L5 7l3 3 3-4 3 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Sales
-      </div>
-      <div class="nav-link" data-page="orders" onclick="navigate('orders',this)">
+<div class="nav-link" data-page="orders" onclick="navigate('orders',this)">
         <svg viewBox="0 0 15 15" fill="none"><rect x="1" y="2" width="13" height="11" rx="1" stroke="currentColor"/><path d="M1 6h13M5 2v4M10 2v4M4 9h3M4 11.5h5" stroke="currentColor" stroke-linecap="round"/></svg>
         Sales Orders
       </div>
@@ -514,32 +510,6 @@ tr:hover td { background:var(--bg); }
           </div>
         </div>
         <div id="recurring-list"></div>
-      </div>
-    </div>
-
-    <!-- SALES -->
-    <div class="page" id="page-sales">
-      <div class="page-header">
-        <div>
-          <div class="page-title">Sales</div>
-          <div class="page-subtitle">Daily sales records and revenue tracking</div>
-        </div>
-        <button id="btn-add-sale" class="btn btn-primary" onclick="openModal('modal-sale')">+ Record Sale</button>
-      </div>
-      <div class="card" style="margin-bottom:16px;">
-        <div class="card-body" style="padding:12px 16px;">
-          <div class="flex-row">
-            <input class="search-bar" placeholder="Search sales..." id="sale-search" oninput="renderSales()">
-            <select class="select-filter" id="sale-type-filter" onchange="renderSales()">
-              <option value="">All types</option>
-              <option>Wholesale</option><option>Retail</option><option>Restaurant</option><option>Market</option>
-            </select>
-            <span id="sale-total" style="margin-left:auto; font-size:13px; color:var(--text2);"></span>
-          </div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="table-wrap" id="sale-table"></div>
       </div>
     </div>
 
@@ -3226,7 +3196,7 @@ function applyPermissions() {
   }
 
   // Hide edit buttons for non-editors
-  const editBtns = ['btn-add-expense','btn-add-sale','btn-add-invoice','btn-add-inventory','btn-add-customer','btn-add-product','btn-add-staff'];
+  const editBtns = ['btn-add-expense','btn-add-invoice','btn-add-inventory','btn-add-customer','btn-add-product','btn-add-staff'];
   editBtns.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = p.canEdit ? '' : 'none';
@@ -3275,7 +3245,7 @@ function navigate(page, el) {
   if (el) el.classList.add('active');
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
-  const renders = { dashboard:renderDashboard, expenses:renderExpenses, sales:renderSales, invoices:renderInvoices, orders:renderOrders, customers:renderCustomers, suppliers:renderSuppliers, products:renderProducts, inventory:renderInventory, production:renderProduction, harvest:renderHarvest, fleet:renderFleet, payroll:renderPayroll, reports:renderReport, statement:renderStatement, cashflow:renderCashflow, loans:renderLoans, claims:renderClaims, settings:renderSettings, users:renderUsers };
+  const renders = { dashboard:renderDashboard, expenses:renderExpenses, invoices:renderInvoices, orders:renderOrders, customers:renderCustomers, suppliers:renderSuppliers, products:renderProducts, inventory:renderInventory, production:renderProduction, harvest:renderHarvest, fleet:renderFleet, payroll:renderPayroll, reports:renderReport, statement:renderStatement, cashflow:renderCashflow, loans:renderLoans, claims:renderClaims, settings:renderSettings, users:renderUsers };
   // Access guards
   if (page === 'payroll'   && !can('seePayroll'))  { showToast('Access denied — Payroll is Admin only', 'error'); return; }
   if (page === 'reports'   && !can('seeReports'))  { showToast('Access denied — Reports is Admin & Manager only', 'error'); return; }
