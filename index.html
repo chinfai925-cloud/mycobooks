@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_142.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_144.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9504,6 +9504,7 @@ function selectCustomer(id) {
   // Store price list and currency for use in line items
   window._invCustPriceList  = c.priceList  || {};
   window._invCustCurrency   = c.currency   || 'MYR';
+  console.log('Customer selected:', c.name, '| currency:', c.currency, '| _invCustCurrency:', window._invCustCurrency);
   // Show currency badge if non-MYR
   const badge = document.getElementById('inv-currency-badge');
   const lbl   = document.getElementById('inv-currency-label');
