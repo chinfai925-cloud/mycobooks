@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_134.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_135.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8989,16 +8989,18 @@ function autoFillInvPrice() {
 }
 
 function moveProduct(id, dir) {
-  // Ensure all products have a sort value
-  DB.products.forEach((p, i) => { if (p.sort === undefined) p.sort = i; });
+  // Ensure sort values
+  DB.products.forEach((p, i) => { if (p.sort === undefined) p.sort = i * 10; });
   DB.products.sort((a, b) => a.sort - b.sort);
   const idx = DB.products.findIndex(p => p.id === id);
   const swapIdx = idx + dir;
   if (swapIdx < 0 || swapIdx >= DB.products.length) return;
-  // Swap sort values
-  const tmp = DB.products[idx].sort;
-  DB.products[idx].sort = DB.products[swapIdx].sort;
-  DB.products[swapIdx].sort = tmp;
+  // Swap the actual array positions
+  const tmp = DB.products[idx];
+  DB.products[idx] = DB.products[swapIdx];
+  DB.products[swapIdx] = tmp;
+  // Reassign sort values based on new positions
+  DB.products.forEach((p, i) => { p.sort = i * 10; });
   renderProducts();
 }
 
