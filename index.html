@@ -3229,6 +3229,10 @@ function navigate(page, el) {
 // UTILS
 // ============================================================
 function fmt(n) { return 'RM ' + Number(n).toLocaleString('en-MY', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+function fmtCurr(n, currency) {
+  const sym = (currency === 'SGD') ? 'SGD ' : 'RM ';
+  return sym + Number(n).toLocaleString('en-MY', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
 function fmtDate(d) { if (!d) return ''; return new Date(d + 'T00:00:00').toLocaleDateString('en-MY', {day:'2-digit',month:'short',year:'numeric'}); }
 function showToast(msg, type='success') {
   const c = document.getElementById('toast-container');
@@ -7458,7 +7462,7 @@ function renderInvLines() {
             style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:right;">
         </td>
         <td id="inv-subtotal-${l.id}" style="padding:6px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;font-weight:500;white-space:nowrap;">
-          ${(window._invCustCurrency||'MYR') === 'SGD' ? 'SGD' : 'RM'} ${((parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0)).toFixed(2)}
+          ${fmtCurr((parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0), window._invCustCurrency||'MYR')}
         </td>
         <td style="padding:6px 4px;text-align:center;">
           <button data-removeid="${l.id}" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;line-height:1;padding:2px 4px;" title="Remove">×</button>
@@ -7495,7 +7499,7 @@ function invLineChangeSoft(lineId, field, val) {
   if (!l) return;
   l[field] = val;
   const subtotalEl = document.getElementById('inv-subtotal-' + lineId);
-  if (subtotalEl) subtotalEl.textContent = fmt((parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0));
+  if (subtotalEl) subtotalEl.textContent = fmtCurr((parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0), window._invCustCurrency||'MYR');
   calcInvGrandTotal();
 }
 
@@ -7520,7 +7524,7 @@ function invLineChange(lineId, field, val) {
       const priceInput = document.querySelector(`input[data-lineid="${lineId}"][data-field="unitPrice"]`);
       if (priceInput) priceInput.value = l.unitPrice;
       const subtotalEl = document.getElementById('inv-subtotal-' + lineId);
-      if (subtotalEl) subtotalEl.textContent = fmt((parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0));
+      if (subtotalEl) subtotalEl.textContent = fmtCurr((parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0), window._invCustCurrency||'MYR');
     }
   }
   calcInvGrandTotal();
@@ -7564,7 +7568,7 @@ function renderInvoices() {
         <td style="color:var(--text2)">${fmtDate(i.date)}</td>
         <td style="color:${i.status==='Overdue'?'var(--red)':'var(--text2)'}">${fmtDate(i.due)}</td>
         <td><span class="badge ${statusMap[i.status]||'badge-gray'}">${i.status}</span>${i.status==='Paid'&&i.account?`<div style="font-size:10px;margin-top:2px;color:var(--green);font-weight:500;">${i.account}</div>`:''}</td>
-        <td class="text-right mono" style="font-weight:500">${amountDisplay(i.total)}</td>
+        <td class="text-right mono" style="font-weight:500">${fmtCurr(i.total, i.currency)}</td>
         <td style="display:flex;gap:4px;padding-top:10px;">
           <button class="btn btn-outline btn-sm" onclick="printInvoice(${i.id})" title="Print Invoice">🖨 Inv</button>
           <button class="btn btn-outline btn-sm" onclick="printDO(${i.id})" title="Print Delivery Order">📦 DO</button>
@@ -7850,6 +7854,14 @@ function editInvoice(id) {
   document.getElementById('inv-notes').value = inv.notes || '';
   document.getElementById('inv-tax-pct').value = inv.taxPct || 0;
   document.getElementById('inv-account').value = inv.account || (DB.accounts[0]||{}).name || '';
+  // Restore currency for this invoice
+  window._invCustCurrency  = inv.currency || 'MYR';
+  window._invCustPriceList = {};
+  const badge = document.getElementById('inv-currency-badge');
+  const lbl   = document.getElementById('inv-currency-label');
+  if (badge && lbl) { lbl.textContent = window._invCustCurrency; badge.style.display = 'block'; }
+  const hdr = document.getElementById('inv-unit-price-header');
+  if (hdr) hdr.textContent = `Unit Price (${window._invCustCurrency})`;
   // load existing lines
   if (inv.lines && inv.lines.length > 0) {
     invLines = inv.lines.map(l => ({ id: Date.now() + Math.random(), product: l.product, qty: l.qty, unitPrice: l.unitPrice }));
@@ -9370,8 +9382,8 @@ function renderCustomers() {
             <td style="font-size:12px;color:var(--text2);">${c.contact||'—'}</td>
             <td style="font-size:12px;color:var(--text2);">${c.phone||'—'}</td>
             <td class="text-right mono">${invCount}</td>
-            <td class="text-right mono" style="color:var(--green);">${fmt(invTotal)}</td>
-            <td class="text-right mono" style="color:var(--green);">${fmt(saleTotal)}</td>
+            <td class="text-right mono" style="color:var(--green);">${fmtCurr(invTotal, c.currency)}</td>
+            <td class="text-right mono" style="color:var(--green);">${fmtCurr(saleTotal, c.currency)}</td>
             <td><div style="display:flex;gap:4px;">
               ${can('canEdit')?`<button class="btn btn-outline btn-sm" onclick="editCustomer(${c.id})" style="font-size:11px;">Edit</button>`:''}
               ${can('canDelete')?`<button class="btn btn-danger btn-sm" onclick="deleteCustomer(${c.id})">Del</button>`:''}
@@ -9406,8 +9418,8 @@ function renderCustomers() {
           </div>
           <div class="customer-stats">
             <div class="cstat"><div class="cstat-val">${invCount}</div><div class="cstat-lbl">Invoices</div></div>
-            <div class="cstat"><div class="cstat-val">${fmt(invTotal).replace('RM ','RM')}</div><div class="cstat-lbl">Invoiced</div></div>
-            <div class="cstat"><div class="cstat-val">${fmt(saleTotal).replace('RM ','RM')}</div><div class="cstat-lbl">Sales</div></div>
+            <div class="cstat"><div class="cstat-val" style="font-size:11px;">${fmtCurr(invTotal, c.currency)}</div><div class="cstat-lbl">Invoiced</div></div>
+            <div class="cstat"><div class="cstat-val" style="font-size:11px;">${fmtCurr(saleTotal, c.currency)}</div><div class="cstat-lbl">Sales</div></div>
           </div>
         </div>
       </div>`;
