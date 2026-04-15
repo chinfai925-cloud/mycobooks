@@ -3105,10 +3105,10 @@ function doLogin() {
   document.getElementById('dash-date').textContent = new Date().toLocaleDateString('en-MY', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
   applyPermissions();
   setToday();
-  populateProductSelects();
-  populateAccountSelects();
-  populateStatementAccounts();
-  renderDashboard();
+  try { populateProductSelects(); } catch(e) { console.error('populateProductSelects:', e); }
+  try { populateAccountSelects(); } catch(e) { console.error('populateAccountSelects:', e); }
+  try { populateStatementAccounts(); } catch(e) { console.error('populateStatementAccounts:', e); }
+  try { renderDashboard(); } catch(e) { console.error('renderDashboard:', e); }
   // Load company profile from localStorage
   try {
     const co = localStorage.getItem('mycobooks_company');
