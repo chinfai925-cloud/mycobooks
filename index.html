@@ -2813,6 +2813,7 @@ async function sbLoad() {
               if (obj.joinDate !== undefined) { obj.join = obj.joinDate; delete obj.joinDate; }
               if (obj.empType  !== undefined) { obj.type = obj.empType;  delete obj.empType; }
             }
+            if (key === 'customers') console.log('Loaded customer:', obj.name, '| currency:', obj.currency);
             return obj;
           });
           const maxId = Math.max(...rows.map(r => parseInt(r.id)||0));
