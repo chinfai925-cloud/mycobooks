@@ -9893,8 +9893,10 @@ document.querySelectorAll('.modal-backdrop').forEach(m => {
 });
 
 // Sale qty auto-calc
-document.getElementById('sale-qty').addEventListener('input', calcSaleTotal);
-document.getElementById('sale-type').addEventListener('change', autoFillSalePrice);
+const saleQtyEl = document.getElementById('sale-qty');
+if (saleQtyEl) saleQtyEl.addEventListener('input', calcSaleTotal);
+const saleTypeEl = document.getElementById('sale-type');
+if (saleTypeEl) saleTypeEl.addEventListener('change', autoFillSalePrice);
 
 // ============================================================
 // USER MANAGEMENT
