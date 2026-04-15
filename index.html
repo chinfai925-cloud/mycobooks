@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_137.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_142.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1998,6 +1998,9 @@ tr:hover td { background:var(--bg); }
             <input type="text" id="inv-customer" placeholder="Type to search or add new customer..." autocomplete="off" oninput="custTypeahead(this.value)" onfocus="custTypeahead(this.value)" onkeydown="custTypeaheadKey(event)">
             <div class="typeahead-dropdown" id="inv-cust-dropdown"></div>
           </div>
+          <div id="inv-currency-badge" style="margin-top:6px;display:none;">
+            <span style="font-size:11px;background:var(--green-light);color:var(--green);padding:3px 10px;border-radius:20px;font-weight:500;">💱 Invoice currency: <span id="inv-currency-label">MYR</span></span>
+          </div>
         </div>
         <div class="form-group" style="grid-column:1/-1"><label>Customer Address</label><input type="text" id="inv-address" placeholder="Full address..."></div>
         <div class="form-group"><label>Due Date</label><input type="date" id="inv-due"></div>
@@ -2886,7 +2889,7 @@ const COLS = {
   users:        ['id','username','password','name','role','initials','active'],
   expenses:     ['id','date','desc','cat','amount','supplier','status','paid','account','notes','dueDate','recurring','recurringId'],
   sales:        ['id','date','customer','product','qty','price','total','type','account','notes','harvestId'],
-  invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','notes','product','qty','unit'],
+  invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','currency','notes','product','qty','unit'],
   inventory:    ['id','name','cat','unit','stock','reorder','cost','supplier'],
   staff:        ['id','name','role','dept','payType','salary','ic','phone','joinDate','empType','epf','socso','eis','bank','bankAcc','notes'],
   customers:    ['id','name','contact','phone','email','address','terms','currency','priceList','notes'],
@@ -7602,9 +7605,8 @@ function printInvoice(id) {
   const total = i.total||0;
 
   const co = DB.company || {};
-  const cust = DB.customers.find(c => c.name === i.customer);
-  const currency = (cust && cust.currency) || 'MYR';
-  const currSym = currency === 'SGD' ? 'SGD' : 'RM';
+  const currency = i.currency || 'MYR';
+  const currSym  = currency === 'SGD' ? 'SGD' : 'RM';
   const win = window.open('','_blank');
   win.document.write(`<!DOCTYPE html><html><head>
     <title>Invoice ${i.no}</title>
@@ -7862,14 +7864,16 @@ function saveInvoice() {
   const validLines = invLines.filter(l => l.product && parseFloat(l.qty) > 0);
   if (validLines.length === 0) { showToast('Add at least one product line', 'error'); return; }
   const { grand } = calcInvGrandTotal();
+  const currency = window._invCustCurrency || 'MYR';
   const data = {
-    no: document.getElementById('inv-no').value,
+    no: document.getElementById('inv-no').value || ('INV-' + DB.nextIds.invoices),
     date: document.getElementById('inv-date').value,
     due: document.getElementById('inv-due').value,
     customer, address: document.getElementById('inv-address').value,
     lines: validLines.map(l => ({ product: l.product, qty: parseFloat(l.qty)||0, unitPrice: parseFloat(l.unitPrice)||0, subtotal: (parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0) })),
     taxPct: parseFloat(document.getElementById('inv-tax-pct').value) || 0,
     total: grand,
+    currency,
     account: document.getElementById('inv-account').value,
     status: document.getElementById('inv-status').value,
     notes: document.getElementById('inv-notes').value
@@ -7895,6 +7899,10 @@ function saveInvoice() {
 
 function resetInvModal() {
   editingInvoiceId = null;
+  window._invCustCurrency  = 'MYR';
+  window._invCustPriceList = {};
+  const badge = document.getElementById('inv-currency-badge');
+  if (badge) badge.style.display = 'none';
   document.getElementById('inv-modal-heading').textContent = 'New Invoice';
   document.getElementById('inv-no').value = 'INV-2026-0' + DB.nextIds.invoices;
   document.getElementById('inv-customer').value = '';
@@ -9493,9 +9501,16 @@ function selectCustomer(id) {
     due.setDate(due.getDate() + (c.terms||0));
     document.getElementById('inv-due').value = due.toISOString().split('T')[0];
   }
-  // Store price tier and custom price list for use in line items
+  // Store price list and currency for use in line items
   window._invCustPriceList  = c.priceList  || {};
   window._invCustCurrency   = c.currency   || 'MYR';
+  // Show currency badge if non-MYR
+  const badge = document.getElementById('inv-currency-badge');
+  const lbl   = document.getElementById('inv-currency-label');
+  if (badge && lbl) {
+    lbl.textContent = window._invCustCurrency;
+    badge.style.display = window._invCustCurrency !== 'MYR' ? 'block' : 'none';
+  }
   document.getElementById('inv-cust-dropdown').classList.remove('open');
 }
 
