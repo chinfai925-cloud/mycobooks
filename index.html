@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_144.html -->
+<!-- saved from url=(0049)file:///C:/Users/CFL/Downloads/mycobooks_146.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7576,6 +7576,10 @@ function printInvoice(id) {
   const i = DB.invoices.find(x=>x.id===id);
   if (!i) return;
 
+  const co = DB.company || {};
+  const currency = i.currency || 'MYR';
+  const currSym  = currency === 'SGD' ? 'SGD' : 'RM';
+
   // Build line items
   let itemsHtml = '';
   let subtotal = 0;
@@ -7604,9 +7608,6 @@ function printInvoice(id) {
   const sst = i.sst||0;
   const total = i.total||0;
 
-  const co = DB.company || {};
-  const currency = i.currency || 'MYR';
-  const currSym  = currency === 'SGD' ? 'SGD' : 'RM';
   const win = window.open('','_blank');
   win.document.write(`<!DOCTYPE html><html><head>
     <title>Invoice ${i.no}</title>
