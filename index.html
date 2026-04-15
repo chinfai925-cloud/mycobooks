@@ -9676,7 +9676,7 @@ function renderCustomers() {
   const search = (document.getElementById('cust-search')||{}).value||'';
   let data = DB.customers.filter(c =>
     !search || c.name.toLowerCase().includes(search.toLowerCase()) || (c.contact||'').toLowerCase().includes(search.toLowerCase())
-  );
+  ).sort((a,b) => a.name.localeCompare(b.name));
   document.getElementById('cust-count').textContent = `${data.length} customer${data.length!==1?'s':''}`;
   const typeColors = {Wholesale:'badge-blue',Restaurant:'badge-amber',Retail:'badge-green',Market:'badge-gray',Online:'badge-blue'};
 
