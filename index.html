@@ -411,9 +411,13 @@ tr:hover td { background:var(--bg); }
         </div>
         <div class="flex-row">
           <select class="select-filter" id="dash-month" onchange="renderDashboard()">
+            <option value="">All time</option>
             <option value="2026-04">April 2026</option>
             <option value="2026-03">March 2026</option>
             <option value="2026-02">February 2026</option>
+            <option value="2026-01">January 2026</option>
+            <option value="2025-12">December 2025</option>
+            <option value="2025-11">November 2025</option>
           </select>
         </div>
       </div>
@@ -3299,7 +3303,8 @@ function renderDashboard() {
   const totalExp = exps.reduce((s,x) => s + x.amount, 0);
   // Revenue = recorded payments + legacy paid invoices (no payment record)
   const paymentRev = (DB.payments||[]).filter(p=>{ const d=p.date||''; return !month||d.startsWith(month); }).reduce((s,p)=>s+p.amount,0);
-  const legacyRev  = filterByMonth(DB.invoices.filter(i=>(i.status==='Paid'||i.status==='Partial') && !(DB.payments||[]).some(p=>p.invoiceId===i.id)), 'date', month).reduce((s,i)=>s+i.total,0);
+  const legacyPaid = DB.invoices.filter(i=>(i.status==='Paid'||i.status==='Partial') && !(DB.payments||[]).some(p=>p.invoiceId===i.id));
+  const legacyRev  = legacyPaid.filter(i=>{ const d=i.paidDate||i.date||''; return !month||d.startsWith(month); }).reduce((s,i)=>s+i.total,0);
   const totalSal = paymentRev + legacyRev;
   const profit = totalSal - totalExp;
   const pending = DB.invoices.filter(i => i.status === 'Pending' || i.status === 'Overdue');
