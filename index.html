@@ -599,6 +599,16 @@ tr:hover td { background:var(--bg); }
           <div class="card-body" style="padding:12px 16px;">
             <div class="flex-row">
               <input class="search-bar" placeholder="Search invoices..." id="inv-search" oninput="renderInvoices()">
+              <select class="select-filter" id="inv-month-filter" onchange="renderInvoices()">
+                <option value="">All months</option>
+                <option value="2026-04">Apr 2026</option>
+                <option value="2026-03">Mar 2026</option>
+                <option value="2026-02">Feb 2026</option>
+                <option value="2026-01">Jan 2026</option>
+                <option value="2025-12">Dec 2025</option>
+                <option value="2025-11">Nov 2025</option>
+                <option value="2025-10">Oct 2025</option>
+              </select>
               <select class="select-filter" id="inv-status-filter" onchange="renderInvoices()">
                 <option value="">All statuses</option>
                 <option>Paid</option><option>Pending</option><option>Partial</option><option>Overdue</option><option>Draft</option>
@@ -7853,9 +7863,11 @@ function reprintReceipt(payId) {
 function renderInvoices() {
   const search = document.getElementById('inv-search').value.toLowerCase();
   const status = document.getElementById('inv-status-filter').value;
+  const month  = (document.getElementById('inv-month-filter')||{}).value||'';
   let data = DB.invoices.filter(i =>
     (!search || i.customer.toLowerCase().includes(search) || i.no.toLowerCase().includes(search)) &&
-    (!status || i.status === status)
+    (!status || i.status === status) &&
+    (!month  || (i.date||'').startsWith(month))
   ).sort((a,b) => b.date.localeCompare(a.date));
 
   const total = data.reduce((s,i) => s+i.total, 0);
