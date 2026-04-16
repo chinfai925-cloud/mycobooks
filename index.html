@@ -3296,9 +3296,9 @@ function filterByMonth(arr, dateField, val) {
 function renderDashboard() {
   const month = document.getElementById('dash-month').value;
   const exps = filterByMonth(DB.expenses, 'date', month);
-  const sals = filterByMonth(DB.sales, 'date', month);
   const totalExp = exps.reduce((s,x) => s + x.amount, 0);
-  const totalSal = sals.reduce((s,x) => s + x.total, 0);
+  const paidInvs = filterByMonth(DB.invoices.filter(i=>i.status==='Paid'||i.status==='Partial'), 'date', month);
+  const totalSal = (DB.payments||[]).filter(p=>{ const d=p.date||''; return !month||d.startsWith(month); }).reduce((s,p)=>s+p.amount,0);
   const profit = totalSal - totalExp;
   const pending = DB.invoices.filter(i => i.status === 'Pending' || i.status === 'Overdue');
   const pendingAmt = pending.reduce((s,i) => s + i.total, 0);
@@ -6375,14 +6375,8 @@ function saveHarvest() {
     const saleType = document.getElementById('hv-sale-type').value;
     const b        = DB.batches.find(x=>x.id===batchId);
     if (customer && total > 0) {
-      const saleId = DB.nextIds.sales++;
-      DB.sales.unshift({
-        id: saleId, date, customer,
-        product: b ? b.type : 'Mushroom',
-        qty, price, total, type: saleType,
-        account: acct, harvestId: h.id
-      });
-      h.saleId = saleId;
+      h.saleCustomer = customer;
+      h.saleTotal = total;
     }
   }
 
@@ -6482,7 +6476,7 @@ function renderHarvest() {
       </tr></thead>
       <tbody>${data.map(h => {
         const b = DB.batches.find(x=>x.id===h.batchId);
-        const s = h.saleId ? DB.sales.find(x=>x.id===h.saleId) : null;
+        const s = null; // sales removed
         const flushLabel = ['','1st','2nd','3rd','4th','5th+'][h.flush]||h.flush+'th';
         return `<tr>
           <td style="color:var(--text2);white-space:nowrap;">${fmtDate(h.date)}</td>
@@ -6548,7 +6542,7 @@ function renderHarvest() {
               <th style="padding:6px 8px;border-bottom:1px solid var(--border);">Sale</th>
             </tr></thead>
             <tbody>${harvests.map(h=>{
-              const s = h.saleId ? DB.sales.find(x=>x.id===h.saleId) : null;
+              const s = null; // sales removed
               const flushLabel = ['','1st','2nd','3rd','4th','5th+'][h.flush]||h.flush+'th';
               return `<tr>
                 <td style="padding:5px 8px;color:var(--text2);">${fmtDate(h.date)}</td>
@@ -8115,14 +8109,11 @@ function saveInvoice() {
     const idx = DB.invoices.findIndex(i => i.id === editingInvoiceId);
     const wasNotPaid = DB.invoices[idx].status !== 'Paid';
     DB.invoices[idx] = { ...DB.invoices[idx], ...data };
-    if (wasNotPaid && data.status === 'Paid') createSalesFromInvoice(DB.invoices[idx]);
-    if (data.status !== 'Paid') DB.sales = DB.sales.filter(s => s.invoiceRef !== data.no);
     showToast('Invoice updated');
     editingInvoiceId = null;
   } else {
     const newInv = { id: DB.nextIds.invoices++, ...data };
     DB.invoices.unshift(newInv);
-    if (newInv.status === 'Paid') createSalesFromInvoice(newInv);
     showToast('Invoice created');
   }
   closeModal('modal-invoice');
@@ -8243,8 +8234,7 @@ function confirmMarkPaid() {
     inv.status = 'Paid';
     inv.account = account;
     inv.paidDate = date;
-    createSalesFromInvoice(inv, account);
-  } else {
+    } else {
     inv.status = 'Partial';
   }
 
@@ -8306,7 +8296,6 @@ function printReceipt(payment, inv) {
 function deleteInvoice(id) {
   if (!confirm('Delete this invoice? Any linked sales records will also be removed.')) return;
   const inv = DB.invoices.find(i => i.id === id);
-  if (inv) DB.sales = DB.sales.filter(s => s.invoiceRef !== inv.no);
   DB.invoices = DB.invoices.filter(i => i.id !== id);
   showToast('Invoice and linked sales deleted');
   renderInvoices();
@@ -9098,7 +9087,7 @@ function renderReport() {
   const month = document.getElementById('report-month').value;
   const monthLabel = new Date(month + '-01').toLocaleDateString('en-MY', {month:'long', year:'numeric'});
   const exps = filterByMonth(DB.expenses, 'date', month);
-  const sals = filterByMonth(DB.sales, 'date', month);
+  const sals = filterByMonth((DB.payments||[]), 'date', month);
 
   const totalSales = sals.reduce((s,x) => s+x.total, 0);
   const byCategory = {};
@@ -9208,12 +9197,16 @@ function populateAccountSelects() {
 }
 
 function accountBalance(acct) {
-  const salesIn   = DB.sales.filter(s => s.account === acct.name && !s.invoiceRef).reduce((s,x) => s+x.total, 0);
-  const invoiceIn = DB.invoices.filter(i => i.status==='Paid' && i.account === acct.name).reduce((s,x) => s+x.total, 0);
+  // Payments recorded against invoices
+  const paymentsIn = (DB.payments||[]).filter(p => p.account === acct.name).reduce((s,p) => s+p.amount, 0);
+  // Paid invoices with no payment records (legacy)
+  const legacyIn  = DB.invoices.filter(i => i.status==='Paid' && i.account === acct.name &&
+    !(DB.payments||[]).some(p => p.invoiceId === i.id)
+  ).reduce((s,x) => s+x.total, 0);
   const outflow   = DB.expenses.filter(e => (e.status||'paid') === 'paid' && e.account === acct.name).reduce((s,x) => s+x.amount, 0);
   const xfrIn     = DB.transfers.filter(t => t.to === acct.name).reduce((s,t) => s+t.amount, 0);
   const xfrOut    = DB.transfers.filter(t => t.from === acct.name).reduce((s,t) => s+t.amount, 0);
-  return (acct.openingBalance || 0) + salesIn + invoiceIn - outflow + xfrIn - xfrOut;
+  return (acct.openingBalance || 0) + paymentsIn + legacyIn - outflow + xfrIn - xfrOut;
 }
 
 function renderSettings() {
@@ -9697,7 +9690,7 @@ function renderCustomers() {
         <tbody>${data.map(c => {
           const invCount  = DB.invoices.filter(i=>i.customer===c.name).length;
           const invTotal  = DB.invoices.filter(i=>i.customer===c.name).reduce((s,i)=>s+i.total,0);
-          const saleTotal = DB.sales.filter(s=>s.customer===c.name).reduce((s,i)=>s+i.total,0);
+          const saleTotal = (DB.payments||[]).filter(p=>p.customer===c.name).reduce((s,p)=>s+p.amount,0);
           return `<tr>
             <td>
               <div style="font-weight:500;">${c.name}</div>
@@ -9720,7 +9713,7 @@ function renderCustomers() {
     document.getElementById('customers-grid').innerHTML = data.map(c => {
       const invCount  = DB.invoices.filter(i=>i.customer===c.name).length;
       const invTotal  = DB.invoices.filter(i=>i.customer===c.name).reduce((s,i)=>s+i.total,0);
-      const saleTotal = DB.sales.filter(s=>s.customer===c.name).reduce((s,i)=>s+i.total,0);
+      const saleTotal = (DB.payments||[]).filter(p=>p.customer===c.name).reduce((s,p)=>s+p.amount,0);
       return `<div class="customer-card">
         <div class="customer-avatar">${custInitials(c.name)}</div>
         <div class="customer-info">
@@ -10278,16 +10271,18 @@ function renderStatement() {
   // Gather all transactions for this account
   const txs = [];
 
-  // Money IN: direct sales
-  DB.sales.filter(s => s.account === acctName && !s.invoiceRef).forEach(s => {
-    if (month && !s.date.startsWith(month)) return;
-    txs.push({ date:s.date, desc:`Sale — ${s.customer} (${s.product})`, ref:`Sales`, type:'in', amount:s.amount||s.total, raw:s.total });
+  // Money IN: payments recorded against invoices
+  (DB.payments||[]).filter(p => p.account === acctName).forEach(p => {
+    if (month && !p.date.startsWith(month)) return;
+    txs.push({ date:p.date, desc:`Payment — ${p.customer} (${p.invoiceNo})${p.reference?' · '+p.reference:''}`, ref:'Invoice', type:'in', amount:p.amount, raw:p.amount });
   });
 
-  // Money IN: paid invoices
-  DB.invoices.filter(i => i.status === 'Paid' && i.account === acctName).forEach(i => {
+  // Money IN: legacy paid invoices with no payment records
+  DB.invoices.filter(i => i.status === 'Paid' && i.account === acctName &&
+    !(DB.payments||[]).some(p => p.invoiceId === i.id)
+  ).forEach(i => {
     if (month && !i.date.startsWith(month)) return;
-    txs.push({ date:i.date, desc:`Invoice ${i.no} — ${i.customer}`, ref:'Invoice', type:'in', amount:i.total, raw:i.total });
+    txs.push({ date:i.paidDate||i.date, desc:`Invoice ${i.no} — ${i.customer}`, ref:'Invoice', type:'in', amount:i.total, raw:i.total });
   });
 
   // Money OUT: paid expenses
