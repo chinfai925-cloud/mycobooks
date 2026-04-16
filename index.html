@@ -3297,8 +3297,10 @@ function renderDashboard() {
   const month = document.getElementById('dash-month').value;
   const exps = filterByMonth(DB.expenses, 'date', month);
   const totalExp = exps.reduce((s,x) => s + x.amount, 0);
-  const paidInvs = filterByMonth(DB.invoices.filter(i=>i.status==='Paid'||i.status==='Partial'), 'date', month);
-  const totalSal = (DB.payments||[]).filter(p=>{ const d=p.date||''; return !month||d.startsWith(month); }).reduce((s,p)=>s+p.amount,0);
+  // Revenue = recorded payments + legacy paid invoices (no payment record)
+  const paymentRev = (DB.payments||[]).filter(p=>{ const d=p.date||''; return !month||d.startsWith(month); }).reduce((s,p)=>s+p.amount,0);
+  const legacyRev  = filterByMonth(DB.invoices.filter(i=>(i.status==='Paid'||i.status==='Partial') && !(DB.payments||[]).some(p=>p.invoiceId===i.id)), 'date', month).reduce((s,i)=>s+i.total,0);
+  const totalSal = paymentRev + legacyRev;
   const profit = totalSal - totalExp;
   const pending = DB.invoices.filter(i => i.status === 'Pending' || i.status === 'Overdue');
   const pendingAmt = pending.reduce((s,i) => s + i.total, 0);
@@ -9088,8 +9090,9 @@ function renderReport() {
   const monthLabel = new Date(month + '-01').toLocaleDateString('en-MY', {month:'long', year:'numeric'});
   const exps = filterByMonth(DB.expenses, 'date', month);
   const sals = filterByMonth((DB.payments||[]), 'date', month);
+  const legacyInvs = filterByMonth(DB.invoices.filter(i=>(i.status==='Paid'||i.status==='Partial') && !(DB.payments||[]).some(p=>p.invoiceId===i.id)), 'date', month);
 
-  const totalSales = sals.reduce((s,x) => s+x.total, 0);
+  const totalSales = sals.reduce((s,x) => s+(x.amount||0), 0) + legacyInvs.reduce((s,i)=>s+i.total,0);
   const byCategory = {};
   exps.forEach(e => { byCategory[e.cat] = (byCategory[e.cat] || 0) + e.amount; });
   const totalExp = Object.values(byCategory).reduce((s,v) => s+v, 0);
@@ -9097,9 +9100,16 @@ function renderReport() {
   const margin = totalSales > 0 ? ((grossProfit / totalSales) * 100).toFixed(1) : 0;
 
   const byProduct = {};
-  sals.forEach(s => { byProduct[s.product] = (byProduct[s.product] || 0) + s.total; });
+  sals.forEach(p => {
+    const inv = DB.invoices.find(i=>i.id===p.invoiceId);
+    if (inv && inv.lines) inv.lines.forEach(l => { byProduct[l.product] = (byProduct[l.product]||0) + (l.subtotal||0); });
+    else if (inv) byProduct[inv.customer] = (byProduct[inv.customer]||0) + (p.amount||0);
+  });
+  legacyInvs.forEach(i => {
+    if (i.lines) i.lines.forEach(l => { byProduct[l.product] = (byProduct[l.product]||0) + (l.subtotal||0); });
+    else byProduct[i.customer] = (byProduct[i.customer]||0) + i.total;
+  });
   const byType = {};
-  sals.forEach(s => { byType[s.type] = (byType[s.type] || 0) + s.total; });
 
   document.getElementById('report-content').innerHTML = `
     <div class="metrics-grid">
