@@ -299,7 +299,11 @@ tr:hover td { background:var(--bg); }
   <div class="sidebar" id="sidebar">
     <div class="sidebar-brand">
       <div class="logo">🍄 MycoBooks</div>
-      <div class="company">Mushroom Farm Co.</div>
+      <div id="company-switcher-wrap" style="margin-top:6px;">
+        <select id="company-switcher" onchange="switchCompany(this.value)" style="width:100%;padding:5px 8px;background:#1a3320;border:1px solid #2d4a32;border-radius:4px;color:#a7d0b0;font-size:11px;font-family:inherit;cursor:pointer;">
+          <option value="default">Mushroom Farm Co.</option>
+        </select>
+      </div>
     </div>
     <div class="sidebar-user">
       <div class="avatar" id="user-avatar">AD</div>
@@ -1309,6 +1313,18 @@ tr:hover td { background:var(--bg); }
       </div>
       <div class="grid-2">
         <div>
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-head">
+              <span class="card-title">Companies</span>
+              <button class="btn btn-primary btn-sm" onclick="openAddCompanyModal()">+ Add Company</button>
+            </div>
+            <div class="card-body" style="padding:0;">
+              <div id="companies-list"></div>
+              <div style="padding:10px 16px;font-size:11px;color:var(--text3);border-top:1px solid var(--border);">
+                Each company has its own books, staff, customers, suppliers and accounts. Switch companies using the dropdown at the top of the sidebar.
+              </div>
+            </div>
+          </div>
           <div class="card" style="margin-bottom:16px;">
             <div class="card-head">
               <span class="card-title">Company Profile</span>
@@ -2829,7 +2845,10 @@ const SB_TABLES = [
 
 function sbTable(key) {
   // Convert camelCase to snake_case for Supabase
-  return key.replace(/([A-Z])/g, '_$1').toLowerCase();
+  const base = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+  // Prepend active company prefix (empty string for the default company)
+  const prefix = (typeof getActiveCompanyPrefix === 'function') ? getActiveCompanyPrefix() : '';
+  return prefix ? `${prefix}_${base}` : base;
 }
 
 // ---- LOAD USERS ON PAGE START (before login) ----
@@ -3155,8 +3174,7 @@ function doLogin() {
     const co = localStorage.getItem('mycobooks_company');
     if (co) {
       DB.company = JSON.parse(co);
-      const el = document.querySelector('.sidebar-brand .company');
-      if (el && DB.company.name) el.textContent = DB.company.name;
+      if (typeof syncCompanySwitcherLabel === 'function') syncCompanySwitcherLabel();
     }
   } catch(e) {}
   // Load all data from Supabase then re-render
@@ -3963,11 +3981,15 @@ function saveCompanyProfile() {
     bankacc: document.getElementById('co-bankacc').value.trim(),
     footer:  document.getElementById('co-footer').value.trim(),
   };
-  // Persist to localStorage (works across sessions without Supabase)
-  try { localStorage.setItem('mycobooks_company', JSON.stringify(DB.company)); } catch(e) {}
-  // Update sidebar company name
-  const el = document.querySelector('.sidebar-brand .company');
-  if (el && DB.company.name) el.textContent = DB.company.name;
+  // Persist to localStorage (per-company key so each sister company keeps its own profile)
+  try {
+    const pk = (typeof getActiveCompanyId === 'function') ? getActiveCompanyId() : 'default';
+    localStorage.setItem('mycobooks_company_' + pk, JSON.stringify(DB.company));
+    // Also write legacy key for backwards compatibility (default company only)
+    if (pk === 'default') localStorage.setItem('mycobooks_company', JSON.stringify(DB.company));
+  } catch(e) {}
+  // Update active company's display name in the switcher
+  if (typeof updateCompanyDisplayName === 'function') updateCompanyDisplayName(DB.company.name);
   showToast('Company profile saved');
 }
 
@@ -9331,6 +9353,7 @@ function renderSettings() {
   renderPackingRates();
   renderRouteRates();
   renderCompanyProfile();
+  if (typeof renderCompanies === 'function') renderCompanies();
   // Show/hide account management buttons for admin only
   const btnAddAcct = document.getElementById('btn-add-account');
   if (btnAddAcct) btnAddAcct.style.display = can('seeUsers') ? '' : 'none';
@@ -11435,6 +11458,337 @@ function deleteTransfer(id) {
   renderSettings();
   renderDashboard();
 }
+
+// ============================================================
+// MULTI-COMPANY (SISTER COMPANY SUPPORT)
+// ============================================================
+// Storage model:
+//   localStorage['mycobooks_companies']  = JSON array of {id, name, prefix, verified}
+//   localStorage['mycobooks_active_co']  = id of currently-active company
+//   localStorage['mycobooks_company_<id>'] = per-company profile (name, regno, bank, etc.)
+// The "default" company has prefix '' so all existing tables (expenses, sales, ...)
+// remain the default company's data. Sister companies use prefixes like c2, c3, ...
+
+function getCompaniesList() {
+  try {
+    const raw = localStorage.getItem('mycobooks_companies');
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr) && arr.length > 0) return arr;
+    }
+  } catch(e) {}
+  // Bootstrap: default company wraps existing data
+  const def = [{ id:'default', name:'Mushroom Farm Co.', prefix:'', verified:true }];
+  localStorage.setItem('mycobooks_companies', JSON.stringify(def));
+  return def;
+}
+
+function saveCompaniesList(list) {
+  localStorage.setItem('mycobooks_companies', JSON.stringify(list));
+}
+
+function getActiveCompanyId() {
+  const id = localStorage.getItem('mycobooks_active_co');
+  if (!id) return 'default';
+  // Verify the id still exists in the list
+  const list = getCompaniesList();
+  return list.find(c => c.id === id) ? id : 'default';
+}
+
+function getActiveCompanyPrefix() {
+  const id = getActiveCompanyId();
+  const co = getCompaniesList().find(c => c.id === id);
+  return co ? (co.prefix || '') : '';
+}
+
+function setActiveCompanyId(id) {
+  localStorage.setItem('mycobooks_active_co', id);
+}
+
+function updateCompanyDisplayName(name) {
+  // Update the active company's label in the sidebar switcher
+  const sel = document.getElementById('company-switcher');
+  if (!sel) return;
+  const activeId = getActiveCompanyId();
+  const opt = sel.querySelector(`option[value="${activeId}"]`);
+  if (opt && name) opt.textContent = name;
+  // Also update the stored list
+  const list = getCompaniesList();
+  const co = list.find(c => c.id === activeId);
+  if (co && name) { co.name = name; saveCompaniesList(list); }
+}
+
+function syncCompanySwitcherLabel() {
+  // Called when company profile loads — keeps the dropdown label in sync
+  if (DB.company && DB.company.name) updateCompanyDisplayName(DB.company.name);
+}
+
+function renderCompanySwitcher() {
+  const sel = document.getElementById('company-switcher');
+  if (!sel) return;
+  const list = getCompaniesList();
+  const active = getActiveCompanyId();
+  sel.innerHTML = list.map(c =>
+    `<option value="${c.id}"${c.id===active?' selected':''}>${c.name}${c.verified===false?' (setup needed)':''}</option>`
+  ).join('');
+}
+
+async function switchCompany(newId) {
+  const current = getActiveCompanyId();
+  if (newId === current) return;
+  const list = getCompaniesList();
+  const target = list.find(c => c.id === newId);
+  if (!target) { showToast('Company not found', 'error'); return; }
+  if (target.verified === false) {
+    if (!confirm(`"${target.name}" hasn't been verified yet. Its Supabase tables may not exist. Switch anyway?`)) {
+      renderCompanySwitcher();
+      return;
+    }
+  }
+  // Confirm switch (prevents accidental flips while editing something)
+  if (!confirm(`Switch to "${target.name}"? Any unsaved changes will be lost.`)) {
+    renderCompanySwitcher();
+    return;
+  }
+
+  setActiveCompanyId(newId);
+
+  // Clear in-memory DB (keep currentUser so we don't log out)
+  const savedUser = DB.currentUser;
+  const tableKeys = ['users','expenses','sales','invoices','inventory','staff','customers',
+    'products','accounts','suppliers','payrollRuns','wageAdvances','transfers','cashflowItems',
+    'loans','claims','recurringExpenses','batches','harvests','packings','packingRates',
+    'salesOrders','lorries','refuels','maintenance','trips','routeRates','payments'];
+  tableKeys.forEach(k => { DB[k] = []; });
+  // Reset nextIds
+  Object.keys(DB.nextIds).forEach(k => { DB.nextIds[k] = 1; });
+
+  // Load per-company profile from localStorage (may be empty for brand-new company)
+  try {
+    const raw = localStorage.getItem('mycobooks_company_' + newId)
+             || (newId === 'default' ? localStorage.getItem('mycobooks_company') : null);
+    DB.company = raw ? JSON.parse(raw)
+      : { name:target.name, regno:'', phone:'', email:'', address:'', bank:'', bankacc:'', footer:'Thank you for your business!' };
+  } catch(e) {
+    DB.company = { name:target.name, regno:'', phone:'', email:'', address:'', bank:'', bankacc:'', footer:'Thank you for your business!' };
+  }
+
+  showToast(`Switching to ${target.name}...`);
+  try {
+    await sbLoad();
+    if (!DB.currentUser) DB.currentUser = savedUser;
+    // Re-render everything
+    try { populateProductSelects(); } catch(e) {}
+    try { populateAccountSelects(); } catch(e) {}
+    try { populateStatementAccounts(); } catch(e) {}
+    try { renderDashboard(); } catch(e) {}
+    try { renderSettings(); } catch(e) {}
+    renderCompanySwitcher();
+    showToast(`Now viewing ${target.name}`, 'success');
+  } catch(e) {
+    console.error('Switch failed:', e);
+    showToast('Switch failed — check console', 'error');
+  }
+}
+
+function renderCompanies() {
+  const wrap = document.getElementById('companies-list');
+  if (!wrap) return;
+  const list = getCompaniesList();
+  const active = getActiveCompanyId();
+  wrap.innerHTML = list.map(c => {
+    const isActive = c.id === active;
+    const isDefault = c.id === 'default';
+    return `
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);${isActive?'background:var(--green-light);':''}">
+      <div style="font-size:20px;">${isActive?'🟢':'⚪'}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:500;font-size:13px;">${c.name}${isActive?' <span style="font-size:10px;color:var(--green);font-weight:600;">· ACTIVE</span>':''}</div>
+        <div style="font-size:11px;color:var(--text2);font-family:'DM Mono',monospace;">prefix: ${c.prefix||'(none — default)'}${c.verified===false?' · <span style="color:var(--red);">setup pending</span>':''}</div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        ${c.verified===false ? `<button class="btn btn-primary btn-sm" onclick="showSetupSql('${c.id}')" style="font-size:11px;">Show SQL</button>` : ''}
+        ${c.verified===false ? `<button class="btn btn-outline btn-sm" onclick="verifyCompany('${c.id}')" style="font-size:11px;">Verify</button>` : ''}
+        ${!isActive ? `<button class="btn btn-outline btn-sm" onclick="switchCompany('${c.id}')" style="font-size:11px;">Switch to</button>` : ''}
+        ${!isDefault && !isActive ? `<button class="btn btn-danger btn-sm" onclick="deleteCompany('${c.id}')" style="font-size:11px;">Remove</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openAddCompanyModal() {
+  // Simple prompt-based flow keeps code small and avoids adding another modal to HTML
+  const name = prompt('Sister company name:\n\n(e.g. "Top Harvest Sdn Bhd")');
+  if (!name || !name.trim()) return;
+  // Auto-suggest next prefix c2, c3, ...
+  const list = getCompaniesList();
+  const used = new Set(list.map(c => c.prefix).filter(Boolean));
+  let n = 2;
+  while (used.has('c' + n)) n++;
+  const suggested = 'c' + n;
+  const prefix = prompt(
+    `Table prefix for "${name.trim()}":\n\n` +
+    `This will be prepended to all Supabase table names (e.g. "${suggested}_expenses").\n` +
+    `Use lowercase letters and numbers only, 2–8 chars.\n\n` +
+    `Suggested: ${suggested}`,
+    suggested
+  );
+  if (!prefix) return;
+  const clean = prefix.trim().toLowerCase();
+  if (!/^[a-z][a-z0-9]{1,7}$/.test(clean)) {
+    alert('Invalid prefix. Use 2–8 chars, start with a letter, lowercase letters/numbers only.');
+    return;
+  }
+  if (used.has(clean)) { alert('That prefix is already in use.'); return; }
+  const id = 'co_' + Date.now();
+  list.push({ id, name:name.trim(), prefix:clean, verified:false });
+  saveCompaniesList(list);
+  // Save a blank profile so there's no null
+  localStorage.setItem('mycobooks_company_' + id, JSON.stringify({
+    name:name.trim(), regno:'', phone:'', email:'', address:'', bank:'', bankacc:'',
+    footer:'Thank you for your business!'
+  }));
+  renderCompanies();
+  renderCompanySwitcher();
+  showSetupSql(id);
+}
+
+function generateSetupSql(prefix) {
+  // Generate CREATE TABLE statements mirroring the existing schema.
+  // Columns match the COLS whitelist used by sbSaveAll.
+  const schemas = {
+    users: `id int8 primary key, username text, password text, name text, role text, initials text, active bool`,
+    expenses: `id int8 primary key, date text, "desc" text, cat text, amount numeric, supplier text, status text, paid text, account text, notes text, "dueDate" text, recurring bool, "recurringId" int8`,
+    sales: `id int8 primary key, date text, customer text, product text, qty numeric, price numeric, total numeric, type text, account text, notes text, "harvestId" int8`,
+    invoices: `id int8 primary key, no text, date text, due text, customer text, address text, lines text, total numeric, tax numeric, sst numeric, status text, account text, currency text, notes text, product text, qty numeric, unit text`,
+    inventory: `id int8 primary key, name text, cat text, unit text, stock numeric, reorder numeric, cost numeric, supplier text`,
+    staff: `id int8 primary key, name text, role text, dept text, "payType" text, salary numeric, ic text, phone text, "joinDate" text, "empType" text, epf bool, socso bool, eis bool, bank text, "bankAcc" text, notes text`,
+    customers: `id int8 primary key, name text, contact text, phone text, email text, address text, terms text, currency text, "priceList" text, notes text`,
+    products: `id int8 primary key, name text, cat text, unit text, price numeric, "priceSgd" numeric, "desc" text, status text, sort int8`,
+    accounts: `id int8 primary key, name text, type text, description text, balance numeric`,
+    suppliers: `id int8 primary key, name text, cat text, contact text, phone text, email text, address text, terms text, notes text`,
+    payroll_runs: `id int8 primary key, month text, "processedOn" text, entries text, "totalNet" numeric`,
+    wage_advances: `id int8 primary key, "staffId" int8, name text, amount numeric, date text, "deductMonth" text, reason text, account text, deducted bool`,
+    transfers: `id int8 primary key, date text, "fromAccount" text, "toAccount" text, amount numeric, notes text`,
+    cashflow_items: `id int8 primary key, date text, "desc" text, amount numeric, type text, notes text`,
+    loans: `id int8 primary key, name text, lender text, amount numeric, balance numeric, rate numeric, term int8, "startDate" text, account text, notes text, payments text`,
+    claims: `id int8 primary key, date text, "submittedOn" text, claimant text, "claimType" text, cat text, "desc" text, amount numeric, status text, "reviewNotes" text, "reviewedOn" text, "paidOn" text, "paidAccount" text, "bulkPaid" text`,
+    recurring_expenses: `id int8 primary key, "desc" text, amount numeric, cat text, supplier text, day int8, account text, start text, "end" text, notes text, active bool, generated text`,
+    batches: `id int8 primary key, no text, type text, bags int8, substrate text, "bagDate" text, "inocDate" text, "maturityDate" text, status text, "harvestDate" text, "harvestKg" numeric, notes text, "createdOn" text`,
+    harvests: `id int8 primary key, date text, "batchId" int8, kg numeric, flush int8, grade text, harvester text, notes text, "saleId" int8`,
+    packings: `id int8 primary key, date text, team text, members text, notes text, orders text, packs int8, "totalKg" numeric`,
+    packing_rates: `id int8 primary key, product text, "ratePerPack" numeric, notes text`,
+    sales_orders: `id int8 primary key, "orderNo" text, customers text, lines text, customer text, "deliveryDate" text, salesperson text, priority text, notes text, total numeric, status text, "createdOn" text, dispatch text`,
+    lorries: `id int8 primary key, plate text, name text, model text, odometer numeric, "serviceIntervalKm" numeric, "lastServiceKm" numeric, "roadTaxExpiry" text, "insuranceExpiry" text, "puspakomDate" text, "puspakomNext" text`,
+    refuels: `id int8 primary key, date text, "lorryId" int8, odometer numeric, km numeric, litres numeric, cost numeric, ppl numeric, efficiency numeric, driver text, account text, notes text`,
+    maintenance: `id int8 primary key, date text, "lorryId" int8, "desc" text, type text, status text, odometer numeric, "nextKm" numeric, vendor text, cost numeric, account text, "nextDate" text, notes text`,
+    trips: `id int8 primary key, date text, "lorryId" int8, driver text, "routeId" int8, route text, wage numeric, mileage numeric, "expLines" text, diesel numeric, toll numeric, other numeric, "wageAccount" text, notes text, "totalCost" numeric`,
+    route_rates: `id int8 primary key, route text, rate numeric, km numeric, notes text`,
+    payments: `id int8 primary key, "invoiceId" int8, "invoiceNo" text, customer text, date text, amount numeric, currency text, account text, reference text, notes text, type text`,
+  };
+  const stmts = Object.entries(schemas).map(([t, cols]) =>
+    `CREATE TABLE IF NOT EXISTS ${prefix}_${t} (${cols});\nALTER TABLE ${prefix}_${t} ENABLE ROW LEVEL SECURITY;\nDROP POLICY IF EXISTS "anon_all" ON ${prefix}_${t};\nCREATE POLICY "anon_all" ON ${prefix}_${t} FOR ALL USING (true) WITH CHECK (true);`
+  );
+  return `-- MycoBooks: create tables for company prefix "${prefix}"\n-- Run this in Supabase SQL Editor, then click "Verify" in the app.\n\n` + stmts.join('\n\n') + '\n';
+}
+
+function showSetupSql(companyId) {
+  const co = getCompaniesList().find(c => c.id === companyId);
+  if (!co) return;
+  const sql = generateSetupSql(co.prefix);
+  const projectUrl = SUPABASE_URL.replace('.supabase.co','').replace('https://','');
+  const editorLink = `https://supabase.com/dashboard/project/${projectUrl}/sql/new`;
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.style.display = 'flex';
+  backdrop.id = 'modal-setup-sql';
+  backdrop.innerHTML = `
+    <div class="modal" style="width:760px;max-height:85vh;">
+      <div class="modal-head">
+        <span class="modal-title">Setup SQL — ${co.name}</span>
+        <button class="modal-close" onclick="document.getElementById('modal-setup-sql').remove()">×</button>
+      </div>
+      <div class="modal-body" style="overflow-y:auto;max-height:calc(85vh - 60px);">
+        <ol style="font-size:13px;line-height:1.7;margin:0 0 14px 18px;padding:0;">
+          <li>Click <b>Copy SQL</b> below.</li>
+          <li>Open <a href="${editorLink}" target="_blank" style="color:var(--green);">Supabase SQL Editor ↗</a> and paste.</li>
+          <li>Click <b>Run</b> in Supabase (takes ~5 seconds).</li>
+          <li>Come back here and click <b>Verify</b> on the company card.</li>
+        </ol>
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <button class="btn btn-primary btn-sm" onclick="copySetupSql()">📋 Copy SQL</button>
+          <button class="btn btn-outline btn-sm" onclick="window.open('${editorLink}','_blank')">Open SQL Editor ↗</button>
+        </div>
+        <textarea id="setup-sql-text" readonly style="width:100%;height:340px;padding:10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:'DM Mono',monospace;font-size:11px;resize:vertical;background:var(--bg);">${sql}</textarea>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+}
+
+function copySetupSql() {
+  const ta = document.getElementById('setup-sql-text');
+  if (!ta) return;
+  ta.select();
+  try {
+    navigator.clipboard.writeText(ta.value);
+    showToast('SQL copied to clipboard');
+  } catch(e) {
+    document.execCommand('copy');
+    showToast('SQL copied');
+  }
+}
+
+async function verifyCompany(companyId) {
+  const list = getCompaniesList();
+  const co = list.find(c => c.id === companyId);
+  if (!co) return;
+  showToast('Checking Supabase tables...');
+  try {
+    // Probe a handful of critical tables
+    const probes = ['expenses','sales','accounts','customers','suppliers'];
+    const missing = [];
+    for (const t of probes) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/${co.prefix}_${t}?select=id&limit=1`, {
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+      });
+      if (!res.ok) missing.push(`${co.prefix}_${t}`);
+    }
+    if (missing.length) {
+      alert(`Verification failed. These tables were not found:\n\n${missing.join('\n')}\n\nDid you run the SQL in Supabase?`);
+      return;
+    }
+    co.verified = true;
+    saveCompaniesList(list);
+    renderCompanies();
+    renderCompanySwitcher();
+    showToast(`${co.name} verified — ready to use`, 'success');
+  } catch(e) {
+    alert('Could not reach Supabase: ' + e.message);
+  }
+}
+
+function deleteCompany(companyId) {
+  if (companyId === 'default') { alert('Cannot remove the default company.'); return; }
+  const list = getCompaniesList();
+  const co = list.find(c => c.id === companyId);
+  if (!co) return;
+  if (!confirm(`Remove "${co.name}" from the app?\n\nThis only removes it from the sidebar. The Supabase tables (${co.prefix}_*) are NOT deleted — you can drop them manually in Supabase if you want.`)) return;
+  const next = list.filter(c => c.id !== companyId);
+  saveCompaniesList(next);
+  localStorage.removeItem('mycobooks_company_' + companyId);
+  renderCompanies();
+  renderCompanySwitcher();
+  showToast(`${co.name} removed`);
+}
+
+// Bootstrap the switcher on page load (before login) so the dropdown reflects saved companies
+(function initCompanySwitcher() {
+  try {
+    getCompaniesList(); // ensures default entry exists
+    renderCompanySwitcher();
+  } catch(e) { console.warn('Company switcher init failed:', e); }
+})();
 
 // Run on page load — fetch users from Supabase so login works across devices
 sbInit();
