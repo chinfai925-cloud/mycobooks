@@ -3187,6 +3187,7 @@ function doLogin() {
     populateAccountSelects();
     populateStatementAccounts();
     renderDashboard();
+    if (typeof applyCurrencyLabels === 'function') applyCurrencyLabels();
     startAutoSave();
   });
   } catch(e) { alert('Login error: ' + e.message + '\n' + e.stack); }
@@ -3317,10 +3318,50 @@ function navigate(page, el) {
 // ============================================================
 // UTILS
 // ============================================================
-function fmt(n) { return 'RM ' + Number(n).toLocaleString('en-MY', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+function currSym() {
+  // Returns the active company's currency symbol with trailing space ("RM " or "SGD ")
+  try {
+    if (typeof getActiveCompanyId === 'function') {
+      const id = getActiveCompanyId();
+      const list = (typeof getCompaniesList === 'function') ? getCompaniesList() : [];
+      const co = list.find(c => c.id === id);
+      if (co && co.currency === 'SGD') return 'SGD ';
+    }
+  } catch(e) {}
+  return 'RM ';
+}
+function fmt(n) { return currSym() + Number(n).toLocaleString('en-MY', {minimumFractionDigits:2, maximumFractionDigits:2}); }
 function fmtCurr(n, currency) {
-  const sym = (currency === 'SGD') ? 'SGD ' : 'RM ';
+  // Explicit override — used by invoices that may differ from company currency (e.g. SGD invoices in an MYR company)
+  const sym = (currency === 'SGD') ? 'SGD ' : (currency === 'MYR' ? 'RM ' : currSym());
   return sym + Number(n).toLocaleString('en-MY', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+// Sweep the DOM and rewrite hardcoded "(RM)" labels to the active company currency.
+// Called on login and on company switch. Labels are rewritten in-place (no data touched).
+function applyCurrencyLabels() {
+  const sym = currSym().trim(); // "RM" or "SGD"
+  const symSpaced = currSym();  // "RM " or "SGD "
+  const reParen = /\((?:RM|SGD)(\b|\/)/g;
+  // Walk text nodes inside the app shell only (avoid hitting <input value="RM...">)
+  const root = document.getElementById('app') || document.body;
+  if (!root) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const toPatch = [];
+  let node;
+  while ((node = walker.nextNode())) {
+    if (reParen.test(node.nodeValue)) toPatch.push(node);
+    reParen.lastIndex = 0;
+  }
+  toPatch.forEach(n => {
+    n.nodeValue = n.nodeValue.replace(/\((?:RM|SGD)(\b|\/)/g, '(' + sym + '$1');
+  });
+  // Also flip well-known placeholder spans that show "RM 0.00" before user types
+  ['so-order-total','exp-grand-total','claim-grand-total'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && /^(RM|SGD)\s/.test(el.textContent)) {
+      el.textContent = el.textContent.replace(/^(RM|SGD)\s/, symSpaced);
+    }
+  });
 }
 function fmtDate(d) { if (!d) return ''; return new Date(d + 'T00:00:00').toLocaleDateString('en-MY', {day:'2-digit',month:'short',year:'numeric'}); }
 function showToast(msg, type='success') {
@@ -4892,14 +4933,14 @@ function setSoLineField(cid, lid, field, val) {
   const kgCell = document.getElementById(`so-line-kg-${lid}`);
   if (kgCell) kgCell.textContent = ((parseInt(l.qty)||0)*size).toFixed(2)+' kg';
   const totCell = document.getElementById(`so-line-total-${lid}`);
-  if (totCell) totCell.textContent = 'RM '+l.total.toFixed(2);
+  if (totCell) totCell.textContent = currSym()+l.total.toFixed(2);
   updateSoOrderTotal();
 }
 
 function updateSoOrderTotal() {
   const total = soCustomers.reduce((s,c)=>s+c.lines.reduce((ls,l)=>ls+(l.total||0),0),0);
   const el = document.getElementById('so-order-total');
-  if (el) el.textContent = 'RM '+total.toFixed(2);
+  if (el) el.textContent = currSym()+total.toFixed(2);
 }
 
 function renderSoCustomers() {
@@ -5666,7 +5707,7 @@ function renderPackingWages() {
               <td style="padding:5px 12px;font-weight:500;">${l.product||'—'}</td>
               <td style="padding:5px 12px;">${l.size==='custom'?'Custom':PK_PACK_SIZES.find(s=>String(s.val)===String(l.size))?.label||l.size}</td>
               <td style="padding:5px 8px;text-align:center;font-family:'DM Mono',monospace;">${l.qty}</td>
-              <td style="padding:5px 8px;text-align:right;font-family:'DM Mono',monospace;color:var(--text2);">${l.rate>0?'RM '+l.rate.toFixed(2):'—'}</td>
+              <td style="padding:5px 8px;text-align:right;font-family:'DM Mono',monospace;color:var(--text2);">${l.rate>0?currSym()+l.rate.toFixed(2):'—'}</td>
               <td style="padding:5px 12px;text-align:right;font-family:'DM Mono',monospace;color:${l.earn>0?'var(--green)':'var(--text3)'};">${l.earn>0?fmt(l.earn):'no rate'}</td>
             </tr>`).join('')}
             <tr style="background:var(--bg);border-top:1px solid var(--border);font-weight:600;">
@@ -8668,9 +8709,9 @@ function payTypeLabel(staff) {
 
 function payRateLabel(staff) {
   const pt = staff.payType || 'salary';
-  if (pt === 'salary')     return `RM ${fmt(staff.salary).replace('RM ','')}/mo`;
-  if (pt === 'daily')      return `RM ${fmt(staff.salary).replace('RM ','')}/day`;
-  if (pt === 'trip')       return `RM ${fmt(staff.salary).replace('RM ','')}/trip`;
+  if (pt === 'salary')     return `${fmt(staff.salary)}/mo`;
+  if (pt === 'daily')      return `${fmt(staff.salary)}/day`;
+  if (pt === 'trip')       return `${fmt(staff.salary)}/trip`;
   if (pt === 'commission') return `${staff.salary}% of sales`;
   return fmt(staff.salary);
 }
@@ -10897,7 +10938,7 @@ function setClaimLine(id, field, val) {
 function calcClaimTotal() {
   const total = claimLines.reduce((s,l) => s + (parseFloat(l.amount)||0), 0);
   const el = document.getElementById('claim-grand-total');
-  if (el) el.textContent = 'RM ' + total.toFixed(2);
+  if (el) el.textContent = currSym() + total.toFixed(2);
 }
 
 function attachClaimLineReceipt(input) {
@@ -11474,11 +11515,19 @@ function getCompaniesList() {
     const raw = localStorage.getItem('mycobooks_companies');
     if (raw) {
       const arr = JSON.parse(raw);
-      if (Array.isArray(arr) && arr.length > 0) return arr;
+      if (Array.isArray(arr) && arr.length > 0) {
+        // Backfill: older entries may not have a currency field
+        let changed = false;
+        arr.forEach(c => {
+          if (!c.currency) { c.currency = 'MYR'; changed = true; }
+        });
+        if (changed) localStorage.setItem('mycobooks_companies', JSON.stringify(arr));
+        return arr;
+      }
     }
   } catch(e) {}
   // Bootstrap: default company wraps existing data
-  const def = [{ id:'default', name:'Mushroom Farm Co.', prefix:'', verified:true }];
+  const def = [{ id:'default', name:'Mushroom Farm Co.', prefix:'', currency:'MYR', verified:true }];
   localStorage.setItem('mycobooks_companies', JSON.stringify(def));
   return def;
 }
@@ -11584,6 +11633,7 @@ async function switchCompany(newId) {
     try { renderDashboard(); } catch(e) {}
     try { renderSettings(); } catch(e) {}
     renderCompanySwitcher();
+    if (typeof applyCurrencyLabels === 'function') applyCurrencyLabels();
     showToast(`Now viewing ${target.name}`, 'success');
   } catch(e) {
     console.error('Switch failed:', e);
@@ -11599,14 +11649,19 @@ function renderCompanies() {
   wrap.innerHTML = list.map(c => {
     const isActive = c.id === active;
     const isDefault = c.id === 'default';
+    const cur = c.currency || 'MYR';
     return `
     <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);${isActive?'background:var(--green-light);':''}">
       <div style="font-size:20px;">${isActive?'🟢':'⚪'}</div>
       <div style="flex:1;min-width:0;">
         <div style="font-weight:500;font-size:13px;">${c.name}${isActive?' <span style="font-size:10px;color:var(--green);font-weight:600;">· ACTIVE</span>':''}</div>
-        <div style="font-size:11px;color:var(--text2);font-family:'DM Mono',monospace;">prefix: ${c.prefix||'(none — default)'}${c.verified===false?' · <span style="color:var(--red);">setup pending</span>':''}</div>
+        <div style="font-size:11px;color:var(--text2);font-family:'DM Mono',monospace;">prefix: ${c.prefix||'(none — default)'} · currency: ${cur}${c.verified===false?' · <span style="color:var(--red);font-family:inherit;">setup pending</span>':''}</div>
       </div>
-      <div style="display:flex;gap:6px;">
+      <div style="display:flex;gap:6px;align-items:center;">
+        <select onchange="changeCompanyCurrency('${c.id}', this.value)" style="padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:11px;font-family:inherit;background:#fff;" title="Change currency">
+          <option value="MYR"${cur==='MYR'?' selected':''}>MYR</option>
+          <option value="SGD"${cur==='SGD'?' selected':''}>SGD</option>
+        </select>
         ${c.verified===false ? `<button class="btn btn-primary btn-sm" onclick="showSetupSql('${c.id}')" style="font-size:11px;">Show SQL</button>` : ''}
         ${c.verified===false ? `<button class="btn btn-outline btn-sm" onclick="verifyCompany('${c.id}')" style="font-size:11px;">Verify</button>` : ''}
         ${!isActive ? `<button class="btn btn-outline btn-sm" onclick="switchCompany('${c.id}')" style="font-size:11px;">Switch to</button>` : ''}
@@ -11614,6 +11669,25 @@ function renderCompanies() {
       </div>
     </div>`;
   }).join('');
+}
+
+function changeCompanyCurrency(companyId, newCurrency) {
+  if (newCurrency !== 'MYR' && newCurrency !== 'SGD') return;
+  const list = getCompaniesList();
+  const co = list.find(c => c.id === companyId);
+  if (!co) return;
+  const prev = co.currency || 'MYR';
+  if (prev === newCurrency) return;
+  co.currency = newCurrency;
+  saveCompaniesList(list);
+  showToast(`${co.name} currency set to ${newCurrency}`);
+  renderCompanies();
+  // If this is the active company, re-render visible screens so symbols flip immediately
+  if (companyId === getActiveCompanyId()) {
+    try { renderDashboard(); } catch(e) {}
+    try { renderSettings(); } catch(e) {}
+    applyCurrencyLabels();
+  }
 }
 
 function openAddCompanyModal() {
@@ -11640,8 +11714,18 @@ function openAddCompanyModal() {
     return;
   }
   if (used.has(clean)) { alert('That prefix is already in use.'); return; }
+  const currencyInput = prompt(
+    `Currency for "${name.trim()}":\n\nType MYR or SGD.\n(Affects display symbols and form labels — does NOT do exchange-rate conversions.)`,
+    'MYR'
+  );
+  if (currencyInput === null) return; // cancelled
+  const currency = (currencyInput || '').trim().toUpperCase();
+  if (currency !== 'MYR' && currency !== 'SGD') {
+    alert('Currency must be MYR or SGD.');
+    return;
+  }
   const id = 'co_' + Date.now();
-  list.push({ id, name:name.trim(), prefix:clean, verified:false });
+  list.push({ id, name:name.trim(), prefix:clean, currency, verified:false });
   saveCompaniesList(list);
   // Save a blank profile so there's no null
   localStorage.setItem('mycobooks_company_' + id, JSON.stringify({
