@@ -2079,10 +2079,21 @@ tr:hover td { background:var(--bg); }
       <button class="btn btn-outline btn-sm" onclick="addInvLine()" style="margin-bottom:14px;">+ Add Line</button>
 
       <div style="display:flex;justify-content:flex-end;margin-bottom:16px;">
-        <div style="width:220px;">
+        <div style="width:260px;">
           <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;">
             <span style="color:var(--text2);">Subtotal</span>
             <span class="mono" id="inv-subtotal">RM 0.00</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px;border-top:1px solid var(--border);gap:6px;">
+            <span style="color:var(--text2);">Discount</span>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <button type="button" id="inv-disc-type" onclick="toggleInvDiscType()" style="padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);font-size:11px;font-weight:500;cursor:pointer;font-family:inherit;min-width:38px;" title="Toggle % or RM">%</button>
+              <input type="number" id="inv-disc-value" value="0" min="0" step="0.01" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:right;" oninput="calcInvGrandTotal()">
+            </div>
+          </div>
+          <div id="inv-disc-amt-row" style="display:none;justify-content:space-between;padding:4px 0 6px;font-size:12px;color:var(--text3);">
+            <span>&nbsp;</span>
+            <span class="mono" id="inv-disc-amt">−RM 0.00</span>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px;border-top:1px solid var(--border);">
             <span style="color:var(--text2);">Tax (SST %)</span>
@@ -2889,7 +2900,7 @@ async function sbLoad() {
   DB[key] = rows.map(r => {
             const obj = { ...r };
             ['lines','customers','orders','expLines','items','dispatch',
-             'members','generated','statutory','payments','entries','priceList'].forEach(col => {
+             'members','generated','statutory','payments','entries','priceList','discount'].forEach(col => {
               if (typeof obj[col] === 'string' && obj[col]) {
                 try { obj[col] = JSON.parse(obj[col]); } catch(e) {}
               }
@@ -2934,7 +2945,7 @@ async function sbSave(tableKey, record) {
   const tbl = sbTable(tableKey);
   // Serialize JSON columns
   const row = { ...record };
-  ['lines','customers','orders','expLines','items','dispatch','members','generated','statutory'].forEach(col => {
+  ['lines','customers','orders','expLines','items','dispatch','members','generated','statutory','discount'].forEach(col => {
     if (row[col] && typeof row[col] === 'object') {
       row[col] = JSON.stringify(row[col]);
     }
@@ -2975,7 +2986,7 @@ const COLS = {
   users:        ['id','username','password','name','role','initials','active'],
   expenses:     ['id','date','desc','cat','amount','supplier','status','paid','account','notes','dueDate','recurring','recurringId'],
   sales:        ['id','date','customer','product','qty','price','total','type','account','notes','harvestId'],
-  invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','currency','notes','product','qty','unit'],
+  invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','currency','notes','product','qty','unit','discount'],
   inventory:    ['id','name','cat','unit','stock','reorder','cost','supplier'],
   staff:        ['id','name','role','dept','payType','salary','ic','phone','joinDate','empType','epf','socso','eis','bank','bankAcc','notes'],
   customers:    ['id','name','contact','phone','email','address','terms','currency','priceList','notes'],
@@ -3033,7 +3044,7 @@ async function sbSaveAll() {
       const rows = records.map(r => {
         const src = { ...r };
         ['lines','customers','orders','expLines','items','dispatch',
-         'members','generated','statutory','payments','entries','priceList'].forEach(c => {
+         'members','generated','statutory','payments','entries','priceList','discount'].forEach(c => {
           if (src[c] && typeof src[c] === 'object') src[c] = JSON.stringify(src[c]);
         });
         if (!cols) return src;
@@ -7659,15 +7670,39 @@ function invLineChange(lineId, field, val) {
   calcInvGrandTotal();
 }
 
+function toggleInvDiscType() {
+  const btn = document.getElementById('inv-disc-type');
+  if (!btn) return;
+  btn.textContent = (btn.textContent === '%') ? 'RM' : '%';
+  calcInvGrandTotal();
+}
+
 function calcInvGrandTotal() {
   const subtotal = invLines.reduce((s, l) => s + (parseFloat(l.qty)||0) * (parseFloat(l.unitPrice)||0), 0);
+  // Discount
+  const discType  = (document.getElementById('inv-disc-type')||{}).textContent || '%';
+  const discValue = parseFloat((document.getElementById('inv-disc-value')||{}).value) || 0;
+  let discAmt = 0;
+  if (discType === '%') discAmt = subtotal * Math.min(discValue, 100) / 100;
+  else                  discAmt = Math.min(discValue, subtotal);
+  const discounted = Math.max(subtotal - discAmt, 0);
+  // Tax applies to discounted subtotal (standard SST/VAT treatment)
   const taxPct = parseFloat(document.getElementById('inv-tax-pct').value) || 0;
-  const tax = subtotal * taxPct / 100;
-  const grand = subtotal + tax;
+  const tax = discounted * taxPct / 100;
+  const grand = discounted + tax;
   const cs = (window._invCustCurrency||'MYR') === 'SGD' ? 'SGD ' : 'RM ';
   document.getElementById('inv-subtotal').textContent = cs + subtotal.toFixed(2);
   document.getElementById('inv-grand-total').textContent = cs + grand.toFixed(2);
-  return { subtotal, tax, grand };
+  // Show/hide discount amount summary row
+  const discRow = document.getElementById('inv-disc-amt-row');
+  const discEl  = document.getElementById('inv-disc-amt');
+  if (discAmt > 0) {
+    if (discRow) discRow.style.display = 'flex';
+    if (discEl)  discEl.textContent = '−' + cs + discAmt.toFixed(2);
+  } else {
+    if (discRow) discRow.style.display = 'none';
+  }
+  return { subtotal, discAmt, discType, discValue, tax, grand };
 }
 
 // kept for backwards-compat (products page calls this)
@@ -8079,6 +8114,7 @@ function printInvoice(id) {
     <div class="totals">
       <table>
         <tr><td style="color:#6b7280;">Subtotal</td><td>${currSym} ${subtotal.toFixed(2)}</td></tr>
+        ${i.discount && i.discount.value > 0 ? `<tr><td style="color:#6b7280;">Discount${i.discount.type==='%'?' ('+i.discount.value+'%)':''}</td><td style="color:#b91c1c;">−${currSym} ${(i.discount.amount||0).toFixed(2)}</td></tr>` : ''}
         ${tax>0?`<tr><td style="color:#6b7280;">Tax</td><td>${currSym} ${tax.toFixed(2)}</td></tr>`:''}
         ${sst>0?`<tr><td style="color:#6b7280;">SST</td><td>${currSym} ${sst.toFixed(2)}</td></tr>`:''}
         <tr class="grand-total"><td>Total</td><td>${currSym} ${total.toFixed(2)}</td></tr>
@@ -8235,6 +8271,16 @@ function editInvoice(id) {
   document.getElementById('inv-notes').value = inv.notes || '';
   document.getElementById('inv-tax-pct').value = inv.taxPct || 0;
   document.getElementById('inv-account').value = inv.account || (DB.accounts[0]||{}).name || '';
+  // Restore discount
+  const discBtn = document.getElementById('inv-disc-type');
+  const discVal = document.getElementById('inv-disc-value');
+  if (inv.discount && discBtn && discVal) {
+    discBtn.textContent = (inv.discount.type === 'RM') ? 'RM' : '%';
+    discVal.value = inv.discount.value || 0;
+  } else {
+    if (discBtn) discBtn.textContent = '%';
+    if (discVal) discVal.value = '0';
+  }
   // Restore currency for this invoice
   window._invCustCurrency  = inv.currency || 'MYR';
   window._invCustPriceList = {};
@@ -8261,7 +8307,8 @@ function saveInvoice() {
   if (!customer) { showToast('Customer name is required', 'error'); return; }
   const validLines = invLines.filter(l => l.product && parseFloat(l.qty) > 0);
   if (validLines.length === 0) { showToast('Add at least one product line', 'error'); return; }
-  const { grand } = calcInvGrandTotal();
+  const calc = calcInvGrandTotal();
+  const { grand, discAmt, discType, discValue } = calc;
   const currency = window._invCustCurrency || 'MYR';
   const data = {
     no: document.getElementById('inv-no').value || ('INV-' + DB.nextIds.invoices),
@@ -8270,6 +8317,7 @@ function saveInvoice() {
     customer, address: document.getElementById('inv-address').value,
     lines: validLines.map(l => ({ product: l.product, qty: parseFloat(l.qty)||0, unitPrice: parseFloat(l.unitPrice)||0, subtotal: (parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0) })),
     taxPct: parseFloat(document.getElementById('inv-tax-pct').value) || 0,
+    discount: (discValue > 0) ? { type: discType, value: discValue, amount: discAmt } : null,
     total: grand,
     currency,
     account: document.getElementById('inv-account').value,
@@ -8303,6 +8351,12 @@ function resetInvModal() {
   document.getElementById('inv-customer').value = '';
   document.getElementById('inv-address').value = '';
   document.getElementById('inv-tax-pct').value = '0';
+  const discBtn = document.getElementById('inv-disc-type');
+  const discVal = document.getElementById('inv-disc-value');
+  if (discBtn) discBtn.textContent = '%';
+  if (discVal) discVal.value = '0';
+  const discRow = document.getElementById('inv-disc-amt-row');
+  if (discRow) discRow.style.display = 'none';
   invLines = [];
   renderInvLines();
 }
@@ -11744,7 +11798,7 @@ function generateSetupSql(prefix) {
     users: `id int8 primary key, username text, password text, name text, role text, initials text, active bool`,
     expenses: `id int8 primary key, date text, "desc" text, cat text, amount numeric, supplier text, status text, paid text, account text, notes text, "dueDate" text, recurring bool, "recurringId" int8`,
     sales: `id int8 primary key, date text, customer text, product text, qty numeric, price numeric, total numeric, type text, account text, notes text, "harvestId" int8`,
-    invoices: `id int8 primary key, no text, date text, due text, customer text, address text, lines text, total numeric, tax numeric, sst numeric, status text, account text, currency text, notes text, product text, qty numeric, unit text`,
+    invoices: `id int8 primary key, no text, date text, due text, customer text, address text, lines text, total numeric, tax numeric, sst numeric, status text, account text, currency text, notes text, product text, qty numeric, unit text, discount text`,
     inventory: `id int8 primary key, name text, cat text, unit text, stock numeric, reorder numeric, cost numeric, supplier text`,
     staff: `id int8 primary key, name text, role text, dept text, "payType" text, salary numeric, ic text, phone text, "joinDate" text, "empType" text, epf bool, socso bool, eis bool, bank text, "bankAcc" text, notes text`,
     customers: `id int8 primary key, name text, contact text, phone text, email text, address text, terms text, currency text, "priceList" text, notes text`,
