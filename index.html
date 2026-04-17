@@ -334,6 +334,14 @@ tr:hover td { background:var(--bg); }
         <svg viewBox="0 0 15 15" fill="none"><path d="M4 1h7a1 1 0 011 1v11a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="currentColor"/><path d="M5 5h5M5 8h5M5 11h3" stroke="currentColor" stroke-linecap="round"/></svg>
         Invoices
       </div>
+      <div class="nav-link" data-page="creditnotes" onclick="navigate('creditnotes',this)">
+        <svg viewBox="0 0 15 15" fill="none"><path d="M4 1h7a1 1 0 011 1v11a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="currentColor"/><path d="M5 7h5" stroke="currentColor" stroke-linecap="round" stroke-width="1.6"/></svg>
+        Credit Notes
+      </div>
+      <div class="nav-link" data-page="debitnotes" onclick="navigate('debitnotes',this)">
+        <svg viewBox="0 0 15 15" fill="none"><path d="M4 1h7a1 1 0 011 1v11a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="currentColor"/><path d="M5 7h5M7.5 4.5v5" stroke="currentColor" stroke-linecap="round" stroke-width="1.6"/></svg>
+        Debit Notes
+      </div>
       <div class="nav-link" data-page="customers" onclick="navigate('customers',this)">
         <svg viewBox="0 0 15 15" fill="none"><circle cx="5.5" cy="5" r="2.5" stroke="currentColor"/><path d="M1 13c0-2.5 2-4.5 4.5-4.5M9 10l1.5 1.5L13 9" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Customers
@@ -718,6 +726,51 @@ tr:hover td { background:var(--bg); }
         </div>
       </div>
       <div id="suppliers-grid" class="customers-grid"></div>
+    </div>
+
+    <!-- CREDIT NOTES -->
+    <div class="page" id="page-creditnotes">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Credit Notes</div>
+          <div class="page-subtitle">Reduce what a customer owes — for returns, overcharges, or post-sale discounts</div>
+        </div>
+        <button class="btn btn-primary" onclick="openCreditNoteModal()">+ New Credit Note</button>
+      </div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-body" style="padding:12px 16px;">
+          <div class="flex-row">
+            <input class="search-bar" placeholder="Search by CN number, customer, or invoice..." id="cn-search" oninput="renderCreditNotes()">
+            <select class="select-filter" id="cn-month-filter" onchange="renderCreditNotes()">
+              <option value="">All months</option>
+              <option value="2026-04">Apr 2026</option>
+              <option value="2026-03">Mar 2026</option>
+              <option value="2026-02">Feb 2026</option>
+              <option value="2026-01">Jan 2026</option>
+              <option value="2025-12">Dec 2025</option>
+            </select>
+            <select class="select-filter" id="cn-status-filter" onchange="renderCreditNotes()">
+              <option value="">All statuses</option>
+              <option>Draft</option><option>Issued</option><option>Applied</option><option>Voided</option>
+            </select>
+            <span id="cn-total-summary" style="margin-left:auto;font-size:13px;color:var(--text2);"></span>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div id="cn-list" class="table-wrap"></div>
+      </div>
+    </div>
+
+    <!-- DEBIT NOTES (placeholder — built in Part 3) -->
+    <div class="page" id="page-debitnotes">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Debit Notes</div>
+          <div class="page-subtitle">Charge a customer or bill back a supplier</div>
+        </div>
+      </div>
+      <div class="card"><div class="card-body"><div class="empty-state"><div class="icon">🚧</div><p>Debit Notes coming in next update.</p></div></div></div>
     </div>
 
     <!-- CUSTOMERS -->
@@ -2143,6 +2196,70 @@ tr:hover td { background:var(--bg); }
   </div>
 </div>
 
+<!-- Credit Note Modal -->
+<div class="modal-backdrop" id="modal-creditnote">
+  <div class="modal" style="width:760px;">
+    <div class="modal-head">
+      <span class="modal-title" id="cn-modal-heading">New Credit Note</span>
+      <button class="modal-close" onclick="closeModal('modal-creditnote')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid form-grid-2" style="margin-bottom:14px;">
+        <div class="form-group"><label>CN Number</label><input type="text" id="cn-no" placeholder="auto"></div>
+        <div class="form-group"><label>Date</label><input type="date" id="cn-date"></div>
+        <div class="form-group" style="grid-column:1/-1"><label>Linked Invoice</label>
+          <select id="cn-invoice" onchange="onCnInvoiceChange()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
+          <div id="cn-invoice-meta" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
+        </div>
+        <div class="form-group"><label>Status</label>
+          <select id="cn-status">
+            <option>Draft</option><option>Issued</option><option>Applied</option><option>Voided</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Reason</label>
+          <select id="cn-reason">
+            <option>Return of goods</option><option>Overcharge</option><option>Post-sale discount</option><option>Damaged goods</option><option>Pricing correction</option><option>Other</option>
+          </select>
+        </div>
+      </div>
+
+      <label style="font-size:12px;font-weight:500;color:var(--text2);display:block;margin-bottom:8px;">Credit Lines</label>
+      <div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:10px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="background:var(--bg);">
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:left;border-bottom:1px solid var(--border);">Description</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:80px;border-bottom:1px solid var(--border);">Qty</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:110px;border-bottom:1px solid var(--border);">Unit Price</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:110px;border-bottom:1px solid var(--border);">Subtotal</th>
+              <th style="width:28px;border-bottom:1px solid var(--border);"></th>
+            </tr>
+          </thead>
+          <tbody id="cn-lines-body"></tbody>
+        </table>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="addCnLine()" style="margin-bottom:14px;">+ Add Line</button>
+
+      <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+        <div style="width:240px;">
+          <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:14px;font-weight:600;border-top:2px solid var(--border);">
+            <span>Credit Total</span>
+            <span class="mono" id="cn-grand-total" style="color:var(--red);">−RM 0.00</span>
+          </div>
+          <div id="cn-exceeds-warn" style="display:none;font-size:11px;color:var(--red);margin-top:4px;text-align:right;"></div>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:10px;"><label>Notes</label><input type="text" id="cn-notes" placeholder="Internal notes..."></div>
+
+      <div class="form-actions">
+        <button class="btn btn-outline" onclick="closeModal('modal-creditnote')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveCreditNote()">Save Credit Note</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Wage Advance Modal -->
 <div class="modal-backdrop" id="modal-wage-advance">
   <div class="modal" style="width:420px;">
@@ -2851,7 +2968,7 @@ const SB_TABLES = [
   'products','accounts','suppliers','payrollRuns','wageAdvances','transfers',
   'cashflowItems','loans','claims','recurringExpenses','batches','harvests',
   'packings','packingRates','salesOrders','lorries','refuels','maintenance',
-  'trips','routeRates','payments'
+  'trips','routeRates','payments','creditNotes','debitNotes'
 ];
 
 function sbTable(key) {
@@ -3011,6 +3128,8 @@ const COLS = {
   trips:        ['id','date','lorryId','driver','routeId','route','wage','mileage','expLines','diesel','toll','other','wageAccount','notes','totalCost'],
   routeRates:   ['id','route','rate','km','notes'],
   payments:     ['id','invoiceId','invoiceNo','customer','date','amount','currency','account','reference','notes','type'],
+  creditNotes:  ['id','no','date','invoiceId','invoiceNo','customer','lines','total','currency','reason','status','notes','createdOn'],
+  debitNotes:   ['id','no','date','kind','partyType','partyName','invoiceId','invoiceNo','lines','total','currency','reason','status','notes','createdOn'],
 };
 
 let sbSaving = false;
@@ -3150,8 +3269,10 @@ const DB = {
   trips: [],
   routeRates: [],
   payments: [],
+  creditNotes: [],
+  debitNotes: [],
   company: { name:'', regno:'', phone:'', email:'', address:'', bank:'', bankacc:'', footer:'Thank you for your business!' },
-  nextIds: { expenses:1, sales:1, invoices:1, inventory:1, staff:1, customers:1, products:1, accounts:1, users:1, suppliers:1, payrollRuns:1, wageAdvances:1, transfers:1, cashflowItems:1, loans:1, claims:1, recurringExpenses:1, batches:1, harvests:1, packings:1, packingRates:1, salesOrders:1, lorries:1, refuels:1, maintenance:1, trips:1, routeRates:1, payments:1 }
+  nextIds: { expenses:1, sales:1, invoices:1, inventory:1, staff:1, customers:1, products:1, accounts:1, users:1, suppliers:1, payrollRuns:1, wageAdvances:1, transfers:1, cashflowItems:1, loans:1, claims:1, recurringExpenses:1, batches:1, harvests:1, packings:1, packingRates:1, salesOrders:1, lorries:1, refuels:1, maintenance:1, trips:1, routeRates:1, payments:1, creditNotes:1, debitNotes:1 }
 };
 
 // ============================================================
@@ -3317,7 +3438,7 @@ function navigate(page, el) {
   if (el) el.classList.add('active');
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
-  const renders = { dashboard:renderDashboard, expenses:renderExpenses, invoices:renderInvoices, orders:renderOrders, customers:renderCustomers, suppliers:renderSuppliers, products:renderProducts, inventory:renderInventory, production:renderProduction, harvest:renderHarvest, fleet:renderFleet, payroll:renderPayroll, reports:renderReport, statement:renderStatement, cashflow:renderCashflow, loans:renderLoans, claims:renderClaims, settings:renderSettings, users:renderUsers };
+  const renders = { dashboard:renderDashboard, expenses:renderExpenses, invoices:renderInvoices, orders:renderOrders, customers:renderCustomers, suppliers:renderSuppliers, products:renderProducts, inventory:renderInventory, production:renderProduction, harvest:renderHarvest, fleet:renderFleet, payroll:renderPayroll, reports:renderReport, statement:renderStatement, cashflow:renderCashflow, loans:renderLoans, claims:renderClaims, settings:renderSettings, users:renderUsers, creditnotes:renderCreditNotes, debitnotes:()=>{} };
   // Access guards
   if (page === 'payroll'   && !can('seePayroll'))  { showToast('Access denied — Payroll is Admin only', 'error'); return; }
   if (page === 'reports'   && !can('seeReports'))  { showToast('Access denied — Reports is Admin & Manager only', 'error'); return; }
@@ -7983,7 +8104,11 @@ function renderInvoices() {
         <td style="color:var(--text2)">${fmtDate(i.date)}</td>
         <td style="color:${i.status==='Overdue'?'var(--red)':'var(--text2)'}">${fmtDate(i.due)}</td>
         <td><span class="badge ${statusMap[i.status]||'badge-gray'}">${i.status}</span>${i.status==='Paid'&&i.account?`<div style="font-size:10px;margin-top:2px;color:var(--green);font-weight:500;">${i.account}</div>`:''}</td>
-        <td class="text-right mono" style="font-weight:500">${fmtCurr(i.total, i.currency)}</td>
+        <td class="text-right mono" style="font-weight:500">${fmtCurr(i.total, i.currency)}${(function(){
+          const credits = getTotalCreditsForInvoice(i.id);
+          if (credits > 0) return `<div style="font-size:10px;color:var(--red);margin-top:2px;font-family:'DM Mono',monospace;">− ${fmtCurr(credits, i.currency)} credit</div>`;
+          return '';
+        })()}</td>
         <td style="display:flex;gap:4px;padding-top:10px;">
           <button class="btn btn-outline btn-sm" onclick="printInvoice(${i.id})" title="Print Invoice">🖨 Inv</button>
           <button class="btn btn-outline btn-sm" onclick="printDO(${i.id})" title="Print Delivery Order">📦 DO</button>
@@ -11823,6 +11948,8 @@ function generateSetupSql(prefix) {
     trips: `id int8 primary key, date text, "lorryId" int8, driver text, "routeId" int8, route text, wage numeric, mileage numeric, "expLines" text, diesel numeric, toll numeric, other numeric, "wageAccount" text, notes text, "totalCost" numeric`,
     route_rates: `id int8 primary key, route text, rate numeric, km numeric, notes text`,
     payments: `id int8 primary key, "invoiceId" int8, "invoiceNo" text, customer text, date text, amount numeric, currency text, account text, reference text, notes text, type text`,
+    credit_notes: `id int8 primary key, no text, date text, "invoiceId" int8, "invoiceNo" text, customer text, lines text, total numeric, currency text, reason text, status text, notes text, "createdOn" text`,
+    debit_notes: `id int8 primary key, no text, date text, kind text, "partyType" text, "partyName" text, "invoiceId" int8, "invoiceNo" text, lines text, total numeric, currency text, reason text, status text, notes text, "createdOn" text`,
   };
   const stmts = Object.entries(schemas).map(([t, cols]) =>
     `CREATE TABLE IF NOT EXISTS ${prefix}_${t} (${cols});\nALTER TABLE ${prefix}_${t} ENABLE ROW LEVEL SECURITY;\nDROP POLICY IF EXISTS "anon_all" ON ${prefix}_${t};\nCREATE POLICY "anon_all" ON ${prefix}_${t} FOR ALL USING (true) WITH CHECK (true);`
@@ -11927,6 +12054,399 @@ function deleteCompany(companyId) {
     renderCompanySwitcher();
   } catch(e) { console.warn('Company switcher init failed:', e); }
 })();
+
+// ============================================================
+// CREDIT NOTES
+// ============================================================
+let cnLines = [];
+let editingCnId = null;
+
+// Sum of all non-voided credit notes against a given invoice
+function getTotalCreditsForInvoice(invoiceId) {
+  if (!invoiceId) return 0;
+  return (DB.creditNotes || [])
+    .filter(cn => cn.invoiceId === invoiceId && cn.status !== 'Voided' && cn.status !== 'Draft')
+    .reduce((s, cn) => s + (cn.total || 0), 0);
+}
+
+// Net invoice balance (total − credits − payments already received)
+function getInvoiceBalance(inv) {
+  if (!inv) return 0;
+  const credits = getTotalCreditsForInvoice(inv.id);
+  const paid = (DB.payments || [])
+    .filter(p => p.invoiceId === inv.id)
+    .reduce((s, p) => s + (p.amount || 0), 0);
+  return Math.max((inv.total || 0) - credits - paid, 0);
+}
+
+function renderCreditNotes() {
+  const wrap = document.getElementById('cn-list');
+  if (!wrap) return;
+  const search = (document.getElementById('cn-search').value || '').toLowerCase().trim();
+  const month  = document.getElementById('cn-month-filter').value || '';
+  const status = document.getElementById('cn-status-filter').value || '';
+
+  let items = [...(DB.creditNotes || [])].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  if (month)  items = items.filter(cn => (cn.date||'').startsWith(month));
+  if (status) items = items.filter(cn => cn.status === status);
+  if (search) {
+    items = items.filter(cn =>
+      (cn.no||'').toLowerCase().includes(search) ||
+      (cn.customer||'').toLowerCase().includes(search) ||
+      (cn.invoiceNo||'').toLowerCase().includes(search)
+    );
+  }
+
+  const total = items.reduce((s,cn) => s + (cn.total||0), 0);
+  document.getElementById('cn-total-summary').textContent =
+    `${items.length} credit note${items.length===1?'':'s'} · Total: ${fmt(total)}`;
+
+  if (items.length === 0) {
+    wrap.innerHTML = '<div class="empty-state"><div class="icon">🧾</div><p>No credit notes yet</p><p style="font-size:12px;color:var(--text3);">Create one to reduce a customer\'s outstanding balance</p></div>';
+    return;
+  }
+
+  const statusBadge = (s) => {
+    const map = { Draft:'badge-gray', Issued:'badge-amber', Applied:'badge-green', Voided:'badge-red' };
+    return `<span class="badge ${map[s]||'badge-gray'}">${s}</span>`;
+  };
+
+  wrap.innerHTML = `<table>
+    <thead><tr>
+      <th>CN No.</th><th>Date</th><th>Customer</th><th>Against Invoice</th>
+      <th>Reason</th><th class="text-right">Amount</th><th>Status</th><th></th>
+    </tr></thead>
+    <tbody>${items.map(cn => `
+      <tr>
+        <td style="font-weight:500;font-family:'DM Mono',monospace;">${cn.no||'—'}</td>
+        <td style="color:var(--text2);white-space:nowrap;">${fmtDate(cn.date)}</td>
+        <td>${cn.customer||'—'}</td>
+        <td><span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text2);">${cn.invoiceNo||'—'}</span></td>
+        <td style="font-size:12px;color:var(--text2);">${cn.reason||'—'}</td>
+        <td class="text-right mono" style="font-weight:500;color:var(--red);">−${fmtCurr(cn.total||0, cn.currency||'MYR')}</td>
+        <td>${statusBadge(cn.status||'Draft')}</td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-outline btn-sm" onclick="printCreditNote(${cn.id})" title="Print">🖨</button>
+          ${can('canEdit') ? `<button class="btn btn-outline btn-sm" onclick="editCreditNote(${cn.id})">Edit</button>` : ''}
+          ${can('canDelete') ? `<button class="btn btn-danger btn-sm" onclick="deleteCreditNote(${cn.id})">Del</button>` : ''}
+        </td>
+      </tr>`).join('')}</tbody></table>`;
+}
+
+function populateCnInvoiceSelect(selectedId) {
+  const sel = document.getElementById('cn-invoice');
+  if (!sel) return;
+  const list = [...(DB.invoices||[])].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  sel.innerHTML = '<option value="">— Select an invoice —</option>' +
+    list.map(i => {
+      const bal = getInvoiceBalance(i);
+      return `<option value="${i.id}"${i.id===selectedId?' selected':''}>${i.no} · ${i.customer} · ${fmtCurr(i.total||0, i.currency||'MYR')} (bal: ${fmtCurr(bal, i.currency||'MYR')})</option>`;
+    }).join('');
+}
+
+function onCnInvoiceChange() {
+  const sel = document.getElementById('cn-invoice');
+  const meta = document.getElementById('cn-invoice-meta');
+  const invId = parseInt(sel.value);
+  if (!invId) { meta.textContent = ''; return; }
+  const inv = (DB.invoices||[]).find(i => i.id === invId);
+  if (!inv) return;
+  const bal = getInvoiceBalance(inv);
+  const cur = inv.currency || 'MYR';
+  meta.innerHTML = `Customer: <b>${inv.customer}</b> · Invoice total: ${fmtCurr(inv.total||0, cur)} · <span style="color:var(--green);">Available to credit: ${fmtCurr(bal, cur)}</span>`;
+  // Autofill lines from the invoice if CN is empty
+  if (cnLines.length === 0 && inv.lines && inv.lines.length) {
+    cnLines = inv.lines.map(l => ({
+      id: Date.now() + Math.random(),
+      desc: l.product || l.desc || '',
+      qty: l.qty || 1,
+      unitPrice: l.unitPrice || l.price || 0
+    }));
+    renderCnLines();
+  }
+  calcCnTotal();
+}
+
+function addCnLine() {
+  cnLines.push({ id: Date.now() + Math.random(), desc:'', qty:1, unitPrice:0 });
+  renderCnLines();
+}
+
+function removeCnLine(id) {
+  cnLines = cnLines.filter(l => l.id !== id);
+  renderCnLines();
+  calcCnTotal();
+}
+
+function setCnLine(id, field, val) {
+  const l = cnLines.find(x => x.id === id);
+  if (!l) return;
+  l[field] = (field === 'desc') ? val : (parseFloat(val) || 0);
+  calcCnTotal();
+  // Update subtotal cell in place (avoid full re-render on every keystroke)
+  const sub = document.getElementById('cn-sub-' + id);
+  if (sub) sub.textContent = fmtCurr((parseFloat(l.qty)||0) * (parseFloat(l.unitPrice)||0), getCnCurrency());
+}
+
+function getCnCurrency() {
+  const sel = document.getElementById('cn-invoice');
+  const invId = parseInt((sel||{}).value);
+  const inv = (DB.invoices||[]).find(i => i.id === invId);
+  return (inv && inv.currency) || 'MYR';
+}
+
+function renderCnLines() {
+  const tb = document.getElementById('cn-lines-body');
+  if (!tb) return;
+  if (cnLines.length === 0) {
+    tb.innerHTML = '<tr><td colspan="5" style="padding:16px;text-align:center;font-size:12px;color:var(--text3);">No lines yet — click "+ Add Line" below</td></tr>';
+    calcCnTotal();
+    return;
+  }
+  const cur = getCnCurrency();
+  tb.innerHTML = cnLines.map(l => {
+    const sub = (parseFloat(l.qty)||0) * (parseFloat(l.unitPrice)||0);
+    return `<tr>
+      <td style="padding:4px 6px;"><input type="text" value="${(l.desc||'').replace(/"/g,'&quot;')}" oninput="setCnLine(${l.id},'desc',this.value)" placeholder="Description" style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:4px;font-size:12px;"></td>
+      <td style="padding:4px 6px;"><input type="number" value="${l.qty||0}" min="0" step="0.01" oninput="setCnLine(${l.id},'qty',this.value)" style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:right;"></td>
+      <td style="padding:4px 6px;"><input type="number" value="${l.unitPrice||0}" min="0" step="0.01" oninput="setCnLine(${l.id},'unitPrice',this.value)" style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:right;"></td>
+      <td id="cn-sub-${l.id}" style="padding:6px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;font-weight:500;white-space:nowrap;">${fmtCurr(sub, cur)}</td>
+      <td style="padding:4px;text-align:center;"><button onclick="removeCnLine(${l.id})" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:16px;padding:4px;">×</button></td>
+    </tr>`;
+  }).join('');
+  calcCnTotal();
+}
+
+function calcCnTotal() {
+  const total = cnLines.reduce((s, l) => s + (parseFloat(l.qty)||0) * (parseFloat(l.unitPrice)||0), 0);
+  const cur = getCnCurrency();
+  const el = document.getElementById('cn-grand-total');
+  if (el) el.textContent = '−' + fmtCurr(total, cur);
+  // Over-credit warning
+  const warn = document.getElementById('cn-exceeds-warn');
+  const sel = document.getElementById('cn-invoice');
+  const invId = parseInt((sel||{}).value);
+  if (warn && invId) {
+    const inv = (DB.invoices||[]).find(i => i.id === invId);
+    if (inv) {
+      // When editing, exclude this CN's own amount from the existing-credits calculation
+      const existingCredits = (DB.creditNotes||[])
+        .filter(cn => cn.invoiceId === invId && cn.id !== editingCnId && cn.status !== 'Voided' && cn.status !== 'Draft')
+        .reduce((s,cn) => s + (cn.total||0), 0);
+      const paid = (DB.payments||[]).filter(p => p.invoiceId === invId).reduce((s,p) => s + (p.amount||0), 0);
+      const available = (inv.total||0) - existingCredits - paid;
+      if (total > available + 0.01) {
+        warn.style.display = 'block';
+        warn.textContent = `⚠ Exceeds available balance of ${fmtCurr(Math.max(available,0), cur)}`;
+      } else {
+        warn.style.display = 'none';
+      }
+    }
+  } else if (warn) {
+    warn.style.display = 'none';
+  }
+  return total;
+}
+
+function openCreditNoteModal() {
+  resetCnModal();
+  populateCnInvoiceSelect();
+  document.getElementById('cn-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('cn-no').value = 'CN-' + new Date().getFullYear() + '-' + String(DB.nextIds.creditNotes).padStart(4,'0');
+  openModal('modal-creditnote');
+}
+
+function resetCnModal() {
+  editingCnId = null;
+  cnLines = [];
+  document.getElementById('cn-modal-heading').textContent = 'New Credit Note';
+  document.getElementById('cn-no').value = '';
+  document.getElementById('cn-invoice').value = '';
+  document.getElementById('cn-invoice-meta').textContent = '';
+  document.getElementById('cn-status').value = 'Draft';
+  document.getElementById('cn-reason').value = 'Return of goods';
+  document.getElementById('cn-notes').value = '';
+  renderCnLines();
+}
+
+function saveCreditNote() {
+  const invId = parseInt(document.getElementById('cn-invoice').value);
+  if (!invId) { showToast('Please select an invoice', 'error'); return; }
+  const inv = (DB.invoices||[]).find(i => i.id === invId);
+  if (!inv) { showToast('Invoice not found', 'error'); return; }
+  const validLines = cnLines.filter(l => (l.desc||'').trim() && parseFloat(l.qty) > 0);
+  if (validLines.length === 0) { showToast('Add at least one line with a description and quantity', 'error'); return; }
+  const total = validLines.reduce((s,l) => s + (parseFloat(l.qty)||0) * (parseFloat(l.unitPrice)||0), 0);
+  if (total <= 0) { showToast('Credit total must be greater than zero', 'error'); return; }
+
+  // Enforce "cannot exceed invoice balance" only when the CN will actually apply (Issued/Applied)
+  const status = document.getElementById('cn-status').value;
+  if (status === 'Issued' || status === 'Applied') {
+    const existingCredits = (DB.creditNotes||[])
+      .filter(cn => cn.invoiceId === invId && cn.id !== editingCnId && cn.status !== 'Voided' && cn.status !== 'Draft')
+      .reduce((s,cn) => s + (cn.total||0), 0);
+    const paid = (DB.payments||[]).filter(p => p.invoiceId === invId).reduce((s,p) => s + (p.amount||0), 0);
+    const available = (inv.total||0) - existingCredits - paid;
+    if (total > available + 0.01) {
+      if (!confirm(`This CN (${fmt(total)}) exceeds the invoice's available balance (${fmt(Math.max(available,0))}).\n\nSave anyway?`)) return;
+    }
+  }
+
+  const data = {
+    no: document.getElementById('cn-no').value || ('CN-' + DB.nextIds.creditNotes),
+    date: document.getElementById('cn-date').value,
+    invoiceId: invId,
+    invoiceNo: inv.no,
+    customer: inv.customer,
+    lines: validLines.map(l => ({ desc:l.desc, qty:parseFloat(l.qty)||0, unitPrice:parseFloat(l.unitPrice)||0, subtotal:(parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0) })),
+    total,
+    currency: inv.currency || 'MYR',
+    reason: document.getElementById('cn-reason').value,
+    status,
+    notes: document.getElementById('cn-notes').value,
+    createdOn: new Date().toISOString()
+  };
+
+  if (editingCnId) {
+    const idx = DB.creditNotes.findIndex(c => c.id === editingCnId);
+    DB.creditNotes[idx] = { ...DB.creditNotes[idx], ...data };
+    showToast('Credit note updated');
+    if (typeof sbPersist === 'function') sbPersist('creditNotes', DB.creditNotes[idx]);
+  } else {
+    const rec = { id: DB.nextIds.creditNotes++, ...data };
+    DB.creditNotes.unshift(rec);
+    showToast('Credit note created');
+    if (typeof sbPersist === 'function') sbPersist('creditNotes', rec);
+  }
+  closeModal('modal-creditnote');
+  renderCreditNotes();
+  if (document.getElementById('page-invoices') && document.getElementById('page-invoices').classList.contains('active')) {
+    renderInvoices();
+  }
+}
+
+function editCreditNote(id) {
+  const cn = (DB.creditNotes||[]).find(c => c.id === id);
+  if (!cn) return;
+  editingCnId = id;
+  document.getElementById('cn-modal-heading').textContent = 'Edit Credit Note';
+  document.getElementById('cn-no').value = cn.no || '';
+  document.getElementById('cn-date').value = cn.date || '';
+  populateCnInvoiceSelect(cn.invoiceId);
+  document.getElementById('cn-status').value = cn.status || 'Draft';
+  document.getElementById('cn-reason').value = cn.reason || 'Return of goods';
+  document.getElementById('cn-notes').value = cn.notes || '';
+  cnLines = (cn.lines || []).map(l => ({ id: Date.now() + Math.random(), desc:l.desc, qty:l.qty, unitPrice:l.unitPrice }));
+  renderCnLines();
+  onCnInvoiceChange(); // refresh meta text
+  openModal('modal-creditnote');
+}
+
+function deleteCreditNote(id) {
+  if (!confirm('Delete this credit note? This cannot be undone.')) return;
+  DB.creditNotes = (DB.creditNotes||[]).filter(c => c.id !== id);
+  showToast('Credit note deleted');
+  if (typeof sbDelete === 'function') sbDelete('creditNotes', id);
+  renderCreditNotes();
+}
+
+function printCreditNote(id) {
+  const cn = (DB.creditNotes||[]).find(c => c.id === id);
+  if (!cn) return;
+  const co = DB.company || {};
+  const inv = (DB.invoices||[]).find(i => i.id === cn.invoiceId) || {};
+  const currency = cn.currency || 'MYR';
+  const cs = currency === 'SGD' ? 'SGD' : 'RM';
+  const itemsHtml = (cn.lines||[]).map(l => `
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${l.desc||''}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${l.qty||0}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${cs} ${(l.unitPrice||0).toFixed(2)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${cs} ${(l.subtotal||((l.qty||0)*(l.unitPrice||0))).toFixed(2)}</td>
+    </tr>`).join('');
+
+  const win = window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head>
+    <title>Credit Note ${cn.no}</title>
+    <style>
+      * { margin:0; padding:0; box-sizing:border-box; }
+      body { font-family:'Segoe UI',sans-serif; font-size:13px; color:#111; padding:40px; max-width:750px; margin:0 auto; }
+      .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:32px; }
+      .company { font-size:22px; font-weight:700; color:#b91c1c; }
+      .cn-title { font-size:28px; font-weight:700; color:#b91c1c; text-align:right; letter-spacing:0.02em; }
+      .cn-no { font-size:14px; color:#6b7280; text-align:right; margin-top:4px; }
+      .bill-section { display:flex; justify-content:space-between; margin-bottom:28px; gap:20px; }
+      .bill-to h4 { font-size:11px; text-transform:uppercase; color:#9ca3af; letter-spacing:0.05em; margin-bottom:6px; }
+      .bill-to p { font-size:13px; line-height:1.6; }
+      .dates table { margin-left:auto; border-collapse:collapse; }
+      .dates td { padding:3px 8px; font-size:12px; }
+      .dates td:first-child { color:#6b7280; }
+      .dates td:last-child { font-weight:600; }
+      table.items { width:100%; border-collapse:collapse; margin-bottom:20px; }
+      table.items thead { background:#fef2f2; }
+      table.items th { padding:10px 12px; text-align:left; font-size:11px; text-transform:uppercase; color:#6b7280; letter-spacing:0.05em; border-bottom:2px solid #b91c1c; }
+      table.items th:not(:first-child) { text-align:right; }
+      .totals { display:flex; justify-content:flex-end; }
+      .totals table { border-collapse:collapse; min-width:260px; }
+      .totals td { padding:6px 12px; font-size:13px; }
+      .totals td:last-child { text-align:right; font-weight:500; }
+      .totals tr.grand-total td { font-size:16px; font-weight:700; color:#b91c1c; border-top:2px solid #b91c1c; padding-top:10px; }
+      .reason { margin-top:20px; padding:12px 16px; background:#fef2f2; border-left:3px solid #b91c1c; border-radius:4px; font-size:12px; }
+      .footer { margin-top:40px; text-align:center; font-size:11px; color:#9ca3af; border-top:1px solid #e5e7eb; padding-top:16px; }
+      @media print { body { padding:20px; } button { display:none; } }
+    </style>
+  </head><body>
+    <div class="header">
+      <div>
+        <div class="company">${co.name||'🍄 MycoBooks'}</div>
+        ${co.regno?`<div style="font-size:11px;color:#6b7280;">Reg: ${co.regno}</div>`:''}
+        ${co.phone?`<div style="font-size:11px;color:#6b7280;">${co.phone}</div>`:''}
+        ${co.address?`<div style="font-size:11px;color:#6b7280;max-width:260px;">${co.address}</div>`:''}
+      </div>
+      <div>
+        <div class="cn-title">CREDIT NOTE</div>
+        <div class="cn-no">${cn.no||''}</div>
+      </div>
+    </div>
+
+    <div class="bill-section">
+      <div class="bill-to" style="flex:1;">
+        <h4>Credit To</h4>
+        <p><strong>${cn.customer||''}</strong></p>
+        ${inv.address?`<p style="color:#6b7280;white-space:pre-line;">${inv.address}</p>`:''}
+      </div>
+      <div class="dates">
+        <table>
+          <tr><td>CN Date</td><td>${fmtDate(cn.date)}</td></tr>
+          <tr><td>Against Invoice</td><td>${cn.invoiceNo||'—'}</td></tr>
+          <tr><td>Status</td><td>${cn.status||'Draft'}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <table class="items">
+      <thead><tr>
+        <th>Description</th><th>Qty</th><th>Unit Price</th><th>Amount</th>
+      </tr></thead>
+      <tbody>${itemsHtml}</tbody>
+    </table>
+
+    <div class="totals">
+      <table>
+        <tr class="grand-total"><td>Total Credit</td><td>− ${cs} ${(cn.total||0).toFixed(2)}</td></tr>
+      </table>
+    </div>
+
+    <div class="reason"><strong>Reason:</strong> ${cn.reason||'—'}${cn.notes?`<br><strong style="margin-top:6px;display:inline-block;">Notes:</strong> ${cn.notes}`:''}</div>
+
+    <div class="footer">${co.footer||'This credit note reduces the balance owed on the referenced invoice.'}</div>
+
+    <div style="text-align:center;margin-top:24px;">
+      <button onclick="window.print()" style="padding:10px 28px;background:#b91c1c;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-family:sans-serif;">🖨 Print / Save as PDF</button>
+    </div>
+  </body></html>`);
+  win.document.close();
+}
 
 // Run on page load — fetch users from Supabase so login works across devices
 sbInit();
