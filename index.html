@@ -626,6 +626,7 @@ tr:hover td { background:var(--bg); }
                 <option>Paid</option><option>Pending</option><option>Partial</option><option>Overdue</option><option>Draft</option>
               </select>
               <span id="inv-total" style="margin-left:auto; font-size:13px; color:var(--text2);"></span>
+              <button class="btn btn-primary btn-sm" onclick="openReceivePaymentModal()">💰 Receive Payment</button>
             </div>
           </div>
         </div>
@@ -647,7 +648,8 @@ tr:hover td { background:var(--bg); }
                 <option value="2026">2026</option>
                 <option value="2025">2025</option>
               </select>
-              <button class="btn btn-outline btn-sm" onclick="printCustomerStatement()" style="margin-left:auto;">🖨 Print</button>
+              <button class="btn btn-primary btn-sm" onclick="openReceivePaymentModal()" style="margin-left:auto;">💰 Receive Payment</button>
+              <button class="btn btn-outline btn-sm" onclick="printCustomerStatement()">🖨 Print</button>
             </div>
           </div>
         </div>
@@ -2365,6 +2367,68 @@ tr:hover td { background:var(--bg); }
       <div class="form-actions">
         <button class="btn btn-outline" onclick="closeModal('modal-debitnote')">Cancel</button>
         <button class="btn btn-primary" onclick="saveDebitNote()">Save Debit Note</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Receive Payment Modal (Bulk Payment Allocation) -->
+<div class="modal-backdrop" id="modal-receive-payment">
+  <div class="modal" style="width:820px;">
+    <div class="modal-head">
+      <span class="modal-title">Receive Payment</span>
+      <button class="modal-close" onclick="closeModal('modal-receive-payment')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid form-grid-2" style="margin-bottom:14px;">
+        <div class="form-group" style="grid-column:1/-1"><label>Customer</label>
+          <select id="rp-customer" onchange="onRpCustomerChange()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
+            <option value="">— Select customer —</option>
+          </select>
+          <div id="rp-customer-meta" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
+        </div>
+        <div class="form-group"><label>Payment Date</label><input type="date" id="rp-date"></div>
+        <div class="form-group"><label>Deposit Into</label>
+          <select id="rp-account" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
+        </div>
+        <div class="form-group"><label>Amount Received</label>
+          <input type="number" id="rp-amount" placeholder="0.00" min="0" step="0.01" oninput="onRpAmountChange()">
+        </div>
+        <div class="form-group"><label>Reference <span style="font-weight:400;color:var(--text3);">optional</span></label><input type="text" id="rp-ref" placeholder="e.g. cheque no, bank ref"></div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <label style="font-size:12px;font-weight:500;color:var(--text2);">Allocation</label>
+        <div style="display:flex;gap:4px;padding:3px;background:var(--bg);border-radius:4px;">
+          <button type="button" id="rp-mode-auto" onclick="setRpMode('auto')" class="btn btn-sm" style="padding:4px 10px;background:var(--green);color:#fff;border:none;font-size:11px;">Auto (FIFO)</button>
+          <button type="button" id="rp-mode-manual" onclick="setRpMode('manual')" class="btn btn-sm" style="padding:4px 10px;background:transparent;color:var(--text2);border:none;font-size:11px;">Manual</button>
+        </div>
+        <span id="rp-unallocated" style="margin-left:auto;font-size:12px;font-family:'DM Mono',monospace;"></span>
+      </div>
+
+      <div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:12px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="background:var(--bg);">
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:center;width:36px;border-bottom:1px solid var(--border);"><input type="checkbox" id="rp-tick-all" onchange="toggleRpTickAll(this.checked)" style="cursor:pointer;"></th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:left;border-bottom:1px solid var(--border);">Invoice</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:left;width:100px;border-bottom:1px solid var(--border);">Date</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:110px;border-bottom:1px solid var(--border);">Total</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:110px;border-bottom:1px solid var(--border);">Balance</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:130px;border-bottom:1px solid var(--border);">Apply</th>
+            </tr>
+          </thead>
+          <tbody id="rp-invoices-body">
+            <tr><td colspan="6" style="padding:20px;text-align:center;font-size:12px;color:var(--text3);">Select a customer to see outstanding invoices</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="form-group" style="margin-bottom:10px;"><label>Notes</label><input type="text" id="rp-notes" placeholder="Internal notes about this payment..."></div>
+
+      <div class="form-actions">
+        <button class="btn btn-outline" onclick="closeModal('modal-receive-payment')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveReceivePayment()">Record Payment</button>
       </div>
     </div>
   </div>
@@ -13025,6 +13089,416 @@ function printDebitNote(id) {
 
     <div style="text-align:center;margin-top:24px;">
       <button onclick="window.print()" style="padding:10px 28px;background:${themeColor};color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-family:sans-serif;">🖨 Print / Save as PDF</button>
+    </div>
+  </body></html>`);
+  win.document.close();
+}
+
+// ============================================================
+// RECEIVE PAYMENT (BULK ALLOCATION)
+// ============================================================
+let rpMode = 'auto';          // 'auto' or 'manual'
+let rpInvoices = [];          // [{id, no, date, total, balance, apply, ticked}]
+let rpCurrency = 'MYR';
+
+function openReceivePaymentModal() {
+  // Reset state
+  rpMode = 'auto';
+  rpInvoices = [];
+  rpCurrency = 'MYR';
+  setRpMode('auto');
+
+  // Populate customer select with only customers that have outstanding invoices
+  const sel = document.getElementById('rp-customer');
+  const customersWithBalance = new Set();
+  (DB.invoices||[]).forEach(inv => {
+    if (inv.status === 'Paid') return;
+    const paid = (DB.payments||[]).filter(p => p.invoiceId === inv.id).reduce((s,p) => s + (p.amount||0), 0);
+    const credits = (typeof getTotalCreditsForInvoice === 'function') ? getTotalCreditsForInvoice(inv.id) : 0;
+    const bal = (inv.total||0) - paid - credits;
+    if (bal > 0.009) customersWithBalance.add(inv.customer);
+  });
+  const list = [...customersWithBalance].sort((a,b) => a.localeCompare(b));
+  sel.innerHTML = '<option value="">— Select customer —</option>' +
+    list.map(c => `<option value="${c.replace(/"/g,'&quot;')}">${c}</option>`).join('');
+
+  // Pre-fill common fields
+  document.getElementById('rp-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('rp-account').innerHTML = (DB.accounts||[]).map(a => `<option value="${a.name}">${a.name}</option>`).join('');
+  document.getElementById('rp-amount').value = '';
+  document.getElementById('rp-ref').value = '';
+  document.getElementById('rp-notes').value = '';
+  document.getElementById('rp-customer-meta').textContent = '';
+  document.getElementById('rp-invoices-body').innerHTML =
+    '<tr><td colspan="6" style="padding:20px;text-align:center;font-size:12px;color:var(--text3);">Select a customer to see outstanding invoices</td></tr>';
+  document.getElementById('rp-unallocated').textContent = '';
+  const tickAll = document.getElementById('rp-tick-all');
+  if (tickAll) tickAll.checked = false;
+
+  // If coming from Customer Statement tab with a customer already selected, preselect it
+  const stmtCust = (document.getElementById('stmt-customer-filter')||{}).value;
+  if (stmtCust && customersWithBalance.has(stmtCust)) {
+    sel.value = stmtCust;
+    onRpCustomerChange();
+  }
+
+  openModal('modal-receive-payment');
+}
+
+function setRpMode(mode) {
+  rpMode = mode;
+  const autoBtn = document.getElementById('rp-mode-auto');
+  const manBtn  = document.getElementById('rp-mode-manual');
+  if (autoBtn && manBtn) {
+    if (mode === 'auto') {
+      autoBtn.style.cssText = 'padding:4px 10px;background:var(--green);color:#fff;border:none;font-size:11px;';
+      manBtn.style.cssText  = 'padding:4px 10px;background:transparent;color:var(--text2);border:none;font-size:11px;';
+    } else {
+      autoBtn.style.cssText = 'padding:4px 10px;background:transparent;color:var(--text2);border:none;font-size:11px;';
+      manBtn.style.cssText  = 'padding:4px 10px;background:var(--green);color:#fff;border:none;font-size:11px;';
+    }
+  }
+  // Re-apply allocation with new mode
+  if (rpInvoices.length) applyRpAllocation();
+}
+
+function onRpCustomerChange() {
+  const cust = document.getElementById('rp-customer').value;
+  const meta = document.getElementById('rp-customer-meta');
+  if (!cust) {
+    rpInvoices = [];
+    renderRpInvoices();
+    meta.textContent = '';
+    return;
+  }
+
+  // Build list of outstanding invoices for this customer (oldest first for FIFO)
+  const custRecord = (DB.customers||[]).find(c => c.name === cust);
+  rpCurrency = (custRecord && custRecord.currency) || 'MYR';
+
+  rpInvoices = (DB.invoices||[])
+    .filter(inv => inv.customer === cust && inv.status !== 'Paid')
+    .map(inv => {
+      const paid    = (DB.payments||[]).filter(p => p.invoiceId === inv.id).reduce((s,p) => s + (p.amount||0), 0);
+      const credits = (typeof getTotalCreditsForInvoice === 'function') ? getTotalCreditsForInvoice(inv.id) : 0;
+      const balance = Math.max((inv.total||0) - paid - credits, 0);
+      return {
+        id: inv.id,
+        no: inv.no,
+        date: inv.date,
+        total: inv.total || 0,
+        balance,
+        currency: inv.currency || 'MYR',
+        apply: 0,
+        ticked: true
+      };
+    })
+    .filter(row => row.balance > 0.009)
+    .sort((a,b) => (a.date||'').localeCompare(b.date||''));
+
+  const totalOutstanding = rpInvoices.reduce((s,r) => s + r.balance, 0);
+  meta.innerHTML = `${rpInvoices.length} outstanding invoice${rpInvoices.length===1?'':'s'} · Total balance: <b>${fmtCurr(totalOutstanding, rpCurrency)}</b>`;
+
+  renderRpInvoices();
+  applyRpAllocation();
+}
+
+function onRpAmountChange() {
+  applyRpAllocation();
+}
+
+function toggleRpTickAll(checked) {
+  rpInvoices.forEach(r => r.ticked = checked);
+  renderRpInvoices();
+  applyRpAllocation();
+}
+
+function toggleRpTick(id, checked) {
+  const row = rpInvoices.find(r => r.id === id);
+  if (!row) return;
+  row.ticked = checked;
+  if (!checked) row.apply = 0;
+  applyRpAllocation();
+}
+
+function setRpApply(id, val) {
+  const row = rpInvoices.find(r => r.id === id);
+  if (!row) return;
+  const amount = Math.max(0, Math.min(parseFloat(val)||0, row.balance));
+  row.apply = amount;
+  row.ticked = amount > 0;
+  // In manual mode, just update the unallocated display (don't re-allocate)
+  updateRpUnallocatedDisplay();
+  // Also refresh the row so the "remaining" text updates
+  renderRpInvoiceRow(row);
+}
+
+// Auto-allocate FIFO across ticked invoices up to the amount available
+function applyRpAllocation() {
+  const amtEl = document.getElementById('rp-amount');
+  const totalReceived = parseFloat(amtEl && amtEl.value) || 0;
+
+  if (rpMode === 'auto') {
+    let remaining = totalReceived;
+    rpInvoices.forEach(row => {
+      if (!row.ticked) { row.apply = 0; return; }
+      const take = Math.min(remaining, row.balance);
+      row.apply = take;
+      remaining -= take;
+    });
+  }
+  // In manual mode: don't overwrite user-entered values. Just leave row.apply alone.
+  renderRpInvoices();
+  updateRpUnallocatedDisplay();
+}
+
+function updateRpUnallocatedDisplay() {
+  const el = document.getElementById('rp-unallocated');
+  if (!el) return;
+  const totalReceived   = parseFloat((document.getElementById('rp-amount')||{}).value) || 0;
+  const totalAllocated  = rpInvoices.reduce((s,r) => s + (r.apply||0), 0);
+  const unallocated     = totalReceived - totalAllocated;
+  if (totalReceived <= 0) { el.textContent = ''; return; }
+  if (Math.abs(unallocated) < 0.01) {
+    el.innerHTML = `<span style="color:var(--green);">✓ Fully allocated</span>`;
+  } else if (unallocated > 0) {
+    el.innerHTML = `<span style="color:var(--amber);">${fmtCurr(unallocated, rpCurrency)} unallocated</span>`;
+  } else {
+    el.innerHTML = `<span style="color:var(--red);">Over-allocated by ${fmtCurr(-unallocated, rpCurrency)}</span>`;
+  }
+}
+
+function renderRpInvoices() {
+  const tb = document.getElementById('rp-invoices-body');
+  if (!tb) return;
+  if (rpInvoices.length === 0) {
+    tb.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;font-size:12px;color:var(--text3);">No outstanding invoices for this customer</td></tr>';
+    return;
+  }
+  tb.innerHTML = rpInvoices.map(r => buildRpRowHtml(r)).join('');
+}
+
+function renderRpInvoiceRow(row) {
+  const tr = document.getElementById('rp-row-' + row.id);
+  if (!tr) return;
+  tr.outerHTML = buildRpRowHtml(row);
+}
+
+function buildRpRowHtml(r) {
+  const afterBal = Math.max(r.balance - (r.apply||0), 0);
+  const isManual = (rpMode === 'manual');
+  const applyCell = isManual
+    ? `<input type="number" value="${(r.apply||0).toFixed(2)}" min="0" max="${r.balance}" step="0.01" oninput="setRpApply(${r.id}, this.value)" style="width:100%;padding:4px 7px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;">`
+    : `<span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--green);font-weight:500;">${(r.apply||0) > 0 ? fmtCurr(r.apply, r.currency) : '—'}</span>`;
+  return `<tr id="rp-row-${r.id}">
+    <td style="padding:6px 10px;text-align:center;"><input type="checkbox" ${r.ticked?'checked':''} onchange="toggleRpTick(${r.id}, this.checked)" style="cursor:pointer;"></td>
+    <td style="padding:6px 10px;font-family:'DM Mono',monospace;font-size:12px;font-weight:500;">${r.no}</td>
+    <td style="padding:6px 10px;font-size:12px;color:var(--text2);white-space:nowrap;">${fmtDate(r.date)}</td>
+    <td style="padding:6px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--text2);">${fmtCurr(r.total, r.currency)}</td>
+    <td style="padding:6px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;font-weight:500;">${fmtCurr(r.balance, r.currency)}</td>
+    <td style="padding:6px 10px;text-align:right;">${applyCell}${(r.apply||0) > 0 && afterBal > 0.009 ? `<div style="font-size:10px;color:var(--text3);margin-top:2px;">Leaves ${fmtCurr(afterBal, r.currency)}</div>` : ''}</td>
+  </tr>`;
+}
+
+function saveReceivePayment() {
+  const customer = document.getElementById('rp-customer').value;
+  const date     = document.getElementById('rp-date').value;
+  const account  = document.getElementById('rp-account').value;
+  const totalAmt = parseFloat(document.getElementById('rp-amount').value) || 0;
+  const ref      = document.getElementById('rp-ref').value.trim();
+  const notes    = document.getElementById('rp-notes').value.trim();
+
+  if (!customer)       { showToast('Select a customer', 'error'); return; }
+  if (!date)           { showToast('Enter a payment date', 'error'); return; }
+  if (!account)        { showToast('Select a deposit account', 'error'); return; }
+  if (totalAmt <= 0)   { showToast('Enter the amount received', 'error'); return; }
+
+  const applied = rpInvoices.filter(r => r.ticked && (r.apply||0) > 0.009);
+  if (applied.length === 0) { showToast('No invoice has an amount applied', 'error'); return; }
+
+  const totalAllocated = applied.reduce((s,r) => s + r.apply, 0);
+
+  // Guard against over-allocation
+  if (totalAllocated > totalAmt + 0.01) {
+    showToast('Allocated more than received — reduce amounts or increase the total', 'error');
+    return;
+  }
+  // Unallocated warning (not blocking)
+  if (totalAmt - totalAllocated > 0.01) {
+    if (!confirm(`${fmtCurr(totalAmt - totalAllocated, rpCurrency)} of this payment is unallocated. It won't be linked to any invoice and won't reduce any balance.\n\nContinue anyway?`)) return;
+  }
+  // Per-invoice over-payment guard (paranoia — setRpApply already clamps)
+  for (const r of applied) {
+    if (r.apply > r.balance + 0.01) {
+      showToast(`Invoice ${r.no}: applied amount exceeds its balance`, 'error');
+      return;
+    }
+  }
+
+  // Create one payment record per allocated invoice, all sharing the same reference
+  if (!DB.payments) DB.payments = [];
+  const bulkRef = ref || ('BULK-' + Date.now());
+  const createdPayments = [];
+  const updatedInvoices = [];
+
+  applied.forEach(r => {
+    const inv = DB.invoices.find(i => i.id === r.id);
+    if (!inv) return;
+    const payment = {
+      id: DB.nextIds.payments++,
+      invoiceId: r.id,
+      invoiceNo: r.no,
+      customer,
+      date,
+      amount: r.apply,
+      currency: inv.currency || 'MYR',
+      account,
+      reference: bulkRef,
+      notes: notes ? `[Bulk payment] ${notes}` : '[Bulk payment]',
+      type: 'payment'
+    };
+    DB.payments.unshift(payment);
+    createdPayments.push(payment);
+
+    // Update invoice status
+    const totalPaidNow = DB.payments.filter(p => p.invoiceId === r.id).reduce((s,p) => s + (p.amount||0), 0);
+    const credits      = (typeof getTotalCreditsForInvoice === 'function') ? getTotalCreditsForInvoice(r.id) : 0;
+    if (totalPaidNow + credits >= (inv.total||0) - 0.009) {
+      inv.status = 'Paid';
+      inv.account = account;
+      inv.paidDate = date;
+    } else {
+      inv.status = 'Partial';
+    }
+    updatedInvoices.push(inv);
+
+    // Persist this payment and the invoice update to Supabase
+    if (typeof sbPersist === 'function') {
+      sbPersist('payments', payment);
+      sbPersist('invoices', inv);
+    }
+  });
+
+  closeModal('modal-receive-payment');
+  showToast(`${fmtCurr(totalAllocated, rpCurrency)} applied across ${applied.length} invoice${applied.length===1?'':'s'}`);
+
+  // Offer combined receipt
+  if (confirm(`Print combined payment receipt for ${applied.length} invoice${applied.length===1?'':'s'}?`)) {
+    printBulkReceipt({
+      customer, date, account, amount: totalAmt, allocated: totalAllocated, reference: bulkRef, notes,
+      currency: rpCurrency, payments: createdPayments, invoices: updatedInvoices, rows: applied
+    });
+  }
+
+  // Refresh views
+  renderInvoices();
+  if (document.getElementById('inv-panel-2') && document.getElementById('inv-panel-2').style.display !== 'none') {
+    if (typeof renderCustomerStatement === 'function') renderCustomerStatement();
+  }
+  if (document.getElementById('inv-panel-3') && document.getElementById('inv-panel-3').style.display !== 'none') {
+    if (typeof renderPaymentHistory === 'function') renderPaymentHistory();
+  }
+}
+
+function printBulkReceipt(data) {
+  const co = DB.company || {};
+  const cs = data.currency === 'SGD' ? 'SGD' : 'RM';
+  const unallocated = Math.max(data.amount - data.allocated, 0);
+  const rowsHtml = data.rows.map(r => {
+    const inv = data.invoices.find(i => i.id === r.id) || {};
+    const remaining = Math.max(r.balance - r.apply, 0);
+    return `<tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-family:monospace;">${r.no}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${fmtDate(r.date)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${cs} ${r.total.toFixed(2)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#059669;font-weight:500;">${cs} ${r.apply.toFixed(2)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:${remaining>0.009?'#b91c1c':'#059669'};">${cs} ${remaining.toFixed(2)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;"><span style="font-size:10px;padding:2px 8px;border-radius:10px;background:${inv.status==='Paid'?'#dcfce7':'#fef9c3'};color:${inv.status==='Paid'?'#166534':'#854d0e'};">${inv.status||''}</span></td>
+    </tr>`;
+  }).join('');
+
+  const win = window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head>
+    <title>Payment Receipt</title>
+    <style>
+      * { margin:0; padding:0; box-sizing:border-box; }
+      body { font-family:'Segoe UI',sans-serif; font-size:13px; color:#111; padding:40px; max-width:780px; margin:0 auto; }
+      .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:28px; }
+      .company { font-size:22px; font-weight:700; color:#166534; }
+      .rc-title { font-size:26px; font-weight:700; color:#166534; text-align:right; letter-spacing:0.02em; }
+      .rc-tag { display:inline-block; background:#dcfce7; color:#166534; padding:3px 10px; border-radius:12px; font-size:10px; font-weight:600; margin-top:6px; text-transform:uppercase; letter-spacing:0.04em; }
+      .bill-section { display:flex; justify-content:space-between; margin-bottom:24px; gap:20px; }
+      .bill-to h4 { font-size:11px; text-transform:uppercase; color:#9ca3af; letter-spacing:0.05em; margin-bottom:6px; }
+      .bill-to p { font-size:13px; line-height:1.6; }
+      .dates table { margin-left:auto; border-collapse:collapse; }
+      .dates td { padding:3px 8px; font-size:12px; }
+      .dates td:first-child { color:#6b7280; }
+      .dates td:last-child { font-weight:600; }
+      table.items { width:100%; border-collapse:collapse; margin-bottom:14px; }
+      table.items thead { background:#f0fdf4; }
+      table.items th { padding:9px 12px; text-align:left; font-size:10px; text-transform:uppercase; color:#6b7280; letter-spacing:0.05em; border-bottom:2px solid #166534; }
+      table.items th:nth-child(3), table.items th:nth-child(4), table.items th:nth-child(5) { text-align:right; }
+      .summary { display:flex; justify-content:flex-end; margin-top:8px; }
+      .summary table { border-collapse:collapse; min-width:300px; }
+      .summary td { padding:6px 12px; font-size:13px; }
+      .summary td:last-child { text-align:right; font-weight:500; font-family:'DM Mono',monospace; }
+      .summary tr.grand td { font-size:16px; font-weight:700; color:#166534; border-top:2px solid #166534; padding-top:10px; }
+      .warn { margin-top:14px; padding:10px 14px; background:#fef3c7; border-left:3px solid #f59e0b; border-radius:4px; font-size:12px; color:#92400e; }
+      .footer { margin-top:40px; text-align:center; font-size:11px; color:#9ca3af; border-top:1px solid #e5e7eb; padding-top:16px; }
+      @media print { body { padding:20px; } button { display:none; } }
+    </style>
+  </head><body>
+    <div class="header">
+      <div>
+        <div class="company">${co.name||'🍄 MycoBooks'}</div>
+        ${co.regno?`<div style="font-size:11px;color:#6b7280;">Reg: ${co.regno}</div>`:''}
+        ${co.phone?`<div style="font-size:11px;color:#6b7280;">${co.phone}</div>`:''}
+      </div>
+      <div style="text-align:right;">
+        <div class="rc-title">PAYMENT RECEIPT</div>
+        <div style="font-size:13px;color:#6b7280;margin-top:4px;">Ref: ${data.reference}</div>
+        <div><span class="rc-tag">Bulk Payment — ${data.rows.length} invoice${data.rows.length===1?'':'s'}</span></div>
+      </div>
+    </div>
+
+    <div class="bill-section">
+      <div class="bill-to" style="flex:1;">
+        <h4>Received From</h4>
+        <p><strong>${data.customer}</strong></p>
+      </div>
+      <div class="dates">
+        <table>
+          <tr><td>Payment Date</td><td>${fmtDate(data.date)}</td></tr>
+          <tr><td>Deposited To</td><td>${data.account}</td></tr>
+          <tr><td>Reference</td><td>${data.reference}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <h4 style="font-size:11px;text-transform:uppercase;color:#9ca3af;letter-spacing:0.05em;margin-bottom:8px;">Allocation</h4>
+    <table class="items">
+      <thead><tr>
+        <th>Invoice No.</th><th>Date</th><th>Invoice Total</th><th>Applied</th><th>Remaining</th><th>Status</th>
+      </tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+
+    <div class="summary">
+      <table>
+        <tr><td style="color:#6b7280;">Amount Received</td><td>${cs} ${data.amount.toFixed(2)}</td></tr>
+        <tr><td style="color:#6b7280;">Total Allocated</td><td style="color:#059669;">${cs} ${data.allocated.toFixed(2)}</td></tr>
+        ${unallocated > 0.009 ? `<tr><td style="color:#b45309;">Unallocated</td><td style="color:#b45309;">${cs} ${unallocated.toFixed(2)}</td></tr>` : ''}
+        <tr class="grand"><td>Total Settled</td><td>${cs} ${data.allocated.toFixed(2)}</td></tr>
+      </table>
+    </div>
+
+    ${unallocated > 0.009 ? `<div class="warn"><strong>Note:</strong> ${cs} ${unallocated.toFixed(2)} of this payment is unallocated and not linked to any invoice.</div>` : ''}
+    ${data.notes ? `<div style="margin-top:16px;padding:12px 14px;background:#f9fafb;border-radius:6px;font-size:12px;color:#6b7280;"><strong>Notes:</strong> ${data.notes}</div>` : ''}
+
+    <div class="footer">Thank you for your payment. — ${co.name||'MycoBooks'}</div>
+
+    <div style="text-align:center;margin-top:24px;">
+      <button onclick="window.print()" style="padding:10px 28px;background:#166534;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-family:sans-serif;">🖨 Print / Save as PDF</button>
     </div>
   </body></html>`);
   win.document.close();
