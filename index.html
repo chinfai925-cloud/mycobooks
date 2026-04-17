@@ -762,15 +762,43 @@ tr:hover td { background:var(--bg); }
       </div>
     </div>
 
-    <!-- DEBIT NOTES (placeholder — built in Part 3) -->
+    <!-- DEBIT NOTES -->
     <div class="page" id="page-debitnotes">
       <div class="page-header">
         <div>
           <div class="page-title">Debit Notes</div>
-          <div class="page-subtitle">Charge a customer or bill back a supplier</div>
+          <div class="page-subtitle">Charge a customer extra, or bill back a supplier for returns/damages</div>
+        </div>
+        <button class="btn btn-primary" onclick="openDebitNoteModal()">+ New Debit Note</button>
+      </div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-body" style="padding:12px 16px;">
+          <div class="flex-row">
+            <input class="search-bar" placeholder="Search by DN number, party, or invoice..." id="dn-search" oninput="renderDebitNotes()">
+            <select class="select-filter" id="dn-kind-filter" onchange="renderDebitNotes()">
+              <option value="">All kinds</option>
+              <option value="sales">Sales DN (to customer)</option>
+              <option value="purchase">Purchase DN (to supplier)</option>
+            </select>
+            <select class="select-filter" id="dn-month-filter" onchange="renderDebitNotes()">
+              <option value="">All months</option>
+              <option value="2026-04">Apr 2026</option>
+              <option value="2026-03">Mar 2026</option>
+              <option value="2026-02">Feb 2026</option>
+              <option value="2026-01">Jan 2026</option>
+              <option value="2025-12">Dec 2025</option>
+            </select>
+            <select class="select-filter" id="dn-status-filter" onchange="renderDebitNotes()">
+              <option value="">All statuses</option>
+              <option>Draft</option><option>Issued</option><option>Settled</option><option>Voided</option>
+            </select>
+            <span id="dn-total-summary" style="margin-left:auto;font-size:13px;color:var(--text2);"></span>
+          </div>
         </div>
       </div>
-      <div class="card"><div class="card-body"><div class="empty-state"><div class="icon">🚧</div><p>Debit Notes coming in next update.</p></div></div></div>
+      <div class="card">
+        <div id="dn-list" class="table-wrap"></div>
+      </div>
     </div>
 
     <!-- CUSTOMERS -->
@@ -2260,6 +2288,88 @@ tr:hover td { background:var(--bg); }
   </div>
 </div>
 
+<!-- Debit Note Modal -->
+<div class="modal-backdrop" id="modal-debitnote">
+  <div class="modal" style="width:780px;">
+    <div class="modal-head">
+      <span class="modal-title" id="dn-modal-heading">New Debit Note</span>
+      <button class="modal-close" onclick="closeModal('modal-debitnote')">×</button>
+    </div>
+    <div class="modal-body">
+      <!-- Kind toggle -->
+      <div style="display:flex;gap:8px;margin-bottom:14px;padding:4px;background:var(--bg);border-radius:var(--radius-sm);">
+        <button type="button" id="dn-kind-sales" onclick="setDnKind('sales')" class="btn btn-sm" style="flex:1;background:var(--green);color:#fff;border:none;">📤 Sales DN (charge customer)</button>
+        <button type="button" id="dn-kind-purchase" onclick="setDnKind('purchase')" class="btn btn-sm" style="flex:1;background:transparent;color:var(--text2);border:none;">📥 Purchase DN (bill supplier)</button>
+      </div>
+
+      <div class="form-grid form-grid-2" style="margin-bottom:14px;">
+        <div class="form-group"><label>DN Number</label><input type="text" id="dn-no" placeholder="auto"></div>
+        <div class="form-group"><label>Date</label><input type="date" id="dn-date"></div>
+
+        <!-- Sales DN fields -->
+        <div class="form-group" id="dn-customer-row" style="grid-column:1/-1"><label>Customer</label>
+          <select id="dn-customer" onchange="onDnCustomerChange()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
+        </div>
+        <div class="form-group" id="dn-invoice-row" style="grid-column:1/-1;display:none;"><label>Linked Invoice <span style="font-weight:400;color:var(--text3);">optional</span></label>
+          <select id="dn-invoice" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
+        </div>
+
+        <!-- Purchase DN fields -->
+        <div class="form-group" id="dn-supplier-row" style="grid-column:1/-1;display:none;"><label>Supplier</label>
+          <select id="dn-supplier" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
+        </div>
+        <div class="form-group" id="dn-supp-ref-row" style="grid-column:1/-1;display:none;"><label>Their Invoice / PO Reference <span style="font-weight:400;color:var(--text3);">optional</span></label>
+          <input type="text" id="dn-supp-ref" placeholder="e.g. SUPP-INV-2024-0123">
+        </div>
+
+        <div class="form-group"><label>Status</label>
+          <select id="dn-status">
+            <option>Draft</option><option>Issued</option><option>Settled</option><option>Voided</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Reason</label>
+          <select id="dn-reason">
+            <option>Undercharge</option><option>Additional charges</option><option>Late fee / interest</option><option>Returned goods (to supplier)</option><option>Damaged goods (to supplier)</option><option>Price adjustment</option><option>Other</option>
+          </select>
+        </div>
+      </div>
+
+      <label style="font-size:12px;font-weight:500;color:var(--text2);display:block;margin-bottom:8px;">Debit Lines</label>
+      <div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:10px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="background:var(--bg);">
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:left;border-bottom:1px solid var(--border);">Description</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:80px;border-bottom:1px solid var(--border);">Qty</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:110px;border-bottom:1px solid var(--border);">Unit Price</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:110px;border-bottom:1px solid var(--border);">Subtotal</th>
+              <th style="width:28px;border-bottom:1px solid var(--border);"></th>
+            </tr>
+          </thead>
+          <tbody id="dn-lines-body"></tbody>
+        </table>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="addDnLine()" style="margin-bottom:14px;">+ Add Line</button>
+
+      <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+        <div style="width:240px;">
+          <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:14px;font-weight:600;border-top:2px solid var(--border);">
+            <span>Debit Total</span>
+            <span class="mono" id="dn-grand-total" style="color:var(--green);">+RM 0.00</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:10px;"><label>Notes</label><input type="text" id="dn-notes" placeholder="Internal notes..."></div>
+
+      <div class="form-actions">
+        <button class="btn btn-outline" onclick="closeModal('modal-debitnote')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveDebitNote()">Save Debit Note</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Wage Advance Modal -->
 <div class="modal-backdrop" id="modal-wage-advance">
   <div class="modal" style="width:420px;">
@@ -3438,7 +3548,7 @@ function navigate(page, el) {
   if (el) el.classList.add('active');
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
-  const renders = { dashboard:renderDashboard, expenses:renderExpenses, invoices:renderInvoices, orders:renderOrders, customers:renderCustomers, suppliers:renderSuppliers, products:renderProducts, inventory:renderInventory, production:renderProduction, harvest:renderHarvest, fleet:renderFleet, payroll:renderPayroll, reports:renderReport, statement:renderStatement, cashflow:renderCashflow, loans:renderLoans, claims:renderClaims, settings:renderSettings, users:renderUsers, creditnotes:renderCreditNotes, debitnotes:()=>{} };
+  const renders = { dashboard:renderDashboard, expenses:renderExpenses, invoices:renderInvoices, orders:renderOrders, customers:renderCustomers, suppliers:renderSuppliers, products:renderProducts, inventory:renderInventory, production:renderProduction, harvest:renderHarvest, fleet:renderFleet, payroll:renderPayroll, reports:renderReport, statement:renderStatement, cashflow:renderCashflow, loans:renderLoans, claims:renderClaims, settings:renderSettings, users:renderUsers, creditnotes:renderCreditNotes, debitnotes:renderDebitNotes };
   // Access guards
   if (page === 'payroll'   && !can('seePayroll'))  { showToast('Access denied — Payroll is Admin only', 'error'); return; }
   if (page === 'reports'   && !can('seeReports'))  { showToast('Access denied — Reports is Admin & Manager only', 'error'); return; }
@@ -3535,10 +3645,21 @@ function renderDashboard() {
   const totalSal = paymentRev + legacyRev;
   const profit = totalSal - totalExp;
   const pending = DB.invoices.filter(i => i.status === 'Pending' || i.status === 'Overdue');
-  const pendingAmt = pending.reduce((s,i) => s + i.total, 0);
+  // Net pending = invoice totals − applied credit notes (excludes Draft/Voided) + outstanding Sales DNs
+  const pendingInvAmt = pending.reduce((s,i) => {
+    const credits = (typeof getTotalCreditsForInvoice === 'function') ? getTotalCreditsForInvoice(i.id) : 0;
+    return s + Math.max((i.total||0) - credits, 0);
+  }, 0);
+  const openSalesDn = (DB.debitNotes||[])
+    .filter(d => d.kind === 'sales' && (d.status === 'Issued' || d.status === 'Draft'))
+    .reduce((s,d) => s + (d.total||0), 0);
+  const pendingAmt = pendingInvAmt + openSalesDn;
 
   const unpaidBills = DB.expenses.filter(e => (e.status||'paid') === 'unpaid');
-  const unpaidAmt   = unpaidBills.reduce((s,e) => s+e.amount, 0);
+  const openPurchaseDn = (DB.debitNotes||[])
+    .filter(d => d.kind === 'purchase' && (d.status === 'Issued' || d.status === 'Draft'))
+    .reduce((s,d) => s + (d.total||0), 0);
+  const unpaidAmt   = unpaidBills.reduce((s,e) => s+e.amount, 0) + openPurchaseDn;
 
   document.getElementById('dash-metrics').innerHTML = `
     <div class="metric-card"><div class="metric-label">Revenue</div><div class="metric-value">${amountDisplay(totalSal)}</div><div class="metric-change up">↑ Sales this period</div></div>
@@ -7886,12 +8007,27 @@ function renderCustomerStatement() {
     p.customer === customer && (!year || (p.date||'').startsWith(year))
   ).sort((a,b) => a.date.localeCompare(b.date));
 
+  // Credit notes against this customer (non-Draft, non-Voided)
+  const cns = (DB.creditNotes||[]).filter(cn =>
+    cn.customer === customer && (!year || (cn.date||'').startsWith(year)) &&
+    cn.status !== 'Draft' && cn.status !== 'Voided'
+  ).sort((a,b) => a.date.localeCompare(b.date));
+
+  // Sales debit notes against this customer (non-Draft, non-Voided)
+  const dns = (DB.debitNotes||[]).filter(dn =>
+    dn.kind === 'sales' && dn.partyName === customer &&
+    (!year || (dn.date||'').startsWith(year)) &&
+    dn.status !== 'Draft' && dn.status !== 'Voided'
+  ).sort((a,b) => a.date.localeCompare(b.date));
+
   const cust     = DB.customers.find(c=>c.name===customer);
   const currency = (cust&&cust.currency) || 'MYR';
   const cs       = currency === 'SGD' ? 'SGD' : 'RM';
   const totalInv = invs.reduce((s,i)=>s+(i.total||0),0);
   const totalPay = pays.reduce((s,p)=>s+(p.amount||0),0);
-  const balance  = totalInv - totalPay;
+  const totalCn  = cns.reduce((s,c)=>s+(c.total||0),0);
+  const totalDn  = dns.reduce((s,d)=>s+(d.total||0),0);
+  const balance  = totalInv + totalDn - totalPay - totalCn;
 
   el.innerHTML = `
     <div class="card" id="stmt-printable">
@@ -7905,42 +8041,53 @@ function renderCustomerStatement() {
           <div style="font-size:20px;font-weight:700;color:${balance>0?'var(--red)':'var(--green)'};">${cs} ${balance.toFixed(2)}</div>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px 16px;background:var(--bg);">
-        <div><div style="font-size:10px;text-transform:uppercase;color:var(--text2);">Total Invoiced</div><div style="font-size:16px;font-weight:600;">${cs} ${totalInv.toFixed(2)}</div></div>
-        <div><div style="font-size:10px;text-transform:uppercase;color:var(--text2);">Total Paid</div><div style="font-size:16px;font-weight:600;color:var(--green);">${cs} ${totalPay.toFixed(2)}</div></div>
-        <div><div style="font-size:10px;text-transform:uppercase;color:var(--text2);">Balance Due</div><div style="font-size:16px;font-weight:600;color:${balance>0?'var(--red)':'var(--green)'};">${cs} ${balance.toFixed(2)}</div></div>
+      <div style="display:grid;grid-template-columns:repeat(${(totalCn||totalDn)?5:3},1fr);gap:10px;padding:12px 16px;background:var(--bg);">
+        <div><div style="font-size:10px;text-transform:uppercase;color:var(--text2);">Invoiced</div><div style="font-size:15px;font-weight:600;">${cs} ${totalInv.toFixed(2)}</div></div>
+        ${totalDn?`<div><div style="font-size:10px;text-transform:uppercase;color:var(--text2);">+ Debit Notes</div><div style="font-size:15px;font-weight:600;color:var(--blue);">${cs} ${totalDn.toFixed(2)}</div></div>`:''}
+        <div><div style="font-size:10px;text-transform:uppercase;color:var(--text2);">Paid</div><div style="font-size:15px;font-weight:600;color:var(--green);">${cs} ${totalPay.toFixed(2)}</div></div>
+        ${totalCn?`<div><div style="font-size:10px;text-transform:uppercase;color:var(--text2);">− Credit Notes</div><div style="font-size:15px;font-weight:600;color:var(--red);">${cs} ${totalCn.toFixed(2)}</div></div>`:''}
+        <div><div style="font-size:10px;text-transform:uppercase;color:var(--text2);">Balance Due</div><div style="font-size:15px;font-weight:600;color:${balance>0?'var(--red)':'var(--green)'};">${cs} ${balance.toFixed(2)}</div></div>
       </div>
       <div class="table-wrap"><table style="width:100%;border-collapse:collapse;">
         <thead><tr style="background:var(--bg);">
           <th style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);">Date</th>
           <th style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);">Description</th>
-          <th style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);text-align:right;">Invoice</th>
-          <th style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);text-align:right;">Payment</th>
+          <th style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);text-align:right;">Charge</th>
+          <th style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);text-align:right;">Credit</th>
           <th style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);text-align:right;">Balance</th>
         </tr></thead>
         <tbody>
-          ${buildStmtRows(invs, pays, cs)}
+          ${buildStmtRows(invs, pays, cs, cns, dns)}
         </tbody>
       </table></div>
     </div>`;
 }
 
-function buildStmtRows(invs, pays, cs) {
+function buildStmtRows(invs, pays, cs, cns, dns) {
+  cns = cns || [];
+  dns = dns || [];
   // Merge and sort all transactions by date
   const rows = [
-    ...invs.map(i => ({ date: i.date, desc: i.no, type: 'inv', amount: i.total||0 })),
-    ...pays.map(p => ({ date: p.date, desc: `Payment${p.reference?' — '+p.reference:''}`, type: 'pay', amount: p.amount||0 }))
-  ].sort((a,b) => a.date.localeCompare(b.date));
+    ...invs.map(i => ({ date: i.date, desc: 'Invoice ' + i.no, type: 'inv', amount: i.total||0 })),
+    ...pays.map(p => ({ date: p.date, desc: `Payment${p.reference?' — '+p.reference:''}`, type: 'pay', amount: p.amount||0 })),
+    ...cns.map(c => ({ date: c.date, desc: `Credit Note ${c.no}${c.invoiceNo?' (vs '+c.invoiceNo+')':''}`, type: 'cn', amount: c.total||0 })),
+    ...dns.map(d => ({ date: d.date, desc: `Debit Note ${d.no}${d.invoiceNo?' (vs '+d.invoiceNo+')':''}`, type: 'dn', amount: d.total||0 }))
+  ].sort((a,b) => (a.date||'').localeCompare(b.date||''));
 
   let running = 0;
   return rows.map(r => {
-    if (r.type === 'inv') running += r.amount;
+    // inv and dn increase what's owed; pay and cn reduce it
+    if (r.type === 'inv' || r.type === 'dn') running += r.amount;
     else running -= r.amount;
+    const isCharge = (r.type === 'inv' || r.type === 'dn');
+    const chargeCol = isCharge ? cs + ' ' + r.amount.toFixed(2) : '—';
+    const creditCol = !isCharge ? cs + ' ' + r.amount.toFixed(2) : '—';
+    const descColor = (r.type === 'dn') ? 'color:var(--blue);' : (r.type === 'cn' ? 'color:var(--red);' : '');
     return `<tr style="border-bottom:1px solid var(--border);">
       <td style="padding:8px 12px;font-size:12px;color:var(--text2);white-space:nowrap;">${fmtDate(r.date)}</td>
-      <td style="padding:8px 12px;font-size:12px;">${r.desc}</td>
-      <td style="padding:8px 12px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--red);">${r.type==='inv'?cs+' '+r.amount.toFixed(2):'—'}</td>
-      <td style="padding:8px 12px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--green);">${r.type==='pay'?cs+' '+r.amount.toFixed(2):'—'}</td>
+      <td style="padding:8px 12px;font-size:12px;${descColor}">${r.desc}</td>
+      <td style="padding:8px 12px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--red);">${chargeCol}</td>
+      <td style="padding:8px 12px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--green);">${creditCol}</td>
       <td style="padding:8px 12px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;font-weight:600;color:${running>0?'var(--red)':'var(--green)'};">${cs} ${running.toFixed(2)}</td>
     </tr>`;
   }).join('');
@@ -9440,10 +9587,25 @@ function renderReport() {
   const sals = filterByMonth((DB.payments||[]), 'date', month);
   const legacyInvs = filterByMonth(DB.invoices.filter(i=>(i.status==='Paid'||i.status==='Partial') && !(DB.payments||[]).some(p=>p.invoiceId===i.id)), 'date', month);
 
-  const totalSales = sals.reduce((s,x) => s+(x.amount||0), 0) + legacyInvs.reduce((s,i)=>s+i.total,0);
+  // CN/DN adjustments for this month (exclude Draft & Voided)
+  const cnThisMonth = (DB.creditNotes||[]).filter(cn =>
+    (cn.date||'').startsWith(month) && cn.status !== 'Draft' && cn.status !== 'Voided'
+  );
+  const cnReduction = cnThisMonth.reduce((s,cn) => s + (cn.total||0), 0);
+
+  const dnThisMonth = (DB.debitNotes||[]).filter(dn =>
+    (dn.date||'').startsWith(month) && dn.status !== 'Draft' && dn.status !== 'Voided'
+  );
+  const salesDnAddition    = dnThisMonth.filter(d => d.kind === 'sales').reduce((s,d) => s + (d.total||0), 0);
+  const purchaseDnReduction = dnThisMonth.filter(d => d.kind === 'purchase').reduce((s,d) => s + (d.total||0), 0);
+
+  const rawSales   = sals.reduce((s,x) => s+(x.amount||0), 0) + legacyInvs.reduce((s,i)=>s+i.total,0);
+  const totalSales = rawSales + salesDnAddition - cnReduction;
+
   const byCategory = {};
   exps.forEach(e => { byCategory[e.cat] = (byCategory[e.cat] || 0) + e.amount; });
-  const totalExp = Object.values(byCategory).reduce((s,v) => s+v, 0);
+  const rawExp   = Object.values(byCategory).reduce((s,v) => s+v, 0);
+  const totalExp = Math.max(rawExp - purchaseDnReduction, 0);
   const grossProfit = totalSales - totalExp;
   const margin = totalSales > 0 ? ((grossProfit / totalSales) * 100).toFixed(1) : 0;
 
@@ -9461,8 +9623,8 @@ function renderReport() {
 
   document.getElementById('report-content').innerHTML = `
     <div class="metrics-grid">
-      <div class="metric-card"><div class="metric-label">Total Revenue</div><div class="metric-value text-green">${fmt(totalSales)}</div></div>
-      <div class="metric-card"><div class="metric-label">Total Expenses</div><div class="metric-value text-red">${fmt(totalExp)}</div></div>
+      <div class="metric-card"><div class="metric-label">Total Revenue</div><div class="metric-value text-green">${fmt(totalSales)}</div>${(cnReduction||salesDnAddition)?`<div class="metric-change neutral" style="font-size:10px;">${fmt(rawSales)} raw${salesDnAddition?` +${fmt(salesDnAddition)} DN`:''}${cnReduction?` −${fmt(cnReduction)} CN`:''}</div>`:''}</div>
+      <div class="metric-card"><div class="metric-label">Total Expenses</div><div class="metric-value text-red">${fmt(totalExp)}</div>${purchaseDnReduction?`<div class="metric-change neutral" style="font-size:10px;">${fmt(rawExp)} raw −${fmt(purchaseDnReduction)} supplier DN</div>`:''}</div>
       <div class="metric-card"><div class="metric-label">Net Profit</div><div class="metric-value" style="color:${grossProfit>=0?'var(--green)':'var(--red)'}">${fmt(grossProfit)}</div></div>
       <div class="metric-card"><div class="metric-label">Profit Margin</div><div class="metric-value" style="color:${grossProfit>=0?'var(--green)':'var(--red)'}">${margin}%</div></div>
     </div>
@@ -12443,6 +12605,426 @@ function printCreditNote(id) {
 
     <div style="text-align:center;margin-top:24px;">
       <button onclick="window.print()" style="padding:10px 28px;background:#b91c1c;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-family:sans-serif;">🖨 Print / Save as PDF</button>
+    </div>
+  </body></html>`);
+  win.document.close();
+}
+
+// ============================================================
+// DEBIT NOTES
+// ============================================================
+let dnLines = [];
+let editingDnId = null;
+let dnKind = 'sales'; // 'sales' or 'purchase'
+
+function setDnKind(k) {
+  dnKind = k;
+  const salesBtn    = document.getElementById('dn-kind-sales');
+  const purchaseBtn = document.getElementById('dn-kind-purchase');
+  const salesRow    = document.getElementById('dn-customer-row');
+  const invoiceRow  = document.getElementById('dn-invoice-row');
+  const suppRow     = document.getElementById('dn-supplier-row');
+  const suppRefRow  = document.getElementById('dn-supp-ref-row');
+  const reasonSel   = document.getElementById('dn-reason');
+
+  if (k === 'sales') {
+    salesBtn.style.cssText    = 'flex:1;background:var(--green);color:#fff;border:none;';
+    purchaseBtn.style.cssText = 'flex:1;background:transparent;color:var(--text2);border:none;';
+    salesRow.style.display    = '';
+    invoiceRow.style.display  = '';
+    suppRow.style.display     = 'none';
+    suppRefRow.style.display  = 'none';
+    // Reason presets for sales
+    if (reasonSel) reasonSel.innerHTML = ['Undercharge','Additional charges','Late fee / interest','Price adjustment','Other']
+      .map(r => `<option>${r}</option>`).join('');
+  } else {
+    salesBtn.style.cssText    = 'flex:1;background:transparent;color:var(--text2);border:none;';
+    purchaseBtn.style.cssText = 'flex:1;background:var(--amber);color:#fff;border:none;';
+    salesRow.style.display    = 'none';
+    invoiceRow.style.display  = 'none';
+    suppRow.style.display     = '';
+    suppRefRow.style.display  = '';
+    // Reason presets for purchase
+    if (reasonSel) reasonSel.innerHTML = ['Returned goods (to supplier)','Damaged goods (to supplier)','Shortage / short delivery','Price adjustment','Other']
+      .map(r => `<option>${r}</option>`).join('');
+  }
+}
+
+function renderDebitNotes() {
+  const wrap = document.getElementById('dn-list');
+  if (!wrap) return;
+  const search = (document.getElementById('dn-search').value||'').toLowerCase().trim();
+  const kindF  = document.getElementById('dn-kind-filter').value || '';
+  const month  = document.getElementById('dn-month-filter').value || '';
+  const status = document.getElementById('dn-status-filter').value || '';
+
+  let items = [...(DB.debitNotes||[])].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  if (kindF)  items = items.filter(dn => dn.kind === kindF);
+  if (month)  items = items.filter(dn => (dn.date||'').startsWith(month));
+  if (status) items = items.filter(dn => dn.status === status);
+  if (search) {
+    items = items.filter(dn =>
+      (dn.no||'').toLowerCase().includes(search) ||
+      (dn.partyName||'').toLowerCase().includes(search) ||
+      (dn.invoiceNo||'').toLowerCase().includes(search)
+    );
+  }
+
+  const total = items.reduce((s,dn) => s + (dn.total||0), 0);
+  document.getElementById('dn-total-summary').textContent =
+    `${items.length} debit note${items.length===1?'':'s'} · Total: ${fmt(total)}`;
+
+  if (items.length === 0) {
+    wrap.innerHTML = '<div class="empty-state"><div class="icon">📄</div><p>No debit notes yet</p><p style="font-size:12px;color:var(--text3);">Create one to charge a customer extra or bill back a supplier</p></div>';
+    return;
+  }
+
+  const statusMap = { Draft:'badge-gray', Issued:'badge-amber', Settled:'badge-green', Voided:'badge-red' };
+  const kindBadge = (k) => k === 'purchase'
+    ? '<span class="badge" style="background:#fef3c7;color:#92400e;">📥 Supplier</span>'
+    : '<span class="badge badge-blue">📤 Customer</span>';
+
+  wrap.innerHTML = `<table>
+    <thead><tr>
+      <th>DN No.</th><th>Date</th><th>Kind</th><th>Party</th><th>Ref.</th>
+      <th>Reason</th><th class="text-right">Amount</th><th>Status</th><th></th>
+    </tr></thead>
+    <tbody>${items.map(dn => `
+      <tr>
+        <td style="font-weight:500;font-family:'DM Mono',monospace;">${dn.no||'—'}</td>
+        <td style="color:var(--text2);white-space:nowrap;">${fmtDate(dn.date)}</td>
+        <td>${kindBadge(dn.kind)}</td>
+        <td>${dn.partyName||'—'}</td>
+        <td><span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text2);">${dn.invoiceNo||'—'}</span></td>
+        <td style="font-size:12px;color:var(--text2);">${dn.reason||'—'}</td>
+        <td class="text-right mono" style="font-weight:500;color:var(--green);">+${fmtCurr(dn.total||0, dn.currency||'MYR')}</td>
+        <td>${`<span class="badge ${statusMap[dn.status]||'badge-gray'}">${dn.status||'Draft'}</span>`}</td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-outline btn-sm" onclick="printDebitNote(${dn.id})" title="Print">🖨</button>
+          ${can('canEdit') ? `<button class="btn btn-outline btn-sm" onclick="editDebitNote(${dn.id})">Edit</button>` : ''}
+          ${can('canDelete') ? `<button class="btn btn-danger btn-sm" onclick="deleteDebitNote(${dn.id})">Del</button>` : ''}
+        </td>
+      </tr>`).join('')}</tbody></table>`;
+}
+
+function populateDnCustomerSelect(selectedName) {
+  const sel = document.getElementById('dn-customer');
+  if (!sel) return;
+  const customers = [...(DB.customers||[])].sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  sel.innerHTML = '<option value="">— Select customer —</option>' +
+    customers.map(c => `<option value="${(c.name||'').replace(/"/g,'&quot;')}"${c.name===selectedName?' selected':''}>${c.name}</option>`).join('');
+}
+
+function populateDnSupplierSelect(selectedName) {
+  const sel = document.getElementById('dn-supplier');
+  if (!sel) return;
+  const suppliers = [...(DB.suppliers||[])].sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  sel.innerHTML = '<option value="">— Select supplier —</option>' +
+    suppliers.map(s => `<option value="${(s.name||'').replace(/"/g,'&quot;')}"${s.name===selectedName?' selected':''}>${s.name}</option>`).join('');
+}
+
+function onDnCustomerChange() {
+  const custName = document.getElementById('dn-customer').value;
+  const sel = document.getElementById('dn-invoice');
+  if (!sel) return;
+  const invs = (DB.invoices||[]).filter(i => i.customer === custName)
+    .sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  sel.innerHTML = '<option value="">— None (standalone DN) —</option>' +
+    invs.map(i => `<option value="${i.id}">${i.no} · ${fmtDate(i.date)} · ${fmtCurr(i.total||0, i.currency||'MYR')}</option>`).join('');
+}
+
+function addDnLine() {
+  dnLines.push({ id: Date.now() + Math.random(), desc:'', qty:1, unitPrice:0 });
+  renderDnLines();
+}
+
+function removeDnLine(id) {
+  dnLines = dnLines.filter(l => l.id !== id);
+  renderDnLines();
+  calcDnTotal();
+}
+
+function setDnLine(id, field, val) {
+  const l = dnLines.find(x => x.id === id);
+  if (!l) return;
+  l[field] = (field === 'desc') ? val : (parseFloat(val) || 0);
+  calcDnTotal();
+  const sub = document.getElementById('dn-sub-' + id);
+  if (sub) sub.textContent = fmt((parseFloat(l.qty)||0) * (parseFloat(l.unitPrice)||0));
+}
+
+function renderDnLines() {
+  const tb = document.getElementById('dn-lines-body');
+  if (!tb) return;
+  if (dnLines.length === 0) {
+    tb.innerHTML = '<tr><td colspan="5" style="padding:16px;text-align:center;font-size:12px;color:var(--text3);">No lines yet — click "+ Add Line" below</td></tr>';
+    calcDnTotal();
+    return;
+  }
+  tb.innerHTML = dnLines.map(l => {
+    const sub = (parseFloat(l.qty)||0) * (parseFloat(l.unitPrice)||0);
+    return `<tr>
+      <td style="padding:4px 6px;"><input type="text" value="${(l.desc||'').replace(/"/g,'&quot;')}" oninput="setDnLine(${l.id},'desc',this.value)" placeholder="Description" style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:4px;font-size:12px;"></td>
+      <td style="padding:4px 6px;"><input type="number" value="${l.qty||0}" min="0" step="0.01" oninput="setDnLine(${l.id},'qty',this.value)" style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:right;"></td>
+      <td style="padding:4px 6px;"><input type="number" value="${l.unitPrice||0}" min="0" step="0.01" oninput="setDnLine(${l.id},'unitPrice',this.value)" style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:right;"></td>
+      <td id="dn-sub-${l.id}" style="padding:6px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;font-weight:500;white-space:nowrap;">${fmt(sub)}</td>
+      <td style="padding:4px;text-align:center;"><button onclick="removeDnLine(${l.id})" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:16px;padding:4px;">×</button></td>
+    </tr>`;
+  }).join('');
+  calcDnTotal();
+}
+
+function calcDnTotal() {
+  const total = dnLines.reduce((s, l) => s + (parseFloat(l.qty)||0) * (parseFloat(l.unitPrice)||0), 0);
+  const el = document.getElementById('dn-grand-total');
+  if (el) el.textContent = '+' + fmt(total);
+  return total;
+}
+
+function openDebitNoteModal() {
+  resetDnModal();
+  setDnKind('sales'); // default to sales
+  populateDnCustomerSelect();
+  populateDnSupplierSelect();
+  document.getElementById('dn-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('dn-no').value = 'DN-' + new Date().getFullYear() + '-' + String(DB.nextIds.debitNotes).padStart(4,'0');
+  openModal('modal-debitnote');
+}
+
+function resetDnModal() {
+  editingDnId = null;
+  dnLines = [];
+  document.getElementById('dn-modal-heading').textContent = 'New Debit Note';
+  document.getElementById('dn-no').value = '';
+  document.getElementById('dn-customer').value = '';
+  document.getElementById('dn-supplier').value = '';
+  document.getElementById('dn-supp-ref').value = '';
+  document.getElementById('dn-status').value = 'Draft';
+  document.getElementById('dn-notes').value = '';
+  const invSel = document.getElementById('dn-invoice');
+  if (invSel) invSel.innerHTML = '<option value="">— None (standalone DN) —</option>';
+  renderDnLines();
+}
+
+function saveDebitNote() {
+  const kind = dnKind;
+  let partyName = '';
+  let invoiceId = null;
+  let invoiceNo = '';
+  let suppRef = '';
+
+  if (kind === 'sales') {
+    partyName = document.getElementById('dn-customer').value.trim();
+    if (!partyName) { showToast('Please select a customer', 'error'); return; }
+    const invId = parseInt(document.getElementById('dn-invoice').value);
+    if (invId) {
+      invoiceId = invId;
+      const inv = (DB.invoices||[]).find(i => i.id === invId);
+      invoiceNo = inv ? inv.no : '';
+    }
+  } else {
+    partyName = document.getElementById('dn-supplier').value.trim();
+    if (!partyName) { showToast('Please select a supplier', 'error'); return; }
+    suppRef = document.getElementById('dn-supp-ref').value.trim();
+    invoiceNo = suppRef;
+  }
+
+  const validLines = dnLines.filter(l => (l.desc||'').trim() && parseFloat(l.qty) > 0);
+  if (validLines.length === 0) { showToast('Add at least one line with a description and quantity', 'error'); return; }
+  const total = validLines.reduce((s,l) => s + (parseFloat(l.qty)||0) * (parseFloat(l.unitPrice)||0), 0);
+  if (total <= 0) { showToast('Debit total must be greater than zero', 'error'); return; }
+
+  // Currency: follow linked invoice if any; else company default
+  let currency = 'MYR';
+  if (kind === 'sales' && invoiceId) {
+    const inv = (DB.invoices||[]).find(i => i.id === invoiceId);
+    if (inv && inv.currency) currency = inv.currency;
+  } else {
+    const list = (typeof getCompaniesList === 'function') ? getCompaniesList() : [];
+    const activeId = (typeof getActiveCompanyId === 'function') ? getActiveCompanyId() : 'default';
+    const co = list.find(c => c.id === activeId);
+    if (co && co.currency) currency = co.currency;
+  }
+
+  const data = {
+    no: document.getElementById('dn-no').value || ('DN-' + DB.nextIds.debitNotes),
+    date: document.getElementById('dn-date').value,
+    kind,
+    partyType: kind === 'sales' ? 'customer' : 'supplier',
+    partyName,
+    invoiceId,
+    invoiceNo,
+    lines: validLines.map(l => ({ desc:l.desc, qty:parseFloat(l.qty)||0, unitPrice:parseFloat(l.unitPrice)||0, subtotal:(parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0) })),
+    total,
+    currency,
+    reason: document.getElementById('dn-reason').value,
+    status: document.getElementById('dn-status').value,
+    notes: document.getElementById('dn-notes').value,
+    createdOn: new Date().toISOString()
+  };
+
+  if (editingDnId) {
+    const idx = DB.debitNotes.findIndex(d => d.id === editingDnId);
+    DB.debitNotes[idx] = { ...DB.debitNotes[idx], ...data };
+    showToast('Debit note updated');
+    if (typeof sbPersist === 'function') sbPersist('debitNotes', DB.debitNotes[idx]);
+  } else {
+    const rec = { id: DB.nextIds.debitNotes++, ...data };
+    DB.debitNotes.unshift(rec);
+    showToast('Debit note created');
+    if (typeof sbPersist === 'function') sbPersist('debitNotes', rec);
+  }
+  closeModal('modal-debitnote');
+  renderDebitNotes();
+}
+
+function editDebitNote(id) {
+  const dn = (DB.debitNotes||[]).find(d => d.id === id);
+  if (!dn) return;
+  editingDnId = id;
+  document.getElementById('dn-modal-heading').textContent = 'Edit Debit Note';
+  document.getElementById('dn-no').value = dn.no || '';
+  document.getElementById('dn-date').value = dn.date || '';
+  document.getElementById('dn-status').value = dn.status || 'Draft';
+  document.getElementById('dn-notes').value = dn.notes || '';
+
+  openModal('modal-debitnote');
+  setDnKind(dn.kind || 'sales');
+  // Restore reason (after setDnKind rebuilt the options)
+  const reasonSel = document.getElementById('dn-reason');
+  if (reasonSel && dn.reason) {
+    // If stored reason isn't in the preset list, prepend it
+    if (![...reasonSel.options].some(o => o.value === dn.reason)) {
+      const opt = document.createElement('option');
+      opt.value = dn.reason; opt.textContent = dn.reason;
+      reasonSel.insertBefore(opt, reasonSel.firstChild);
+    }
+    reasonSel.value = dn.reason;
+  }
+
+  if (dn.kind === 'sales') {
+    populateDnCustomerSelect(dn.partyName);
+    onDnCustomerChange();
+    // Restore invoice selection
+    setTimeout(() => {
+      const invSel = document.getElementById('dn-invoice');
+      if (invSel && dn.invoiceId) invSel.value = dn.invoiceId;
+    }, 0);
+  } else {
+    populateDnSupplierSelect(dn.partyName);
+    document.getElementById('dn-supp-ref').value = dn.invoiceNo || '';
+  }
+
+  dnLines = (dn.lines||[]).map(l => ({ id: Date.now() + Math.random(), desc:l.desc, qty:l.qty, unitPrice:l.unitPrice }));
+  renderDnLines();
+}
+
+function deleteDebitNote(id) {
+  if (!confirm('Delete this debit note? This cannot be undone.')) return;
+  DB.debitNotes = (DB.debitNotes||[]).filter(d => d.id !== id);
+  showToast('Debit note deleted');
+  if (typeof sbDelete === 'function') sbDelete('debitNotes', id);
+  renderDebitNotes();
+}
+
+function printDebitNote(id) {
+  const dn = (DB.debitNotes||[]).find(d => d.id === id);
+  if (!dn) return;
+  const co = DB.company || {};
+  const currency = dn.currency || 'MYR';
+  const cs = currency === 'SGD' ? 'SGD' : 'RM';
+  const isPurchase = dn.kind === 'purchase';
+  const themeColor = isPurchase ? '#92400e' : '#1e40af';
+  const themeBg    = isPurchase ? '#fef3c7' : '#dbeafe';
+  const toLabel    = isPurchase ? 'Debit To Supplier' : 'Debit To Customer';
+
+  const itemsHtml = (dn.lines||[]).map(l => `
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${l.desc||''}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${l.qty||0}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${cs} ${(l.unitPrice||0).toFixed(2)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${cs} ${(l.subtotal||((l.qty||0)*(l.unitPrice||0))).toFixed(2)}</td>
+    </tr>`).join('');
+
+  const win = window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head>
+    <title>Debit Note ${dn.no}</title>
+    <style>
+      * { margin:0; padding:0; box-sizing:border-box; }
+      body { font-family:'Segoe UI',sans-serif; font-size:13px; color:#111; padding:40px; max-width:750px; margin:0 auto; }
+      .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:32px; }
+      .company { font-size:22px; font-weight:700; color:${themeColor}; }
+      .dn-title { font-size:28px; font-weight:700; color:${themeColor}; text-align:right; letter-spacing:0.02em; }
+      .dn-no { font-size:14px; color:#6b7280; text-align:right; margin-top:4px; }
+      .dn-kind-tag { display:inline-block; background:${themeBg}; color:${themeColor}; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:600; margin-top:6px; text-transform:uppercase; letter-spacing:0.03em; }
+      .bill-section { display:flex; justify-content:space-between; margin-bottom:28px; gap:20px; }
+      .bill-to h4 { font-size:11px; text-transform:uppercase; color:#9ca3af; letter-spacing:0.05em; margin-bottom:6px; }
+      .bill-to p { font-size:13px; line-height:1.6; }
+      .dates table { margin-left:auto; border-collapse:collapse; }
+      .dates td { padding:3px 8px; font-size:12px; }
+      .dates td:first-child { color:#6b7280; }
+      .dates td:last-child { font-weight:600; }
+      table.items { width:100%; border-collapse:collapse; margin-bottom:20px; }
+      table.items thead { background:${themeBg}; }
+      table.items th { padding:10px 12px; text-align:left; font-size:11px; text-transform:uppercase; color:#6b7280; letter-spacing:0.05em; border-bottom:2px solid ${themeColor}; }
+      table.items th:not(:first-child) { text-align:right; }
+      .totals { display:flex; justify-content:flex-end; }
+      .totals table { border-collapse:collapse; min-width:260px; }
+      .totals td { padding:6px 12px; font-size:13px; }
+      .totals td:last-child { text-align:right; font-weight:500; }
+      .totals tr.grand-total td { font-size:16px; font-weight:700; color:${themeColor}; border-top:2px solid ${themeColor}; padding-top:10px; }
+      .reason { margin-top:20px; padding:12px 16px; background:${themeBg}; border-left:3px solid ${themeColor}; border-radius:4px; font-size:12px; }
+      .footer { margin-top:40px; text-align:center; font-size:11px; color:#9ca3af; border-top:1px solid #e5e7eb; padding-top:16px; }
+      @media print { body { padding:20px; } button { display:none; } }
+    </style>
+  </head><body>
+    <div class="header">
+      <div>
+        <div class="company">${co.name||'🍄 MycoBooks'}</div>
+        ${co.regno?`<div style="font-size:11px;color:#6b7280;">Reg: ${co.regno}</div>`:''}
+        ${co.phone?`<div style="font-size:11px;color:#6b7280;">${co.phone}</div>`:''}
+        ${co.address?`<div style="font-size:11px;color:#6b7280;max-width:260px;">${co.address}</div>`:''}
+      </div>
+      <div>
+        <div class="dn-title">DEBIT NOTE</div>
+        <div class="dn-no">${dn.no||''}</div>
+        <div style="text-align:right;"><span class="dn-kind-tag">${isPurchase?'Purchase DN':'Sales DN'}</span></div>
+      </div>
+    </div>
+
+    <div class="bill-section">
+      <div class="bill-to" style="flex:1;">
+        <h4>${toLabel}</h4>
+        <p><strong>${dn.partyName||''}</strong></p>
+      </div>
+      <div class="dates">
+        <table>
+          <tr><td>DN Date</td><td>${fmtDate(dn.date)}</td></tr>
+          ${dn.invoiceNo?`<tr><td>Reference</td><td>${dn.invoiceNo}</td></tr>`:''}
+          <tr><td>Status</td><td>${dn.status||'Draft'}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <table class="items">
+      <thead><tr>
+        <th>Description</th><th>Qty</th><th>Unit Price</th><th>Amount</th>
+      </tr></thead>
+      <tbody>${itemsHtml}</tbody>
+    </table>
+
+    <div class="totals">
+      <table>
+        <tr class="grand-total"><td>Total Due</td><td>${cs} ${(dn.total||0).toFixed(2)}</td></tr>
+      </table>
+    </div>
+
+    <div class="reason"><strong>Reason:</strong> ${dn.reason||'—'}${dn.notes?`<br><strong style="margin-top:6px;display:inline-block;">Notes:</strong> ${dn.notes}`:''}</div>
+
+    <div class="footer">${co.footer||'This debit note represents an additional amount due.'}</div>
+
+    <div style="text-align:center;margin-top:24px;">
+      <button onclick="window.print()" style="padding:10px 28px;background:${themeColor};color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-family:sans-serif;">🖨 Print / Save as PDF</button>
     </div>
   </body></html>`);
   win.document.close();
