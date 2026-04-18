@@ -467,6 +467,7 @@ tr:hover td { background:var(--bg); }
           <div class="page-subtitle">Record and track all farm expenditures</div>
         </div>
         <div class="flex-row">
+          <button class="btn btn-outline" onclick="openCategoriesModal('expense')" title="Manage expense categories">⚙ Categories</button>
           <button id="btn-add-expense" class="btn btn-primary" onclick="resetExpModal();addExpLine();populateSuppDatalist();openModal('modal-expense')">+ Add Expense</button>
         </div>
       </div>
@@ -3102,6 +3103,7 @@ tr:hover td { background:var(--bg); }
         <button id="cat-type-supplier"  onclick="setCategoryType('supplier')"  class="btn btn-primary btn-sm" style="flex:1;font-size:12px;">Supplier</button>
         <button id="cat-type-inventory" onclick="setCategoryType('inventory')" class="btn btn-outline btn-sm" style="flex:1;font-size:12px;background:transparent;border:none;">Inventory</button>
         <button id="cat-type-product"   onclick="setCategoryType('product')"   class="btn btn-outline btn-sm" style="flex:1;font-size:12px;background:transparent;border:none;">Product</button>
+        <button id="cat-type-expense"   onclick="setCategoryType('expense')"   class="btn btn-outline btn-sm" style="flex:1;font-size:12px;background:transparent;border:none;">Expense</button>
       </div>
 
       <div style="font-size:12px;color:var(--text2);margin-bottom:10px;" id="cat-type-help">Edit the categories available for suppliers. Changes apply immediately to dropdowns.</div>
@@ -3544,6 +3546,7 @@ const DB = {
   supplierCategories: ['Spawn','Substrate','Packaging','Chemicals','Equipment','Other'],
   inventoryCategories: ['Spawn','Substrate','Packaging','Chemicals','Equipment','Other'],
   productCategories: ['Fresh','Dried','Processed','Bundle','Frozen','Powdered','Extract'],
+  expenseCategories: ['Supplies','Utilities','Transport','Maintenance','Payroll','Other'],
   company: { name:'', regno:'', phone:'', email:'', address:'', bank:'', bankacc:'', footer:'Thank you for your business!' },
   nextIds: { expenses:1, sales:1, invoices:1, inventory:1, staff:1, customers:1, products:1, accounts:1, users:1, suppliers:1, payrollRuns:1, wageAdvances:1, transfers:1, cashflowItems:1, loans:1, claims:1, recurringExpenses:1, batches:1, harvests:1, packings:1, packingRates:1, salesOrders:1, lorries:1, refuels:1, maintenance:1, trips:1, routeRates:1, payments:1, creditNotes:1, debitNotes:1 }
 };
@@ -7703,7 +7706,7 @@ function renderExpLines() {
   const emptyRow = document.getElementById('exp-empty-row');
   if (emptyRow) emptyRow.remove();
 
-  const cats     = ['Supplies','Utilities','Transport','Maintenance','Payroll','Other'];
+  const cats     = (DB.expenseCategories && DB.expenseCategories.length) ? DB.expenseCategories : ['Supplies','Utilities','Transport','Maintenance','Payroll','Other'];
   const acctOpts = DB.accounts.map(a => `<option value="${a.name}">${a.name}</option>`).join('');
 
   expLines.forEach(l => {
@@ -10603,6 +10606,18 @@ const CATEGORY_CONFIG = {
     hasAllOption: { 'prod-cat-filter': true },
     datalistId: 'prod-cat-list',                // product uses a <datalist> as suggestions
     helpText: 'Edit the product category suggestions. Products use free-text entry with these as suggestions.'
+  },
+  expense: {
+    dbKey: 'expenseCategories',
+    label: 'expense',
+    // Expenses live inside expLines on each record, so recordCollection/recordField
+    // aren't meaningful here. We handle usage counting specially below.
+    recordCollection: '__expenseLines',
+    recordField: 'cat',
+    selectIds: ['exp-cat-filter'],              // only the top filter is a static select
+    hasAllOption: { 'exp-cat-filter': true },
+    datalistId: null,
+    helpText: 'Edit expense categories. Per-row dropdowns inside the expense modal rebuild from this list.'
   }
 };
 
@@ -10614,7 +10629,7 @@ function openCategoriesModal(type) {
 
 function setCategoryType(type) {
   currentCategoryType = type;
-  ['supplier','inventory','product'].forEach(t => {
+  ['supplier','inventory','product','expense'].forEach(t => {
     const btn = document.getElementById('cat-type-'+t);
     if (!btn) return;
     if (t === type) {
@@ -10641,9 +10656,21 @@ function renderCategoryList() {
     return;
   }
   // Count usage for each category
-  const records = DB[cfg.recordCollection] || [];
   const usage = {};
-  list.forEach(c => { usage[c] = records.filter(r => (r||{})[cfg.recordField] === c).length; });
+  if (currentCategoryType === 'expense') {
+    // Expenses are nested — count across every expLines row on every expense record,
+    // and also the legacy top-level .cat field on older expense records.
+    list.forEach(c => { usage[c] = 0; });
+    (DB.expenses || []).forEach(e => {
+      if (e.cat && usage[e.cat] !== undefined) usage[e.cat]++;   // legacy flat expenses
+      (e.expLines || []).forEach(ln => {
+        if (ln && ln.cat && usage[ln.cat] !== undefined) usage[ln.cat]++;
+      });
+    });
+  } else {
+    const records = DB[cfg.recordCollection] || [];
+    list.forEach(c => { usage[c] = records.filter(r => (r||{})[cfg.recordField] === c).length; });
+  }
 
   container.innerHTML = list.map((name, idx) => {
     const count = usage[name] || 0;
@@ -10691,16 +10718,32 @@ function renameCategory(idx) {
     return;
   }
   // Count how many records will be affected
-  const records = DB[cfg.recordCollection] || [];
-  const affected = records.filter(r => (r||{})[cfg.recordField] === oldName).length;
+  let affected = 0;
+  if (currentCategoryType === 'expense') {
+    (DB.expenses || []).forEach(e => {
+      if (e.cat === oldName) affected++;
+      (e.expLines || []).forEach(ln => { if (ln && ln.cat === oldName) affected++; });
+    });
+  } else {
+    const records = DB[cfg.recordCollection] || [];
+    affected = records.filter(r => (r||{})[cfg.recordField] === oldName).length;
+  }
   let updateRecords = false;
   if (affected > 0) {
-    updateRecords = confirm(`${affected} ${cfg.label}${affected>1?'s':''} currently use${affected>1?'':'s'} "${oldName}".\n\nClick OK to rename them to "${trimmed}" as well.\nClick Cancel to rename only the category (existing records will keep the old name).`);
+    updateRecords = confirm(`${affected} ${cfg.label}${affected>1?' entries':''} currently use "${oldName}".\n\nClick OK to rename them to "${trimmed}" as well.\nClick Cancel to rename only the category (existing records will keep the old name).`);
   }
   list[idx] = trimmed;
   DB[cfg.dbKey] = list;
   if (updateRecords) {
-    records.forEach(r => { if (r && r[cfg.recordField] === oldName) r[cfg.recordField] = trimmed; });
+    if (currentCategoryType === 'expense') {
+      (DB.expenses || []).forEach(e => {
+        if (e.cat === oldName) e.cat = trimmed;
+        (e.expLines || []).forEach(ln => { if (ln && ln.cat === oldName) ln.cat = trimmed; });
+      });
+    } else {
+      const records = DB[cfg.recordCollection] || [];
+      records.forEach(r => { if (r && r[cfg.recordField] === oldName) r[cfg.recordField] = trimmed; });
+    }
   }
   showToast(`Renamed to "${trimmed}"${updateRecords ? ' · updated '+affected+' record'+(affected>1?'s':'') : ''}`);
   renderCategoryList();
@@ -10709,6 +10752,7 @@ function renameCategory(idx) {
   if (currentCategoryType === 'supplier' && typeof renderSuppliers === 'function') renderSuppliers();
   if (currentCategoryType === 'inventory' && typeof renderInventory === 'function') renderInventory();
   if (currentCategoryType === 'product' && typeof renderProducts === 'function') renderProducts();
+  if (currentCategoryType === 'expense' && typeof renderExpenses === 'function') renderExpenses();
 }
 
 function deleteCategory(idx) {
@@ -10717,10 +10761,18 @@ function deleteCategory(idx) {
   const name = list[idx];
   if (!name) return;
   // Block deletion if in use
-  const records = DB[cfg.recordCollection] || [];
-  const inUseCount = records.filter(r => (r||{})[cfg.recordField] === name).length;
+  let inUseCount = 0;
+  if (currentCategoryType === 'expense') {
+    (DB.expenses || []).forEach(e => {
+      if (e.cat === name) inUseCount++;
+      (e.expLines || []).forEach(ln => { if (ln && ln.cat === name) inUseCount++; });
+    });
+  } else {
+    const records = DB[cfg.recordCollection] || [];
+    inUseCount = records.filter(r => (r||{})[cfg.recordField] === name).length;
+  }
   if (inUseCount > 0) {
-    alert(`Cannot delete "${name}" — ${inUseCount} ${cfg.label}${inUseCount>1?'s are':' is'} using this category.\n\nReassign those records to another category first (edit each one from the ${cfg.label} list), then try deleting again.`);
+    alert(`Cannot delete "${name}" — ${inUseCount} ${cfg.label}${inUseCount>1?' entries are':' is'} using this category.\n\nReassign those records to another category first, then try deleting again.`);
     return;
   }
   if (!confirm(`Delete category "${name}"? This cannot be undone.`)) return;
