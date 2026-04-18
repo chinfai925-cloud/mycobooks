@@ -8290,6 +8290,21 @@ function reprintReceipt(payId) {
   printReceipt(p, inv);
 }
 
+// Invoice sort state — persists across renders within the session
+let invSortKey = 'date';
+let invSortDir = 'desc'; // 'asc' | 'desc'
+
+function setInvSort(key) {
+  if (invSortKey === key) {
+    invSortDir = (invSortDir === 'asc') ? 'desc' : 'asc';
+  } else {
+    invSortKey = key;
+    // Sensible defaults per column: text asc, numbers/dates desc
+    invSortDir = (key === 'no' || key === 'customer' || key === 'status') ? 'asc' : 'desc';
+  }
+  renderInvoices();
+}
+
 function renderInvoices() {
   const search = document.getElementById('inv-search').value.toLowerCase();
   const status = document.getElementById('inv-status-filter').value;
@@ -8298,16 +8313,41 @@ function renderInvoices() {
     (!search || i.customer.toLowerCase().includes(search) || i.no.toLowerCase().includes(search)) &&
     (!status || i.status === status) &&
     (!month  || (i.date||'').startsWith(month))
-  ).sort((a,b) => b.date.localeCompare(a.date));
+  );
+
+  // Apply sort
+  const dir = invSortDir === 'asc' ? 1 : -1;
+  const getVal = (i) => {
+    switch (invSortKey) {
+      case 'no':       return (i.no||'').toLowerCase();
+      case 'customer': return (i.customer||'').toLowerCase();
+      case 'date':     return i.date || '';
+      case 'due':      return i.due || '';
+      case 'status':   return (i.status||'').toLowerCase();
+      case 'total':    return i.total || 0;
+      default:         return '';
+    }
+  };
+  data.sort((a,b) => {
+    const va = getVal(a), vb = getVal(b);
+    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+    return String(va).localeCompare(String(vb)) * dir;
+  });
 
   const total = data.reduce((s,i) => s+i.total, 0);
   document.getElementById('inv-total').textContent = `${data.length} invoices · Total: ${fmt(total)}`;
 
   const statusMap = {Paid:'badge-green',Pending:'badge-amber',Overdue:'badge-red',Draft:'badge-gray',Partial:'badge-blue'};
+
+  // Helper to render a sortable header
+  const arrow = (k) => invSortKey === k ? (invSortDir === 'asc' ? ' ↑' : ' ↓') : '';
+  const activeStyle = (k) => invSortKey === k ? 'color:var(--text);font-weight:600;' : '';
+  const sortTh = (k, label, extraClass) => `<th${extraClass?' class="'+extraClass+'"':''} style="cursor:pointer;user-select:none;${activeStyle(k)}" onclick="setInvSort('${k}')" title="Sort by ${label}">${label}${arrow(k)}</th>`;
+
   document.getElementById('inv-table').innerHTML = data.length === 0
     ? '<div class="empty-state"><div class="icon">🧾</div><p>No invoices found</p></div>'
     : `<table>
-      <thead><tr><th>Invoice No.</th><th>Customer</th><th>Items</th><th>Issue Date</th><th>Due Date</th><th>Status</th><th class="text-right">Amount</th><th></th></tr></thead>
+      <thead><tr>${sortTh('no','Invoice No.')}${sortTh('customer','Customer')}<th>Items</th>${sortTh('date','Issue Date')}${sortTh('due','Due Date')}${sortTh('status','Status')}${sortTh('total','Amount','text-right')}<th></th></tr></thead>
       <tbody>${data.map(i => `<tr>
         <td style="font-family:'DM Mono',monospace;font-size:12px;">${i.no}</td>
         <td><div style="font-weight:500">${i.customer}</div><div style="font-size:11px;color:var(--text2)">${i.address||''}</div></td>
