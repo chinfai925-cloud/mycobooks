@@ -2706,6 +2706,56 @@ tr:hover td { background:var(--bg); }
   </div>
 </div>
 
+<!-- Edit Expense Modal -->
+<div class="modal-backdrop" id="modal-edit-expense">
+  <div class="modal" style="width:560px;">
+    <div class="modal-head">
+      <span class="modal-title">Edit Expense</span>
+      <button class="modal-close" onclick="closeModal('modal-edit-expense')">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-exp-id">
+      <div class="form-grid form-grid-2">
+        <div class="form-group"><label>Date</label>
+          <input type="date" id="edit-exp-date" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
+        </div>
+        <div class="form-group"><label>Amount (RM)</label>
+          <input type="number" min="0" step="0.01" id="edit-exp-amount" placeholder="0.00" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
+        </div>
+        <div class="form-group" style="grid-column:1/-1"><label>Description</label>
+          <input type="text" id="edit-exp-desc" placeholder="What was this expense for?" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
+        </div>
+        <div class="form-group"><label>Category</label>
+          <select id="edit-exp-cat" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
+        </div>
+        <div class="form-group"><label>Supplier / Payee</label>
+          <input type="text" id="edit-exp-supplier" list="supp-datalist" placeholder="Who was paid?" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
+        </div>
+        <div class="form-group"><label>Status</label>
+          <select id="edit-exp-status" onchange="toggleEditExpStatusFields()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
+            <option value="paid">Paid</option>
+            <option value="unpaid">Unpaid</option>
+          </select>
+        </div>
+        <div class="form-group" id="edit-exp-account-group"><label>Paid from account</label>
+          <select id="edit-exp-account" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
+        </div>
+        <div class="form-group" id="edit-exp-due-group" style="display:none;"><label>Due date</label>
+          <input type="date" id="edit-exp-due" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
+        </div>
+        <div class="form-group" style="grid-column:1/-1"><label>Notes</label>
+          <input type="text" id="edit-exp-notes" placeholder="Optional notes..." style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:10px;" id="edit-exp-attachments"></div>
+      <div class="form-actions" style="margin-top:16px;">
+        <button class="btn btn-outline" onclick="closeModal('modal-edit-expense')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveEditExpense()">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Transfer Modal -->
 <div class="modal-backdrop" id="modal-transfer">
   <div class="modal" style="width:400px;">
@@ -7583,6 +7633,7 @@ function renderExpenses() {
           <td class="text-right text-red mono">${amountDisplay(e.amount)}</td>
           <td style="display:flex;gap:4px;padding-top:10px;flex-wrap:wrap;">
             ${e.supplierInvoice ? `<button class="btn btn-outline btn-sm" onclick="viewSuppInvoice(${e.id})" style="font-size:11px;">📋 Inv</button>` : ''}
+            ${can('canEdit') ? `<button class="btn btn-outline btn-sm" onclick="editExpense(${e.id})" style="font-size:11px;">Edit</button>` : ''}
             ${!isPaid && can('canEdit') ? `<button class="btn btn-sm" style="background:var(--green-light);color:var(--green);font-size:11px;border:none;" onclick="markExpensePaid(${e.id})">Mark Paid</button>` : ''}
             ${can('canDelete') ? `<button class="btn btn-danger btn-sm" onclick="deleteExpense(${e.id})">Del</button>` : ''}
           </td>
@@ -7611,6 +7662,104 @@ function confirmExpensePaid() {
   e.paid    = account;
   closeModal('modal-mark-exp-paid');
   showToast(`Expense paid — recorded to ${account}`);
+  renderExpenses();
+}
+
+// ============================================================
+// EDIT EXPENSE
+// ============================================================
+function editExpense(id) {
+  const e = DB.expenses.find(x => x.id === id);
+  if (!e) { showToast('Expense not found', 'error'); return; }
+
+  document.getElementById('edit-exp-id').value      = id;
+  document.getElementById('edit-exp-date').value    = e.date || '';
+  document.getElementById('edit-exp-amount').value  = e.amount || '';
+  document.getElementById('edit-exp-desc').value    = e.desc || '';
+  document.getElementById('edit-exp-supplier').value = e.supplier || '';
+  document.getElementById('edit-exp-notes').value   = e.notes || '';
+  document.getElementById('edit-exp-due').value     = e.dueDate || '';
+
+  // Populate category dropdown from DB
+  const catSel = document.getElementById('edit-exp-cat');
+  const cats   = (DB.expenseCategories && DB.expenseCategories.length) ? DB.expenseCategories : ['Supplies','Utilities','Transport','Maintenance','Payroll','Other'];
+  // Include the current category even if it's no longer in the master list (legacy data)
+  const current = e.cat || cats[0];
+  const allCats = cats.includes(current) ? cats : [current, ...cats];
+  catSel.innerHTML = allCats.map(c => `<option value="${c}"${c===current?' selected':''}>${c}</option>`).join('');
+
+  // Populate account dropdown
+  const acctSel = document.getElementById('edit-exp-account');
+  const accounts = (DB.accounts || []).map(a => a.name);
+  const currentAcct = e.account || e.paid || (accounts[0] || '');
+  // Include legacy account even if it was renamed/deleted
+  const allAccts = currentAcct && !accounts.includes(currentAcct) ? [currentAcct, ...accounts] : accounts;
+  acctSel.innerHTML = allAccts.map(a => `<option value="${a}"${a===currentAcct?' selected':''}>${a}</option>`).join('');
+
+  // Populate supplier datalist so autocomplete works
+  if (typeof populateSuppDatalist === 'function') populateSuppDatalist();
+
+  // Status
+  const status = (e.status || 'paid');
+  document.getElementById('edit-exp-status').value = status;
+  toggleEditExpStatusFields();
+
+  // Attachment info (read-only — editing the file is done via the row's attach button)
+  const attach = document.getElementById('edit-exp-attachments');
+  const bits = [];
+  if (e.receipt) bits.push('📎 Receipt attached');
+  if (e.supplierInvoice) bits.push('📋 Supplier invoice attached');
+  attach.textContent = bits.length ? bits.join(' · ') + ' (manage attachments from the row buttons)' : 'No attachments. Use the receipt button on the row to add one.';
+
+  openModal('modal-edit-expense');
+}
+
+function toggleEditExpStatusFields() {
+  const status = document.getElementById('edit-exp-status').value;
+  document.getElementById('edit-exp-account-group').style.display = (status === 'paid')   ? '' : 'none';
+  document.getElementById('edit-exp-due-group').style.display     = (status === 'unpaid') ? '' : 'none';
+}
+
+function saveEditExpense() {
+  const id     = parseInt(document.getElementById('edit-exp-id').value);
+  const e      = DB.expenses.find(x => x.id === id);
+  if (!e) { showToast('Expense not found', 'error'); return; }
+
+  const date   = document.getElementById('edit-exp-date').value;
+  const amount = parseFloat(document.getElementById('edit-exp-amount').value);
+  const desc   = document.getElementById('edit-exp-desc').value.trim();
+  const cat    = document.getElementById('edit-exp-cat').value;
+  const supp   = document.getElementById('edit-exp-supplier').value.trim();
+  const status = document.getElementById('edit-exp-status').value;
+  const notes  = document.getElementById('edit-exp-notes').value.trim();
+
+  // Validation
+  if (!date)        { showToast('Date is required', 'error'); return; }
+  if (!desc)        { showToast('Description is required', 'error'); return; }
+  if (isNaN(amount) || amount <= 0) { showToast('Amount must be greater than zero', 'error'); return; }
+
+  // Apply changes
+  e.date     = date;
+  e.amount   = amount;
+  e.desc     = desc;
+  e.cat      = cat;
+  e.supplier = supp;
+  e.status   = status;
+  e.notes    = notes;
+
+  if (status === 'paid') {
+    const acct = document.getElementById('edit-exp-account').value;
+    e.account = acct;
+    e.paid    = acct;
+    e.dueDate = ''; // clear the unpaid-only field
+  } else {
+    const due = document.getElementById('edit-exp-due').value;
+    e.dueDate = due || '';
+    // Keep e.account/paid as-is for historical reference; rendering logic hides them when unpaid
+  }
+
+  closeModal('modal-edit-expense');
+  showToast('Expense updated');
   renderExpenses();
 }
 
