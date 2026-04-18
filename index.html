@@ -735,7 +735,10 @@ tr:hover td { background:var(--bg); }
           <div class="page-title">Products</div>
           <div class="page-subtitle">Manage your mushroom catalogue, prices, and units</div>
         </div>
-        <button id="btn-add-product" class="btn btn-primary" onclick="openProductModal()">+ Add Product</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" onclick="openCategoriesModal('product')" title="Manage product categories">⚙ Categories</button>
+          <button id="btn-add-product" class="btn btn-primary" onclick="openProductModal()">+ Add Product</button>
+        </div>
       </div>
       <div class="card" style="margin-bottom:16px;">
         <div class="card-body" style="padding:12px 16px;">
@@ -760,7 +763,10 @@ tr:hover td { background:var(--bg); }
           <div class="page-title">Suppliers</div>
           <div class="page-subtitle">Manage your vendors and supply sources</div>
         </div>
-        <button id="btn-add-supplier" class="btn btn-primary" onclick="openSupplierModal()">+ Add Supplier</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" onclick="openCategoriesModal('supplier')" title="Manage supplier categories">⚙ Categories</button>
+          <button id="btn-add-supplier" class="btn btn-primary" onclick="openSupplierModal()">+ Add Supplier</button>
+        </div>
       </div>
       <div class="card" style="margin-bottom:16px;">
         <div class="card-body" style="padding:12px 16px;">
@@ -886,7 +892,10 @@ tr:hover td { background:var(--bg); }
           <div class="page-title">Inventory & Supplies</div>
           <div class="page-subtitle">Track stock levels and reorder points</div>
         </div>
-        <button id="btn-add-inventory" class="btn btn-primary" onclick="openModal('modal-inventory')">+ Add Item</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" onclick="openCategoriesModal('inventory')" title="Manage inventory categories">⚙ Categories</button>
+          <button id="btn-add-inventory" class="btn btn-primary" onclick="openModal('modal-inventory')">+ Add Item</button>
+        </div>
       </div>
       <div class="metrics-grid" id="inv-metrics" style="grid-template-columns:repeat(3,1fr);"></div>
       <div class="card" style="margin-bottom:16px;">
@@ -3080,6 +3089,41 @@ tr:hover td { background:var(--bg); }
   </div>
 </div>
 
+<!-- Manage Categories Modal -->
+<div class="modal-backdrop" id="modal-categories">
+  <div class="modal" style="width:520px;">
+    <div class="modal-head">
+      <span class="modal-title" id="cat-modal-title">Manage Categories</span>
+      <button class="modal-close" onclick="closeModal('modal-categories')">×</button>
+    </div>
+    <div class="modal-body">
+      <!-- Type switcher -->
+      <div style="display:flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:3px;margin-bottom:14px;">
+        <button id="cat-type-supplier"  onclick="setCategoryType('supplier')"  class="btn btn-primary btn-sm" style="flex:1;font-size:12px;">Supplier</button>
+        <button id="cat-type-inventory" onclick="setCategoryType('inventory')" class="btn btn-outline btn-sm" style="flex:1;font-size:12px;background:transparent;border:none;">Inventory</button>
+        <button id="cat-type-product"   onclick="setCategoryType('product')"   class="btn btn-outline btn-sm" style="flex:1;font-size:12px;background:transparent;border:none;">Product</button>
+      </div>
+
+      <div style="font-size:12px;color:var(--text2);margin-bottom:10px;" id="cat-type-help">Edit the categories available for suppliers. Changes apply immediately to dropdowns.</div>
+
+      <!-- Add new -->
+      <div style="display:flex;gap:6px;margin-bottom:12px;">
+        <input type="text" id="cat-new-input" placeholder="New category name..." style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;" onkeydown="if(event.key==='Enter'){addCategory();event.preventDefault();}">
+        <button class="btn btn-primary btn-sm" onclick="addCategory()">+ Add</button>
+      </div>
+
+      <!-- List -->
+      <div id="cat-list" style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;max-height:340px;overflow-y:auto;"></div>
+
+      <div style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.5;">💡 Renaming a category will update all existing records using the old name. Categories in use cannot be deleted — reassign those records first.</div>
+
+      <div class="form-actions">
+        <button class="btn btn-outline" onclick="closeModal('modal-categories')">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Customer Modal -->
 <div class="modal-backdrop" id="modal-customer">
   <div class="modal">
@@ -3496,6 +3540,10 @@ const DB = {
   payments: [],
   creditNotes: [],
   debitNotes: [],
+  // Editable category lists — managed via "Manage Categories" modal
+  supplierCategories: ['Spawn','Substrate','Packaging','Chemicals','Equipment','Other'],
+  inventoryCategories: ['Spawn','Substrate','Packaging','Chemicals','Equipment','Other'],
+  productCategories: ['Fresh','Dried','Processed','Bundle','Frozen','Powdered','Extract'],
   company: { name:'', regno:'', phone:'', email:'', address:'', bank:'', bankacc:'', footer:'Thank you for your business!' },
   nextIds: { expenses:1, sales:1, invoices:1, inventory:1, staff:1, customers:1, products:1, accounts:1, users:1, suppliers:1, payrollRuns:1, wageAdvances:1, transfers:1, cashflowItems:1, loans:1, claims:1, recurringExpenses:1, batches:1, harvests:1, packings:1, packingRates:1, salesOrders:1, lorries:1, refuels:1, maintenance:1, trips:1, routeRates:1, payments:1, creditNotes:1, debitNotes:1 }
 };
@@ -3544,6 +3592,7 @@ function doLogin() {
     populateAccountSelects();
     populateStatementAccounts();
     try { recomputeAllInvoiceStatuses(); } catch(e) { console.error('recomputeAllInvoiceStatuses:', e); }
+    try { populateCategorySelects(); } catch(e) { console.error('populateCategorySelects:', e); }
     renderDashboard();
     if (typeof applyCurrencyLabels === 'function') applyCurrencyLabels();
     startAutoSave();
@@ -10517,6 +10566,190 @@ function setSuppView(v) {
   if (btnGrid) { btnGrid.className = v==='grid'?'btn btn-primary btn-sm':'btn btn-outline btn-sm'; btnGrid.style.cssText = v==='grid'?'font-size:11px;padding:3px 10px;':'font-size:11px;padding:3px 10px;background:transparent;border:none;'; }
   if (btnList) { btnList.className = v==='list'?'btn btn-primary btn-sm':'btn btn-outline btn-sm'; btnList.style.cssText = v==='list'?'font-size:11px;padding:3px 10px;':'font-size:11px;padding:3px 10px;background:transparent;border:none;'; }
   renderSuppliers();
+}
+
+// ============================================================
+// CATEGORY MANAGEMENT (supplier / inventory / product)
+// ============================================================
+let currentCategoryType = 'supplier';
+
+const CATEGORY_CONFIG = {
+  supplier: {
+    dbKey: 'supplierCategories',
+    label: 'supplier',
+    recordCollection: 'suppliers',
+    recordField: 'cat',
+    selectIds: ['supp-cat','supp-cat-filter'],
+    hasAllOption: { 'supp-cat-filter': true },   // filter dropdowns get an "All categories" option
+    datalistId: null,
+    helpText: 'Edit the categories available for suppliers. Changes apply immediately to dropdowns.'
+  },
+  inventory: {
+    dbKey: 'inventoryCategories',
+    label: 'inventory item',
+    recordCollection: 'inventory',
+    recordField: 'cat',
+    selectIds: ['item-cat','inv-cat-filter'],
+    hasAllOption: { 'inv-cat-filter': true },
+    datalistId: null,
+    helpText: 'Edit the categories available for inventory items (spawn, substrate, packaging, etc).'
+  },
+  product: {
+    dbKey: 'productCategories',
+    label: 'product',
+    recordCollection: 'products',
+    recordField: 'cat',
+    selectIds: ['prod-cat-filter'],             // only the filter is a <select>
+    hasAllOption: { 'prod-cat-filter': true },
+    datalistId: 'prod-cat-list',                // product uses a <datalist> as suggestions
+    helpText: 'Edit the product category suggestions. Products use free-text entry with these as suggestions.'
+  }
+};
+
+function openCategoriesModal(type) {
+  currentCategoryType = type || 'supplier';
+  setCategoryType(currentCategoryType);
+  openModal('modal-categories');
+}
+
+function setCategoryType(type) {
+  currentCategoryType = type;
+  ['supplier','inventory','product'].forEach(t => {
+    const btn = document.getElementById('cat-type-'+t);
+    if (!btn) return;
+    if (t === type) {
+      btn.className = 'btn btn-primary btn-sm';
+      btn.style.cssText = 'flex:1;font-size:12px;';
+    } else {
+      btn.className = 'btn btn-outline btn-sm';
+      btn.style.cssText = 'flex:1;font-size:12px;background:transparent;border:none;';
+    }
+  });
+  const help = document.getElementById('cat-type-help');
+  if (help) help.textContent = CATEGORY_CONFIG[type].helpText;
+  document.getElementById('cat-modal-title').textContent = 'Manage ' + type.charAt(0).toUpperCase() + type.slice(1) + ' Categories';
+  renderCategoryList();
+}
+
+function renderCategoryList() {
+  const cfg  = CATEGORY_CONFIG[currentCategoryType];
+  const list = DB[cfg.dbKey] || [];
+  const container = document.getElementById('cat-list');
+  if (!container) return;
+  if (list.length === 0) {
+    container.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px;">No categories yet. Add one above.</div>';
+    return;
+  }
+  // Count usage for each category
+  const records = DB[cfg.recordCollection] || [];
+  const usage = {};
+  list.forEach(c => { usage[c] = records.filter(r => (r||{})[cfg.recordField] === c).length; });
+
+  container.innerHTML = list.map((name, idx) => {
+    const count = usage[name] || 0;
+    const inUse = count > 0;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;${idx>0?'border-top:1px solid var(--border);':''}">
+      <span style="flex:1;font-size:13px;font-weight:500;">${name}</span>
+      <span style="font-size:11px;color:var(--text3);min-width:70px;text-align:right;">${inUse?count+' in use':'unused'}</span>
+      <button class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 8px;" onclick="renameCategory(${idx})" title="Rename">✎</button>
+      <button class="btn btn-sm" style="font-size:11px;padding:3px 8px;background:${inUse?'var(--bg)':'#fee2e2'};color:${inUse?'var(--text3)':'var(--red)'};border:1px solid ${inUse?'var(--border)':'#fecaca'};${inUse?'cursor:not-allowed;':''}" onclick="deleteCategory(${idx})" title="${inUse?'Cannot delete — in use':'Delete'}">🗑</button>
+    </div>`;
+  }).join('');
+}
+
+function addCategory() {
+  const input = document.getElementById('cat-new-input');
+  const name  = (input.value||'').trim();
+  if (!name) return;
+  const cfg  = CATEGORY_CONFIG[currentCategoryType];
+  const list = DB[cfg.dbKey] || [];
+  // Case-insensitive duplicate check
+  if (list.some(c => c.toLowerCase() === name.toLowerCase())) {
+    alert(`"${name}" already exists in the ${currentCategoryType} categories.`);
+    return;
+  }
+  list.push(name);
+  DB[cfg.dbKey] = list;
+  input.value = '';
+  showToast(`Added "${name}"`);
+  renderCategoryList();
+  populateCategorySelects();
+}
+
+function renameCategory(idx) {
+  const cfg  = CATEGORY_CONFIG[currentCategoryType];
+  const list = DB[cfg.dbKey] || [];
+  const oldName = list[idx];
+  if (!oldName) return;
+  const newName = prompt(`Rename "${oldName}" to:`, oldName);
+  if (newName === null) return;
+  const trimmed = newName.trim();
+  if (!trimmed) return;
+  if (trimmed === oldName) return;
+  if (list.some((c,i) => i !== idx && c.toLowerCase() === trimmed.toLowerCase())) {
+    alert(`"${trimmed}" already exists. Pick a different name.`);
+    return;
+  }
+  // Count how many records will be affected
+  const records = DB[cfg.recordCollection] || [];
+  const affected = records.filter(r => (r||{})[cfg.recordField] === oldName).length;
+  let updateRecords = false;
+  if (affected > 0) {
+    updateRecords = confirm(`${affected} ${cfg.label}${affected>1?'s':''} currently use${affected>1?'':'s'} "${oldName}".\n\nClick OK to rename them to "${trimmed}" as well.\nClick Cancel to rename only the category (existing records will keep the old name).`);
+  }
+  list[idx] = trimmed;
+  DB[cfg.dbKey] = list;
+  if (updateRecords) {
+    records.forEach(r => { if (r && r[cfg.recordField] === oldName) r[cfg.recordField] = trimmed; });
+  }
+  showToast(`Renamed to "${trimmed}"${updateRecords ? ' · updated '+affected+' record'+(affected>1?'s':'') : ''}`);
+  renderCategoryList();
+  populateCategorySelects();
+  // Refresh whichever list is on screen
+  if (currentCategoryType === 'supplier' && typeof renderSuppliers === 'function') renderSuppliers();
+  if (currentCategoryType === 'inventory' && typeof renderInventory === 'function') renderInventory();
+  if (currentCategoryType === 'product' && typeof renderProducts === 'function') renderProducts();
+}
+
+function deleteCategory(idx) {
+  const cfg  = CATEGORY_CONFIG[currentCategoryType];
+  const list = DB[cfg.dbKey] || [];
+  const name = list[idx];
+  if (!name) return;
+  // Block deletion if in use
+  const records = DB[cfg.recordCollection] || [];
+  const inUseCount = records.filter(r => (r||{})[cfg.recordField] === name).length;
+  if (inUseCount > 0) {
+    alert(`Cannot delete "${name}" — ${inUseCount} ${cfg.label}${inUseCount>1?'s are':' is'} using this category.\n\nReassign those records to another category first (edit each one from the ${cfg.label} list), then try deleting again.`);
+    return;
+  }
+  if (!confirm(`Delete category "${name}"? This cannot be undone.`)) return;
+  list.splice(idx, 1);
+  DB[cfg.dbKey] = list;
+  showToast(`Deleted "${name}"`);
+  renderCategoryList();
+  populateCategorySelects();
+}
+
+// Rebuild every category-driven <select> and <datalist> from DB
+function populateCategorySelects() {
+  Object.keys(CATEGORY_CONFIG).forEach(type => {
+    const cfg  = CATEGORY_CONFIG[type];
+    const list = DB[cfg.dbKey] || [];
+    // Rebuild selects
+    (cfg.selectIds || []).forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const current = el.value;
+      const allOpt  = (cfg.hasAllOption && cfg.hasAllOption[id]) ? '<option value="">All categories</option>' : '';
+      el.innerHTML = allOpt + list.map(c => `<option value="${c}"${c===current?' selected':''}>${c}</option>`).join('');
+    });
+    // Rebuild datalist (product suggestions)
+    if (cfg.datalistId) {
+      const dl = document.getElementById(cfg.datalistId);
+      if (dl) dl.innerHTML = list.map(c => `<option value="${c}">${c}</option>`).join('');
+    }
+  });
 }
 
 function renderSuppliers() {
