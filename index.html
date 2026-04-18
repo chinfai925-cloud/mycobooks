@@ -603,6 +603,8 @@ tr:hover td { background:var(--bg); }
         <button id="inv-tab-1" onclick="switchInvTab(1)" class="btn btn-outline" style="border-bottom:2px solid var(--green);color:var(--green);border-radius:var(--radius-sm) var(--radius-sm) 0 0;">🧾 Invoices</button>
         <button id="inv-tab-2" onclick="switchInvTab(2)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">👤 Customer Statement</button>
         <button id="inv-tab-3" onclick="switchInvTab(3)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">💳 Payment History</button>
+        <button id="inv-tab-4" onclick="switchInvTab(4)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">📊 Aging</button>
+        <button id="inv-tab-5" onclick="switchInvTab(5)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">✓ Reconciliation</button>
       </div>
 
       <!-- Tab 1: Invoices -->
@@ -674,6 +676,55 @@ tr:hover td { background:var(--bg); }
           </div>
         </div>
         <div id="inv-pay-hist"></div>
+      </div>
+
+      <!-- Tab 4: Aging Report -->
+      <div id="inv-panel-4" style="display:none;">
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-body" style="padding:12px 16px;">
+            <div class="flex-row">
+              <input class="search-bar" placeholder="Search customer..." id="aging-search" oninput="renderAging()" style="width:240px;">
+              <select class="select-filter" id="aging-bucket" onchange="renderAging()">
+                <option value="">All buckets</option>
+                <option value="current">Current (not due)</option>
+                <option value="0-30">0–30 days overdue</option>
+                <option value="31-60">31–60 days overdue</option>
+                <option value="61-90">61–90 days overdue</option>
+                <option value="90+">90+ days overdue</option>
+              </select>
+              <span id="aging-summary" style="margin-left:auto;font-size:13px;color:var(--text2);"></span>
+              <button class="btn btn-outline btn-sm" onclick="printAgingReport()">🖨 Print</button>
+            </div>
+          </div>
+        </div>
+        <div id="aging-content"></div>
+      </div>
+
+      <!-- Tab 5: Reconciliation -->
+      <div id="inv-panel-5" style="display:none;">
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-body" style="padding:12px 16px;">
+            <div class="flex-row">
+              <select class="select-filter" id="recon-account" onchange="renderReconciliation()" style="min-width:180px;">
+                <option value="">— Select account —</option>
+              </select>
+              <select class="select-filter" id="recon-month" onchange="renderReconciliation()">
+                <option value="">All months</option>
+                <option value="2026-04">April 2026</option>
+                <option value="2026-03">March 2026</option>
+                <option value="2026-02">February 2026</option>
+                <option value="2026-01">January 2026</option>
+              </select>
+              <select class="select-filter" id="recon-status" onchange="renderReconciliation()">
+                <option value="">All</option>
+                <option value="unreconciled">Unreconciled only</option>
+                <option value="reconciled">Reconciled only</option>
+              </select>
+              <span id="recon-summary" style="margin-left:auto;font-size:13px;color:var(--text2);"></span>
+            </div>
+          </div>
+        </div>
+        <div id="recon-content"></div>
       </div>
     </div>
 
@@ -3492,6 +3543,7 @@ function doLogin() {
     populateProductSelects();
     populateAccountSelects();
     populateStatementAccounts();
+    try { recomputeAllInvoiceStatuses(); } catch(e) { console.error('recomputeAllInvoiceStatuses:', e); }
     renderDashboard();
     if (typeof applyCurrencyLabels === 'function') applyCurrencyLabels();
     startAutoSave();
@@ -8018,15 +8070,20 @@ function autoFillInvPrice() {}
 let invTab = 1;
 function switchInvTab(n) {
   invTab = n;
-  [1,2,3].forEach(i => {
-    document.getElementById('inv-panel-'+i).style.display = i===n ? '' : 'none';
+  [1,2,3,4,5].forEach(i => {
+    const panel = document.getElementById('inv-panel-'+i);
+    if (panel) panel.style.display = i===n ? '' : 'none';
     const btn = document.getElementById('inv-tab-'+i);
-    btn.style.borderBottomColor = i===n ? 'var(--green)' : 'transparent';
-    btn.style.color = i===n ? 'var(--green)' : 'var(--text)';
+    if (btn) {
+      btn.style.borderBottomColor = i===n ? 'var(--green)' : 'transparent';
+      btn.style.color = i===n ? 'var(--green)' : 'var(--text)';
+    }
   });
   if (n===1) renderInvoices();
   if (n===2) { populateStmtCustomers(); renderCustomerStatement(); }
   if (n===3) { populatePayHistCustomers(); renderPaymentHistory(); }
+  if (n===4) renderAging();
+  if (n===5) { populateReconAccounts(); renderReconciliation(); }
 }
 
 function populateStmtCustomers() {
@@ -8348,8 +8405,10 @@ function renderInvoices() {
     ? '<div class="empty-state"><div class="icon">🧾</div><p>No invoices found</p></div>'
     : `<table>
       <thead><tr>${sortTh('no','Invoice No.')}${sortTh('customer','Customer')}<th>Items</th>${sortTh('date','Issue Date')}${sortTh('due','Due Date')}${sortTh('status','Status')}${sortTh('total','Amount','text-right')}<th></th></tr></thead>
-      <tbody>${data.map(i => `<tr>
-        <td style="font-family:'DM Mono',monospace;font-size:12px;">${i.no}</td>
+      <tbody>${data.map(i => {
+        const isLocked = (DB.payments||[]).some(p => p.invoiceId === i.id);
+        return `<tr>
+        <td style="font-family:'DM Mono',monospace;font-size:12px;">${isLocked?'<span title="Locked: has payments" style="color:var(--text3);margin-right:4px;">🔒</span>':''}${i.no}</td>
         <td><div style="font-weight:500">${i.customer}</div><div style="font-size:11px;color:var(--text2)">${i.address||''}</div></td>
         <td style="font-size:12px;color:var(--text2);">${i.lines ? i.lines.map(l=>`${l.product} ×${l.qty}`).join('<br>') : (i.product ? `${i.product} ×${i.qty}` : '—')}</td>
         <td style="color:var(--text2)">${fmtDate(i.date)}</td>
@@ -8363,12 +8422,13 @@ function renderInvoices() {
         <td style="display:flex;gap:4px;padding-top:10px;">
           <button class="btn btn-outline btn-sm" onclick="printInvoice(${i.id})" title="Print Invoice">🖨 Inv</button>
           <button class="btn btn-outline btn-sm" onclick="printDO(${i.id})" title="Print Delivery Order">📦 DO</button>
-          ${can('canEdit') ? `<button class="btn btn-outline btn-sm" onclick="editInvoice(${i.id})">Edit</button>` : ''}
+          ${can('canEdit') ? `<button class="btn btn-outline btn-sm" onclick="editInvoice(${i.id})" title="${isLocked?'Locked — void payments first':'Edit invoice'}"${isLocked?' style="opacity:0.5;"':''}>${isLocked?'🔒 Edit':'Edit'}</button>` : ''}
           ${can('canEdit') && (i.status==='Pending'||i.status==='Overdue'||i.status==='Partial'||i.status==='Draft')?`<button class="btn btn-sm" style="background:var(--green-light);color:var(--green);font-size:11px;border:none;" onclick="markInvoicePaid(${i.id})">+ Payment</button>`:''}
           ${can('canEdit') && i.status==='Paid'?`<button class="btn btn-outline btn-sm" onclick="viewPayments(${i.id})" style="font-size:11px;">Payments</button>`:''}
           ${can('canDelete') ? `<button class="btn btn-danger btn-sm" onclick="deleteInvoice(${i.id})">Del</button>` : ''}
         </td>
-      </tr>`).join('')}</tbody>
+      </tr>`;
+      }).join('')}</tbody>
     </table>`;
 }
 
@@ -8636,6 +8696,15 @@ function printDO(id) {
 function editInvoice(id) {
   const inv = DB.invoices.find(i => i.id === id);
   if (!inv) return;
+  // LOCK: invoices with payments can't be edited until payments are voided
+  const payments = (DB.payments||[]).filter(p => p.invoiceId === id);
+  if (payments.length > 0) {
+    const totalPaid = payments.reduce((s,p) => s + (p.amount||0), 0);
+    const cs = (inv.currency === 'SGD') ? 'SGD' : 'RM';
+    const msg = `This invoice is locked from editing because it has ${payments.length} payment${payments.length>1?'s':''} recorded (total ${cs} ${totalPaid.toFixed(2)}).\n\nTo edit the invoice, first void or delete the payment(s) from the Payment History tab.\n\nYou can still view or print the invoice.`;
+    alert(msg);
+    return;
+  }
   editingInvoiceId = id;
   document.getElementById('inv-modal-heading').textContent = 'Edit Invoice';
   document.getElementById('inv-no').value = inv.no;
@@ -8757,6 +8826,331 @@ function createSalesFromInvoice(inv, account) {
       invoiceRef: inv.no
     });
   });
+}
+
+// ============================================================
+// DERIVED STATUS — single source of truth for invoice.status
+// ============================================================
+function computeInvoiceStatus(inv) {
+  if (!inv) return 'Draft';
+  // Preserve explicit Draft and Voided states (not derivable from payments)
+  if (inv.status === 'Draft' || inv.status === 'Voided') return inv.status;
+  const paid    = (DB.payments||[]).filter(p => p.invoiceId === inv.id).reduce((s,p) => s + (p.amount||0), 0);
+  const credits = (typeof getTotalCreditsForInvoice === 'function') ? getTotalCreditsForInvoice(inv.id) : 0;
+  const settled = paid + credits;
+  const total   = inv.total || 0;
+  if (settled >= total && total > 0) return 'Paid';
+  if (settled > 0) return 'Partial';
+  // No settlement yet — overdue if due date passed
+  if (inv.due) {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const dueD  = new Date(inv.due + 'T00:00:00');
+    if (dueD < today) return 'Overdue';
+  }
+  return 'Pending';
+}
+
+function recomputeAllInvoiceStatuses() {
+  let changed = 0;
+  (DB.invoices||[]).forEach(inv => {
+    const s = computeInvoiceStatus(inv);
+    if (inv.status !== s) { inv.status = s; changed++; }
+    // Clear account on non-paid invoices to avoid stale data
+    if (s !== 'Paid' && inv.account) inv.account = '';
+  });
+  return changed;
+}
+
+// ============================================================
+// AGING REPORT
+// ============================================================
+// (uses existing getInvoiceBalance() defined later in the file)
+
+function getAgingBucket(inv) {
+  // Not due yet → current; otherwise bucket by days overdue
+  const today = new Date(); today.setHours(0,0,0,0);
+  if (!inv.due) return 'current';
+  const dueD = new Date(inv.due + 'T00:00:00');
+  const diffDays = Math.floor((today - dueD) / 86400000);
+  if (diffDays < 0)  return 'current';
+  if (diffDays <= 30) return '0-30';
+  if (diffDays <= 60) return '31-60';
+  if (diffDays <= 90) return '61-90';
+  return '90+';
+}
+
+function renderAging() {
+  const search = ((document.getElementById('aging-search')||{}).value||'').toLowerCase();
+  const bucketFilter = (document.getElementById('aging-bucket')||{}).value||'';
+
+  // Collect outstanding invoices (anything with balance > 0, excluding Draft/Voided)
+  const outstanding = (DB.invoices||[]).filter(inv => {
+    if (inv.status === 'Draft' || inv.status === 'Voided') return false;
+    return getInvoiceBalance(inv) > 0.005;
+  });
+
+  // Group by customer, then by bucket
+  const byCust = {};
+  outstanding.forEach(inv => {
+    const cust = inv.customer || '(unknown)';
+    if (!byCust[cust]) byCust[cust] = { current:[], '0-30':[], '31-60':[], '61-90':[], '90+':[] };
+    const b = getAgingBucket(inv);
+    byCust[cust][b].push(inv);
+  });
+
+  // Build rows, applying search + bucket filter
+  let grandTotals = { current:0, '0-30':0, '31-60':0, '61-90':0, '90+':0, all:0 };
+  const rows = Object.keys(byCust).sort().filter(c => !search || c.toLowerCase().includes(search)).map(cust => {
+    const buckets = byCust[cust];
+    const totals  = { current:0, '0-30':0, '31-60':0, '61-90':0, '90+':0 };
+    Object.keys(totals).forEach(k => {
+      totals[k] = buckets[k].reduce((s,i) => s + getInvoiceBalance(i), 0);
+    });
+    const custTotal = Object.values(totals).reduce((a,b)=>a+b, 0);
+    // Apply bucket filter (hide customer if their filtered-bucket total is 0)
+    if (bucketFilter && totals[bucketFilter] <= 0) return null;
+    // Accumulate grand totals (respecting bucket filter)
+    if (bucketFilter) {
+      grandTotals[bucketFilter] += totals[bucketFilter];
+      grandTotals.all += totals[bucketFilter];
+    } else {
+      Object.keys(totals).forEach(k => grandTotals[k] += totals[k]);
+      grandTotals.all += custTotal;
+    }
+    const cell = (v, color) => v > 0
+      ? `<td class="text-right mono" style="color:${color};font-weight:500;">${fmt(v)}</td>`
+      : `<td class="text-right mono" style="color:var(--text3);">—</td>`;
+    return `<tr>
+      <td style="font-weight:500;">${cust}</td>
+      ${cell(totals.current, 'var(--text2)')}
+      ${cell(totals['0-30'],  'var(--amber)')}
+      ${cell(totals['31-60'], '#d97706')}
+      ${cell(totals['61-90'], 'var(--red)')}
+      ${cell(totals['90+'],   '#991b1b')}
+      <td class="text-right mono" style="font-weight:600;">${fmt(custTotal)}</td>
+    </tr>`;
+  }).filter(Boolean);
+
+  document.getElementById('aging-summary').textContent = `${rows.length} customer${rows.length!==1?'s':''} · Total outstanding: ${fmt(grandTotals.all)}`;
+
+  if (rows.length === 0) {
+    document.getElementById('aging-content').innerHTML = '<div class="card"><div class="empty-state"><div class="icon">✨</div><p>No outstanding invoices — you\'re all caught up!</p></div></div>';
+    return;
+  }
+
+  const bucketTotalCell = (v, color) => v > 0
+    ? `<td class="text-right mono" style="color:${color};font-weight:700;">${fmt(v)}</td>`
+    : `<td class="text-right mono" style="color:var(--text3);">—</td>`;
+
+  document.getElementById('aging-content').innerHTML = `
+    <div class="card">
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>Customer</th>
+          <th class="text-right">Current<br><span style="font-size:10px;color:var(--text3);font-weight:400;">Not yet due</span></th>
+          <th class="text-right">0–30<br><span style="font-size:10px;color:var(--text3);font-weight:400;">days overdue</span></th>
+          <th class="text-right">31–60<br><span style="font-size:10px;color:var(--text3);font-weight:400;">days overdue</span></th>
+          <th class="text-right">61–90<br><span style="font-size:10px;color:var(--text3);font-weight:400;">days overdue</span></th>
+          <th class="text-right">90+<br><span style="font-size:10px;color:var(--text3);font-weight:400;">days overdue</span></th>
+          <th class="text-right">Total</th>
+        </tr></thead>
+        <tbody>${rows.join('')}</tbody>
+        <tfoot>
+          <tr style="background:var(--bg);border-top:2px solid var(--border);">
+            <td style="font-weight:700;">TOTALS</td>
+            ${bucketTotalCell(grandTotals.current, 'var(--text2)')}
+            ${bucketTotalCell(grandTotals['0-30'],  'var(--amber)')}
+            ${bucketTotalCell(grandTotals['31-60'], '#d97706')}
+            ${bucketTotalCell(grandTotals['61-90'], 'var(--red)')}
+            ${bucketTotalCell(grandTotals['90+'],   '#991b1b')}
+            <td class="text-right mono" style="font-weight:700;color:var(--green);">${fmt(grandTotals.all)}</td>
+          </tr>
+        </tfoot>
+      </table></div>
+    </div>`;
+}
+
+function printAgingReport() {
+  const co = DB.company || {};
+  const today = new Date().toLocaleDateString('en-MY', {day:'2-digit',month:'long',year:'numeric'});
+  const outstanding = (DB.invoices||[]).filter(inv => {
+    if (inv.status === 'Draft' || inv.status === 'Voided') return false;
+    return getInvoiceBalance(inv) > 0.005;
+  });
+  const byCust = {};
+  outstanding.forEach(inv => {
+    const c = inv.customer || '(unknown)';
+    if (!byCust[c]) byCust[c] = { current:0, '0-30':0, '31-60':0, '61-90':0, '90+':0 };
+    byCust[c][getAgingBucket(inv)] += getInvoiceBalance(inv);
+  });
+  const tot = { current:0, '0-30':0, '31-60':0, '61-90':0, '90+':0, all:0 };
+  const rowsHtml = Object.keys(byCust).sort().map(c => {
+    const b = byCust[c];
+    const sum = b.current + b['0-30'] + b['31-60'] + b['61-90'] + b['90+'];
+    Object.keys(b).forEach(k => tot[k] += b[k]);
+    tot.all += sum;
+    const td = v => v > 0 ? `<td style="text-align:right;padding:7px 10px;border-bottom:1px solid #e5e7eb;">${fmt(v)}</td>` : `<td style="text-align:right;padding:7px 10px;border-bottom:1px solid #e5e7eb;color:#9ca3af;">—</td>`;
+    return `<tr><td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;">${c}</td>${td(b.current)}${td(b['0-30'])}${td(b['31-60'])}${td(b['61-90'])}${td(b['90+'])}<td style="text-align:right;padding:7px 10px;border-bottom:1px solid #e5e7eb;font-weight:600;">${fmt(sum)}</td></tr>`;
+  }).join('');
+  const win = window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head><title>Aging Report</title>
+    <style>
+      *{margin:0;padding:0;box-sizing:border-box;}
+      body{font-family:'Segoe UI',sans-serif;font-size:12px;color:#111;padding:32px;max-width:900px;margin:0 auto;}
+      .header{border-bottom:2px solid #166534;padding-bottom:14px;margin-bottom:20px;}
+      .company{font-size:20px;font-weight:700;color:#166534;}
+      .title{font-size:22px;font-weight:700;margin-top:4px;}
+      .asof{font-size:11px;color:#6b7280;margin-top:4px;}
+      table{width:100%;border-collapse:collapse;margin-bottom:18px;}
+      th{background:#f0fdf4;padding:9px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#6b7280;letter-spacing:0.04em;border-bottom:2px solid #166534;}
+      th.right{text-align:right;}
+      tfoot td{font-weight:700;border-top:2px solid #166534;padding-top:9px;background:#f9fafb;}
+      .footer{margin-top:22px;text-align:center;font-size:10px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:12px;}
+      @media print { body { padding:16px; } button { display:none; } }
+    </style></head><body>
+    <div class="header">
+      <div class="company">${co.name||'🍄 MycoBooks'}</div>
+      <div class="title">Accounts Receivable Aging</div>
+      <div class="asof">As of ${today}</div>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Customer</th>
+        <th class="right">Current</th>
+        <th class="right">0–30 days</th>
+        <th class="right">31–60 days</th>
+        <th class="right">61–90 days</th>
+        <th class="right">90+ days</th>
+        <th class="right">Total</th>
+      </tr></thead>
+      <tbody>${rowsHtml || '<tr><td colspan="7" style="text-align:center;padding:20px;color:#9ca3af;">No outstanding invoices</td></tr>'}</tbody>
+      <tfoot><tr>
+        <td style="padding:9px 10px;">TOTALS</td>
+        <td style="text-align:right;padding:9px 10px;">${fmt(tot.current)}</td>
+        <td style="text-align:right;padding:9px 10px;">${fmt(tot['0-30'])}</td>
+        <td style="text-align:right;padding:9px 10px;">${fmt(tot['31-60'])}</td>
+        <td style="text-align:right;padding:9px 10px;">${fmt(tot['61-90'])}</td>
+        <td style="text-align:right;padding:9px 10px;">${fmt(tot['90+'])}</td>
+        <td style="text-align:right;padding:9px 10px;color:#166534;">${fmt(tot.all)}</td>
+      </tr></tfoot>
+    </table>
+    <div class="footer">Generated ${today} · ${co.name||'MycoBooks'}</div>
+    <div style="text-align:center;margin-top:20px;"><button onclick="window.print()" style="padding:8px 22px;background:#166534;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;">🖨 Print</button></div>
+  </body></html>`);
+  win.document.close();
+}
+
+// ============================================================
+// RECONCILIATION VIEW
+// ============================================================
+function populateReconAccounts() {
+  const sel = document.getElementById('recon-account');
+  if (!sel) return;
+  const cur = sel.value;
+  // Gather accounts from both DB.accounts and any accounts actually used on payments
+  const usedAccounts = new Set((DB.payments||[]).map(p => p.account).filter(Boolean));
+  (DB.accounts||[]).forEach(a => usedAccounts.add(a.name));
+  const accounts = [...usedAccounts].sort();
+  sel.innerHTML = '<option value="">— Select account —</option>' + accounts.map(a => `<option value="${a}"${a===cur?' selected':''}>${a}</option>`).join('');
+}
+
+function renderReconciliation() {
+  const account = (document.getElementById('recon-account')||{}).value||'';
+  const month   = (document.getElementById('recon-month')||{}).value||'';
+  const statusF = (document.getElementById('recon-status')||{}).value||'';
+
+  if (!account) {
+    document.getElementById('recon-content').innerHTML = '<div class="card"><div class="empty-state"><div class="icon">🏦</div><p>Select a bank account to begin reconciling</p><p style="font-size:12px;color:var(--text2);margin-top:6px;">Tick off each payment as you match it against your bank statement</p></div></div>';
+    document.getElementById('recon-summary').textContent = '';
+    return;
+  }
+
+  let payments = (DB.payments||[]).filter(p => p.account === account);
+  if (month) payments = payments.filter(p => (p.date||'').startsWith(month));
+  if (statusF === 'reconciled')   payments = payments.filter(p => p.reconciled);
+  if (statusF === 'unreconciled') payments = payments.filter(p => !p.reconciled);
+  payments.sort((a,b) => (a.date||'').localeCompare(b.date||''));
+
+  const total        = payments.reduce((s,p) => s + (p.amount||0), 0);
+  const reconTotal   = payments.filter(p => p.reconciled).reduce((s,p) => s + (p.amount||0), 0);
+  const unreconTotal = total - reconTotal;
+
+  document.getElementById('recon-summary').textContent =
+    `${payments.length} payment${payments.length!==1?'s':''} · Reconciled: ${fmt(reconTotal)} · Unreconciled: ${fmt(unreconTotal)}`;
+
+  if (payments.length === 0) {
+    document.getElementById('recon-content').innerHTML = '<div class="card"><div class="empty-state"><div class="icon">📭</div><p>No payments match the current filters</p></div></div>';
+    return;
+  }
+
+  const rows = payments.map(p => {
+    const inv = (DB.invoices||[]).find(i => i.id === p.invoiceId);
+    const invNo = inv ? inv.no : '(deleted)';
+    const cust  = inv ? inv.customer : '—';
+    const reconciledOn = p.reconciledDate ? fmtDate(p.reconciledDate) : '';
+    return `<tr style="${p.reconciled?'background:#f0fdf4;':''}">
+      <td style="width:34px;text-align:center;">
+        <input type="checkbox" ${p.reconciled?'checked':''} onchange="togglePaymentReconciled(${p.id}, this.checked)" style="cursor:pointer;width:16px;height:16px;" title="Mark as reconciled">
+      </td>
+      <td style="color:var(--text2);white-space:nowrap;">${fmtDate(p.date)}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:12px;">${invNo}</td>
+      <td>${cust}</td>
+      <td style="font-size:12px;color:var(--text2);">${p.reference||'—'}</td>
+      <td class="text-right mono" style="font-weight:500;color:var(--green);">${fmt(p.amount||0)}</td>
+      <td style="font-size:11px;color:${p.reconciled?'var(--green)':'var(--text3)'};">${p.reconciled?('✓ '+reconciledOn):'Not reconciled'}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('recon-content').innerHTML = `
+    <div class="card" style="margin-bottom:12px;">
+      <div class="card-body" style="padding:14px 18px;display:flex;gap:20px;flex-wrap:wrap;">
+        <div><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.04em;">Total Deposits</div><div style="font-size:20px;font-weight:700;margin-top:2px;">${fmt(total)}</div></div>
+        <div><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.04em;">Reconciled</div><div style="font-size:20px;font-weight:700;margin-top:2px;color:var(--green);">${fmt(reconTotal)}</div></div>
+        <div><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.04em;">Unreconciled</div><div style="font-size:20px;font-weight:700;margin-top:2px;color:${unreconTotal>0?'var(--amber)':'var(--text3)'};">${fmt(unreconTotal)}</div></div>
+        <div style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+          <button class="btn btn-outline btn-sm" onclick="reconMarkAll(true)">✓ Tick all visible</button>
+          <button class="btn btn-outline btn-sm" onclick="reconMarkAll(false)">Untick all visible</button>
+        </div>
+      </div>
+    </div>
+    <div class="card"><div class="table-wrap"><table>
+      <thead><tr>
+        <th style="width:34px;"></th>
+        <th>Date</th>
+        <th>Invoice</th>
+        <th>Customer</th>
+        <th>Reference</th>
+        <th class="text-right">Amount</th>
+        <th>Status</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div></div>`;
+}
+
+function togglePaymentReconciled(payId, checked) {
+  const p = (DB.payments||[]).find(x => x.id === payId);
+  if (!p) return;
+  p.reconciled = !!checked;
+  p.reconciledDate = checked ? new Date().toISOString().slice(0,10) : null;
+  renderReconciliation();
+}
+
+function reconMarkAll(checked) {
+  const account = (document.getElementById('recon-account')||{}).value||'';
+  const month   = (document.getElementById('recon-month')||{}).value||'';
+  const statusF = (document.getElementById('recon-status')||{}).value||'';
+  if (!account) return;
+  let payments = (DB.payments||[]).filter(p => p.account === account);
+  if (month) payments = payments.filter(p => (p.date||'').startsWith(month));
+  if (statusF === 'reconciled')   payments = payments.filter(p => p.reconciled);
+  if (statusF === 'unreconciled') payments = payments.filter(p => !p.reconciled);
+  const today = new Date().toISOString().slice(0,10);
+  payments.forEach(p => {
+    p.reconciled = !!checked;
+    p.reconciledDate = checked ? today : null;
+  });
+  showToast(checked ? `Marked ${payments.length} payment${payments.length!==1?'s':''} as reconciled` : `Unticked ${payments.length} payment${payments.length!==1?'s':''}`);
+  renderReconciliation();
 }
 
 function markInvoicePaid(id) {
@@ -8895,6 +9289,12 @@ function printReceipt(payment, inv) {
 
 
 function deleteInvoice(id) {
+  // LOCK: invoices with payments can't be deleted until payments are voided
+  const payments = (DB.payments||[]).filter(p => p.invoiceId === id);
+  if (payments.length > 0) {
+    alert(`This invoice cannot be deleted because it has ${payments.length} payment${payments.length>1?'s':''} recorded.\n\nPlease void or delete the payment(s) first from the Payment History tab.`);
+    return;
+  }
   if (!confirm('Delete this invoice? Any linked sales records will also be removed.')) return;
   const inv = DB.invoices.find(i => i.id === id);
   DB.invoices = DB.invoices.filter(i => i.id !== id);
