@@ -1152,8 +1152,13 @@ tr:hover td { background:var(--bg); }
         <div class="metrics-grid" id="payroll-metrics" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px;"></div>
         <div class="flex-row" style="margin-bottom:12px;">
           <button id="btn-add-staff" class="btn btn-primary" onclick="openStaffModal()">+ Add Staff</button>
+          <div style="margin-left:auto;display:flex;gap:4px;background:var(--bg);padding:3px;border-radius:var(--radius-sm);">
+            <button id="staff-view-cards" class="btn btn-primary btn-sm" style="font-size:11px;padding:4px 12px;" onclick="setStaffView('cards')">📇 Cards</button>
+            <button id="staff-view-sheet" class="btn btn-outline btn-sm" style="font-size:11px;padding:4px 12px;background:transparent;border:none;" onclick="setStaffView('sheet')">📊 Spreadsheet</button>
+          </div>
         </div>
-        <div class="grid-2">
+        <!-- Cards view (default) -->
+        <div id="staff-cards-view" class="grid-2">
           <div class="card">
             <div class="card-head"><span class="card-title">Staff Wages</span></div>
             <div class="card-body" style="padding:0;" id="payroll-list"></div>
@@ -1161,6 +1166,16 @@ tr:hover td { background:var(--bg); }
           <div class="card">
             <div class="card-head"><span class="card-title">Department Breakdown</span></div>
             <div class="card-body" id="payroll-dept"></div>
+          </div>
+        </div>
+        <!-- Spreadsheet view -->
+        <div id="staff-sheet-view" style="display:none;">
+          <div class="card">
+            <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;">
+              <span class="card-title">Staff Spreadsheet — edit any cell directly</span>
+              <span style="font-size:11px;color:var(--text3);">Changes save automatically when you leave a cell</span>
+            </div>
+            <div class="card-body" style="padding:0;overflow-x:auto;" id="staff-sheet-body"></div>
           </div>
         </div>
       </div>
@@ -9279,6 +9294,45 @@ function renderPayrollStaff(month) {
     <div class="metric-card"><div class="metric-label">Monthly Payroll</div><div class="metric-value">${amountDisplay(totalWages)}</div><div class="metric-change neutral">Base salaries</div></div>
     <div class="metric-card"><div class="metric-label">Departments</div><div class="metric-value">${depts.length}</div><div class="metric-change neutral">Operating units</div></div>
   `;
+
+  // Render whichever view is active
+  if (staffView === 'sheet') {
+    renderStaffSpreadsheet();
+  } else {
+    renderStaffCards(totalWages, depts);
+  }
+}
+
+// ============================================================
+// STAFF VIEW TOGGLE
+// ============================================================
+let staffView = 'cards';
+
+function setStaffView(view) {
+  staffView = view;
+  const cardsBtn = document.getElementById('staff-view-cards');
+  const sheetBtn = document.getElementById('staff-view-sheet');
+  const cardsView = document.getElementById('staff-cards-view');
+  const sheetView = document.getElementById('staff-sheet-view');
+  if (view === 'sheet') {
+    cardsBtn.className = 'btn btn-outline btn-sm';
+    cardsBtn.style.cssText = 'font-size:11px;padding:4px 12px;background:transparent;border:none;';
+    sheetBtn.className = 'btn btn-primary btn-sm';
+    sheetBtn.style.cssText = 'font-size:11px;padding:4px 12px;';
+    cardsView.style.display = 'none';
+    sheetView.style.display = '';
+  } else {
+    cardsBtn.className = 'btn btn-primary btn-sm';
+    cardsBtn.style.cssText = 'font-size:11px;padding:4px 12px;';
+    sheetBtn.className = 'btn btn-outline btn-sm';
+    sheetBtn.style.cssText = 'font-size:11px;padding:4px 12px;background:transparent;border:none;';
+    cardsView.style.display = '';
+    sheetView.style.display = 'none';
+  }
+  renderPayrollStaff(document.getElementById('payroll-month').value);
+}
+
+function renderStaffCards(totalWages, depts) {
   document.getElementById('payroll-list').innerHTML = DB.staff.map(s => `
     <div class="payroll-row" style="padding:12px 16px;">
       <div style="display:flex;align-items:center;gap:12px;">
@@ -9316,6 +9370,155 @@ function renderPayrollStaff(month) {
       <div style="font-size:11px;color:var(--text3);margin-top:3px">${pct}% of payroll</div>
     </div>`;
   }).join('');
+}
+
+// ============================================================
+// STAFF SPREADSHEET VIEW — inline cell editing
+// ============================================================
+const DEPT_OPTIONS = ['Production','Harvesting','Packaging','Administration','Delivery','Maintenance','Sales'];
+const PAYTYPE_OPTIONS = [
+  {value:'salary',      label:'Fixed Salary'},
+  {value:'daily',       label:'Daily Rate'},
+  {value:'trip',        label:'Per Trip'},
+  {value:'commission',  label:'Commission'},
+];
+const EMPTYPE_OPTIONS = ['Full-time','Part-time','Contract'];
+
+function renderStaffSpreadsheet() {
+  const body = document.getElementById('staff-sheet-body');
+  if (!body) return;
+
+  if (DB.staff.length === 0) {
+    body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text3);">
+      No staff yet. Click <strong>+ Add Staff</strong> above to add your first employee.
+    </div>`;
+    return;
+  }
+
+  const cellStyle = 'padding:6px 8px;border:none;background:transparent;font-size:12px;font-family:inherit;width:100%;outline:none;';
+  const focusStyle = 'onfocus="this.style.background=\'var(--green-light)\'" onblur="this.style.background=\'transparent\'"';
+
+  body.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:1200px;">
+      <thead>
+        <tr style="background:var(--bg);border-bottom:2px solid var(--border);">
+          <th style="padding:8px;text-align:left;font-weight:500;color:var(--text2);position:sticky;left:0;background:var(--bg);z-index:1;min-width:160px;">Name</th>
+          <th style="padding:8px;text-align:left;font-weight:500;color:var(--text2);min-width:140px;">Role</th>
+          <th style="padding:8px;text-align:left;font-weight:500;color:var(--text2);min-width:130px;">Department</th>
+          <th style="padding:8px;text-align:left;font-weight:500;color:var(--text2);min-width:130px;">Pay Type</th>
+          <th style="padding:8px;text-align:right;font-weight:500;color:var(--text2);min-width:100px;">Rate (RM)</th>
+          <th style="padding:8px;text-align:left;font-weight:500;color:var(--text2);min-width:130px;">IC / Passport</th>
+          <th style="padding:8px;text-align:left;font-weight:500;color:var(--text2);min-width:120px;">Phone</th>
+          <th style="padding:8px;text-align:left;font-weight:500;color:var(--text2);min-width:100px;">Join Date</th>
+          <th style="padding:8px;text-align:left;font-weight:500;color:var(--text2);min-width:110px;">Employment</th>
+          <th style="padding:8px;text-align:center;font-weight:500;color:var(--text2);" title="EPF">EPF</th>
+          <th style="padding:8px;text-align:center;font-weight:500;color:var(--text2);" title="SOCSO">SOCSO</th>
+          <th style="padding:8px;text-align:center;font-weight:500;color:var(--text2);" title="EIS">EIS</th>
+          <th style="padding:8px;text-align:center;font-weight:500;color:var(--text2);min-width:110px;" title="Click to edit allowances in the full modal">Allowances</th>
+          <th style="padding:8px;text-align:center;font-weight:500;color:var(--text2);min-width:80px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${DB.staff.map(s => {
+          const allowTotal = (s.allowances || []).reduce((sum,a) => sum + (parseFloat(a.amount)||0), 0);
+          const allowCount = (s.allowances || []).length;
+          return `<tr style="border-bottom:1px solid var(--border);" data-staff-id="${s.id}">
+            <td style="padding:0;position:sticky;left:0;background:#fff;z-index:1;border-right:1px solid var(--border);">
+              <input type="text" value="${escAttr(s.name)}" data-field="name" data-sid="${s.id}"
+                style="${cellStyle}font-weight:500;" ${focusStyle}>
+            </td>
+            <td style="padding:0;"><input type="text" value="${escAttr(s.role||'')}" data-field="role" data-sid="${s.id}" style="${cellStyle}" ${focusStyle}></td>
+            <td style="padding:0;">
+              <select data-field="dept" data-sid="${s.id}" style="${cellStyle}cursor:pointer;" ${focusStyle}>
+                ${DEPT_OPTIONS.map(d => `<option value="${d}"${(s.dept||'Production')===d?' selected':''}>${d}</option>`).join('')}
+              </select>
+            </td>
+            <td style="padding:0;">
+              <select data-field="payType" data-sid="${s.id}" style="${cellStyle}cursor:pointer;" ${focusStyle}>
+                ${PAYTYPE_OPTIONS.map(p => `<option value="${p.value}"${(s.payType||'salary')===p.value?' selected':''}>${p.label}</option>`).join('')}
+              </select>
+            </td>
+            <td style="padding:0;">
+              <input type="number" min="0" step="0.01" value="${s.salary||0}" data-field="salary" data-sid="${s.id}"
+                style="${cellStyle}text-align:right;font-family:'DM Mono',monospace;" ${focusStyle}>
+            </td>
+            <td style="padding:0;"><input type="text" value="${escAttr(s.ic||'')}" data-field="ic" data-sid="${s.id}" style="${cellStyle}" ${focusStyle}></td>
+            <td style="padding:0;"><input type="text" value="${escAttr(s.phone||'')}" data-field="phone" data-sid="${s.id}" style="${cellStyle}" ${focusStyle}></td>
+            <td style="padding:0;"><input type="date" value="${s.join||''}" data-field="join" data-sid="${s.id}" style="${cellStyle}" ${focusStyle}></td>
+            <td style="padding:0;">
+              <select data-field="type" data-sid="${s.id}" style="${cellStyle}cursor:pointer;" ${focusStyle}>
+                ${EMPTYPE_OPTIONS.map(t => `<option value="${t}"${(s.type||'Full-time')===t?' selected':''}>${t}</option>`).join('')}
+              </select>
+            </td>
+            <td style="text-align:center;padding:6px;"><input type="checkbox" data-field="epf" data-sid="${s.id}" ${s.epf!==false?'checked':''} style="width:14px;height:14px;accent-color:var(--green);cursor:pointer;"></td>
+            <td style="text-align:center;padding:6px;"><input type="checkbox" data-field="socso" data-sid="${s.id}" ${s.socso!==false?'checked':''} style="width:14px;height:14px;accent-color:var(--green);cursor:pointer;"></td>
+            <td style="text-align:center;padding:6px;"><input type="checkbox" data-field="eis" data-sid="${s.id}" ${s.eis!==false?'checked':''} style="width:14px;height:14px;accent-color:var(--green);cursor:pointer;"></td>
+            <td style="text-align:center;padding:6px;">
+              <button class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 8px;" onclick="openStaffModal(${s.id})" title="Click Edit to manage allowances in the full modal">
+                ${allowCount > 0 ? `${fmt(allowTotal)} <span style="color:var(--text3);">(${allowCount})</span>` : '—'}
+              </button>
+            </td>
+            <td style="text-align:center;padding:6px;white-space:nowrap;">
+              <button class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 8px;" onclick="openStaffModal(${s.id})" title="Open full editor">⋯</button>
+              <button class="btn btn-danger btn-sm" style="font-size:11px;padding:3px 8px;" onclick="deleteStaff(${s.id})" title="Remove staff">×</button>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+
+  // Wire up inline-edit handlers
+  body.querySelectorAll('input[data-field], select[data-field]').forEach(el => {
+    const evtName = (el.type === 'checkbox' || el.tagName === 'SELECT' || el.type === 'date') ? 'change' : 'blur';
+    el.addEventListener(evtName, (ev) => {
+      const sid   = parseInt(ev.target.dataset.sid);
+      const field = ev.target.dataset.field;
+      const staff = DB.staff.find(x => x.id === sid);
+      if (!staff) return;
+
+      let newVal;
+      if (ev.target.type === 'checkbox')   newVal = ev.target.checked;
+      else if (ev.target.type === 'number') newVal = parseFloat(ev.target.value) || 0;
+      else                                   newVal = ev.target.value;
+
+      // Name is required — reject empty
+      if (field === 'name' && (!newVal || !newVal.toString().trim())) {
+        showToast('Name cannot be empty', 'error');
+        ev.target.value = staff.name;
+        return;
+      }
+      // Trim text fields
+      if (typeof newVal === 'string') newVal = newVal.trim();
+
+      // Only save if changed
+      const oldVal = staff[field];
+      if (oldVal === newVal) return;
+
+      staff[field] = newVal;
+      showToast(`${staff.name} — ${field} updated`);
+      // Refresh metrics row (don't re-render whole sheet; focus would be lost)
+      const depts = [...new Set(DB.staff.map(s => s.dept))];
+      const totalWages = DB.staff.reduce((sum,e) => sum + (e.salary||0), 0);
+      document.getElementById('payroll-metrics').innerHTML = `
+        <div class="metric-card"><div class="metric-label">Total Staff</div><div class="metric-value">${DB.staff.length}</div><div class="metric-change neutral">Active employees</div></div>
+        <div class="metric-card"><div class="metric-label">Monthly Payroll</div><div class="metric-value">${amountDisplay(totalWages)}</div><div class="metric-change neutral">Base salaries</div></div>
+        <div class="metric-card"><div class="metric-label">Departments</div><div class="metric-value">${depts.length}</div><div class="metric-change neutral">Operating units</div></div>
+      `;
+    });
+    // Enter key submits for text/number inputs
+    if (el.tagName === 'INPUT' && (el.type === 'text' || el.type === 'number')) {
+      el.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') ev.target.blur();
+      });
+    }
+  });
+}
+
+// Small HTML-escape helper for attribute values
+function escAttr(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/"/g,'&quot;')
+    .replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function renderAttendance(month) {
