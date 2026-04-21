@@ -2555,6 +2555,14 @@ tr:hover td { background:var(--bg); }
         <!-- Notes -->
         <div class="form-group" style="grid-column:1/-1;"><label>Notes <span style="font-weight:400;color:var(--text3);">(optional)</span></label><input type="text" id="staff-notes" placeholder="Any additional notes..."></div>
 
+        <!-- Allowances & Incentives (default monthly) -->
+        <div class="form-group" style="grid-column:1/-1;">
+          <label style="margin-bottom:4px;display:block;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;">Default Monthly Allowances & Incentives</label>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Applied every month automatically. Can be overridden per month in the Attendance tab.</div>
+          <div id="staff-allowances-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
+          <button type="button" class="btn btn-outline btn-sm" onclick="addStaffAllowanceRow()">+ Add Allowance</button>
+        </div>
+
         <div class="form-group" style="grid-column:1/-1;">
           <label style="margin-bottom:8px;display:block;">Statutory Contributions</label>
           <div style="display:flex;gap:16px;flex-wrap:wrap;">
@@ -2574,6 +2582,28 @@ tr:hover td { background:var(--bg); }
       <div class="form-actions">
         <button class="btn btn-outline" onclick="closeModal('modal-staff')">Cancel</button>
         <button class="btn btn-primary" id="staff-save-btn" onclick="saveStaff()">Add Staff</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Monthly Allowances Override Modal -->
+<div class="modal-backdrop" id="modal-month-allowances">
+  <div class="modal" style="width:560px;">
+    <div class="modal-head">
+      <span class="modal-title" id="month-allow-title">Allowances for —</span>
+      <button class="modal-close" onclick="closeModal('modal-month-allowances')">×</button>
+    </div>
+    <div class="modal-body">
+      <div id="month-allow-info" style="font-size:12px;color:var(--text2);margin-bottom:12px;padding:10px 12px;background:var(--bg);border-radius:var(--radius-sm);"></div>
+      <div id="month-allow-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="addMonthAllowanceRow()">+ Add Allowance</button>
+        <button type="button" class="btn btn-outline btn-sm" id="month-allow-reset-btn" onclick="resetMonthAllowances()" style="color:var(--amber);">↺ Reset to profile default</button>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-outline" onclick="closeModal('modal-month-allowances')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveMonthAllowances()">Save Allowances</button>
       </div>
     </div>
   </div>
@@ -3321,7 +3351,7 @@ const COLS = {
   sales:        ['id','date','customer','product','qty','price','total','type','account','notes','harvestId'],
   invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','currency','notes','product','qty','unit','discount'],
   inventory:    ['id','name','cat','unit','stock','reorder','cost','supplier'],
-  staff:        ['id','name','role','dept','payType','salary','ic','phone','joinDate','empType','epf','socso','eis','bank','bankAcc','notes'],
+  staff:        ['id','name','role','dept','payType','salary','ic','phone','joinDate','empType','epf','socso','eis','bank','bankAcc','notes','address','emergencyName','emergencyPhone','emergencyRel','allowances'],
   customers:    ['id','name','contact','phone','email','address','terms','currency','priceList','notes'],
   products:     ['id','name','cat','unit','price','priceSgd','desc','status','sort'],
   accounts:     ['id','name','type','description','balance'],
@@ -9194,14 +9224,34 @@ function calcNetPay(staff, att, month) {
   const otPay       = pt === 'trip' ? 0 : (staff.salary / ((wd || 1) * 8)) * (att.overtime || 0) * 1.5;
   const packingWage = calcPackingWages(staff.name, month);
   const tripWage    = calcTripWages(staff.name, month);
-  const grossPay    = basePay + otPay + packingWage + tripWage;
-  const statutory   = calcStatutory(staff, grossPay);
+
+  // Allowances — prefer per-month override (att.allowances) over profile default
+  const monthAllowances = Array.isArray(att.allowances)
+    ? att.allowances
+    : (staff.allowances || []).map(a => ({ ...a }));
+  const taxableAllow    = monthAllowances.filter(a => a.taxable).reduce((s,a) => s + (parseFloat(a.amount) || 0), 0);
+  const nonTaxableAllow = monthAllowances.filter(a => !a.taxable).reduce((s,a) => s + (parseFloat(a.amount) || 0), 0);
+
+  // Taxable (EPF-able) gross — base + OT + packing + trip + taxable allowances
+  const taxableGross = basePay + otPay + packingWage + tripWage + taxableAllow;
+  // Total gross pay (what the employee actually gets before deductions)
+  const grossPay     = taxableGross + nonTaxableAllow;
+
+  // Statutory applies only to taxable gross
+  const statutory = calcStatutory(staff, taxableGross);
+
   const manualDeduct  = parseFloat(att.deduction) || 0;
   const advanceDeduct = DB.wageAdvances
     .filter(a => a.staffId === staff.id && a.deductMonth === month && !a.deducted)
     .reduce((s, a) => s + a.amount, 0);
   const deduct = manualDeduct + advanceDeduct + statutory.totalEmp;
-  return { basePay, otPay, packingWage, tripWage, grossPay, statutory, deduct, advanceDeduct, manualDeduct, net: grossPay - deduct };
+  return {
+    basePay, otPay, packingWage, tripWage,
+    allowances: monthAllowances,
+    taxableAllow, nonTaxableAllow, taxableGross,
+    grossPay, statutory, deduct, advanceDeduct, manualDeduct,
+    net: grossPay - deduct
+  };
 }
 
 function renderPayrollStaff(month) {
@@ -9264,6 +9314,7 @@ function renderAttendance(month) {
         <th>Pay Type</th>
         <th style="text-align:center;">Days / Trips / Sales</th>
         <th style="text-align:center;">OT Hours</th>
+        <th style="text-align:center;">Allowances</th>
         <th style="text-align:center;">Deduction (RM)</th>
         <th>Note</th>
       </tr></thead>
@@ -9298,11 +9349,25 @@ function renderAttendance(month) {
             style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:center;"
             onchange="setAtt(${s.id},'${month}','overtime',this.value)">`;
 
+        // Allowances summary — show total and whether overridden
+        const effectiveAllowances = Array.isArray(att.allowances)
+          ? att.allowances
+          : (s.allowances || []);
+        const allowTotal = effectiveAllowances.reduce((sum,a) => sum + (parseFloat(a.amount)||0), 0);
+        const isOverridden = Array.isArray(att.allowances);
+        const allowBtn = `
+          <button class="btn btn-outline btn-sm" style="padding:4px 8px;font-size:11px;white-space:nowrap;"
+            onclick="openMonthAllowancesModal(${s.id},'${month}')">
+            ${allowTotal > 0 ? fmt(allowTotal) : '—'}
+            ${isOverridden ? '<span style="color:var(--amber);margin-left:4px;" title="Overridden for this month">✎</span>' : ''}
+          </button>`;
+
         return `<tr>
           <td style="font-weight:500;">${s.name}<div style="font-size:11px;color:var(--text2);">${s.role}</div></td>
           <td><span class="badge badge-blue" style="font-size:10px;">${payTypeLabel(s)}</span><div style="font-size:10px;color:var(--text3);margin-top:3px;">${payRateLabel(s)}</div></td>
           <td style="text-align:center;padding:6px 8px;">${mainInput}</td>
           <td style="text-align:center;padding:6px 8px;">${otInput}</td>
+          <td style="text-align:center;padding:6px 8px;">${allowBtn}</td>
           <td style="text-align:center;padding:6px 8px;">
             <input type="number" min="0" value="${att.deduction||0}"
               style="width:80px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:center;"
@@ -9328,6 +9393,114 @@ function setAtt(staffId, month, field, val) {
   attendanceEdits[key][field] = textFields.includes(field) ? val : parseFloat(val) || 0;
 }
 
+// ============================================================
+// MONTHLY ALLOWANCE OVERRIDE
+// ============================================================
+let monthAllowancesCtx = { staffId: null, month: null, draft: [] };
+
+function openMonthAllowancesModal(staffId, month) {
+  const s   = DB.staff.find(x => x.id === staffId);
+  if (!s) return;
+  const att = getAttendance(staffId, month);
+
+  // If attendance has an allowances array, it's an override; else start from profile defaults
+  const isOverride = Array.isArray(att.allowances);
+  const sourceRows = isOverride ? att.allowances : (s.allowances || []);
+
+  monthAllowancesCtx = {
+    staffId,
+    month,
+    draft: sourceRows.map(a => ({ name: a.name || '', amount: parseFloat(a.amount) || 0, taxable: !!a.taxable })),
+    wasOverride: isOverride,
+  };
+
+  const label = new Date(month+'-01').toLocaleDateString('en-MY',{month:'long',year:'numeric'});
+  document.getElementById('month-allow-title').textContent = `Allowances for ${s.name} — ${label}`;
+  document.getElementById('month-allow-info').innerHTML = isOverride
+    ? `<span style="color:var(--amber);">✎ Overridden for this month.</span> Changes apply only to ${label}. Reset to use the profile defaults.`
+    : `Showing profile defaults. Any edit here will override <strong>only ${label}</strong>; other months will still use the profile defaults.`;
+  document.getElementById('month-allow-reset-btn').style.display = isOverride ? '' : 'none';
+
+  renderMonthAllowanceRows();
+  openModal('modal-month-allowances');
+}
+
+function renderMonthAllowanceRows() {
+  const listEl = document.getElementById('month-allow-list');
+  listEl.innerHTML = monthAllowancesCtx.draft.map((a, idx) => `
+    <div style="display:flex;gap:6px;align-items:center;padding:6px;background:var(--bg);border-radius:var(--radius-sm);">
+      <input type="text" value="${a.name || ''}" placeholder="e.g. Transport" list="allowance-presets"
+        style="flex:2;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;"
+        data-field="name" data-idx="${idx}">
+      <input type="number" min="0" step="0.01" value="${a.amount || 0}" placeholder="0.00"
+        style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:right;"
+        data-field="amount" data-idx="${idx}">
+      <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);white-space:nowrap;cursor:pointer;" title="If checked, this allowance is added to gross pay and EPF/SOCSO/EIS applies.">
+        <input type="checkbox" ${a.taxable ? 'checked' : ''} data-field="taxable" data-idx="${idx}"
+          style="width:13px;height:13px;accent-color:var(--green);cursor:pointer;">
+        EPF-able
+      </label>
+      <button type="button" class="btn btn-outline btn-sm" style="padding:4px 8px;font-size:11px;color:var(--red);"
+        onclick="removeMonthAllowanceRow(${idx})" title="Remove">×</button>
+    </div>`).join('');
+
+  listEl.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', (ev) => {
+      const idx   = parseInt(ev.target.dataset.idx);
+      const field = ev.target.dataset.field;
+      if (!monthAllowancesCtx.draft[idx]) return;
+      if (field === 'taxable') {
+        monthAllowancesCtx.draft[idx].taxable = ev.target.checked;
+      } else if (field === 'amount') {
+        monthAllowancesCtx.draft[idx].amount = parseFloat(ev.target.value) || 0;
+      } else {
+        monthAllowancesCtx.draft[idx][field] = ev.target.value;
+        const preset = COMMON_ALLOWANCES.find(p => p.name.toLowerCase() === ev.target.value.toLowerCase());
+        if (preset) {
+          monthAllowancesCtx.draft[idx].taxable = preset.taxable;
+          renderMonthAllowanceRows();
+        }
+      }
+    });
+  });
+}
+
+function addMonthAllowanceRow() {
+  monthAllowancesCtx.draft.push({ name: '', amount: 0, taxable: false });
+  renderMonthAllowanceRows();
+}
+
+function removeMonthAllowanceRow(idx) {
+  monthAllowancesCtx.draft.splice(idx, 1);
+  renderMonthAllowanceRows();
+}
+
+function resetMonthAllowances() {
+  if (!confirm('Reset to profile defaults? The monthly override will be removed.')) return;
+  const { staffId, month } = monthAllowancesCtx;
+  const key = `${staffId}-${month}`;
+  if (attendanceEdits[key]) {
+    delete attendanceEdits[key].allowances;
+  }
+  closeModal('modal-month-allowances');
+  showToast('Reset to profile defaults');
+  renderAttendance(month);
+}
+
+function saveMonthAllowances() {
+  const { staffId, month, draft } = monthAllowancesCtx;
+  const key = `${staffId}-${month}`;
+  if (!attendanceEdits[key]) {
+    attendanceEdits[key] = { ...getAttendance(staffId, month) };
+  }
+  attendanceEdits[key].allowances = draft
+    .filter(a => a.name && a.name.trim())
+    .map(a => ({ name: a.name.trim(), amount: parseFloat(a.amount) || 0, taxable: !!a.taxable }));
+  closeModal('modal-month-allowances');
+  showToast('Allowances saved for this month');
+  renderAttendance(month);
+}
+
 function saveAttendance() {
   showToast('Attendance saved — go to Run Payroll to process');
 }
@@ -9347,12 +9520,12 @@ function renderRunPayroll(month) {
 
   const entries = DB.staff.map(s => {
     const att = getAttendance(s.id, month);
-    const { basePay, otPay, packingWage, tripWage, grossPay, statutory, deduct, advanceDeduct, net, manualDeduct } = calcNetPay(s, att, month);
+    const { basePay, otPay, packingWage, tripWage, allowances, taxableAllow, nonTaxableAllow, taxableGross, grossPay, statutory, deduct, advanceDeduct, net, manualDeduct } = calcNetPay(s, att, month);
     const acct = existing
       ? (existing.entries.find(e=>e.staffId===s.id)||{}).account || defaultAcct
       : (payrollAccounts[s.id] || defaultAcct);
     if (!payrollAccounts[s.id]) payrollAccounts[s.id] = acct;
-    return { s, att, basePay, otPay, packingWage, tripWage, grossPay, statutory, deduct, advanceDeduct, manualDeduct, net, acct };
+    return { s, att, basePay, otPay, packingWage, tripWage, allowances, taxableAllow, nonTaxableAllow, taxableGross, grossPay, statutory, deduct, advanceDeduct, manualDeduct, net, acct };
   });
   const totalNet = entries.reduce((sum,e) => sum + e.net, 0);
   const totalEpfEmr   = entries.reduce((s,e) => s + e.statutory.epfEmr, 0);
@@ -9458,9 +9631,9 @@ function processPayroll(month) {
   const defaultAcct = (DB.accounts[0]||{}).name||'';
   const entries = DB.staff.map(s => {
     const att = getAttendance(s.id, month);
-    const { basePay, otPay, packingWage, tripWage, grossPay, statutory, deduct, advanceDeduct, net } = calcNetPay(s, att, month);
+    const { basePay, otPay, packingWage, tripWage, allowances, taxableAllow, nonTaxableAllow, taxableGross, grossPay, statutory, deduct, advanceDeduct, net } = calcNetPay(s, att, month);
     const account = payrollAccounts[s.id] || defaultAcct;
-    return { staffId: s.id, name: s.name, ...att, basePay, otPay, packingWage, tripWage, grossPay, statutory, deduct, advanceDeduct, net, account };
+    return { staffId: s.id, name: s.name, ...att, basePay, otPay, packingWage, tripWage, allowances, taxableAllow, nonTaxableAllow, taxableGross, grossPay, statutory, deduct, advanceDeduct, net, account };
   });
   const totalNet = entries.reduce((s,e) => s + e.net, 0);
   const run = {
@@ -9575,6 +9748,9 @@ function viewPayslip(runId, staffId) {
           ${(entry.otPay||0) > 0 ? `<tr><td style="padding:4px 0 4px 12px;color:var(--text2);">Overtime Allowance</td><td class="text-right mono">${fmt(entry.otPay)}</td></tr>` : ''}
           ${(entry.packingWage||0) > 0 ? `<tr><td style="padding:4px 0 4px 12px;color:var(--text2);">📦 Packing Wages</td><td class="text-right mono" style="color:var(--green);">${fmt(entry.packingWage)}</td></tr>` : ''}
           ${(entry.tripWage||0) > 0 ? `<tr><td style="padding:4px 0 4px 12px;color:var(--text2);">🚛 Trip Wages</td><td class="text-right mono" style="color:var(--green);">${fmt(entry.tripWage)}</td></tr>` : ''}
+          ${(entry.allowances || []).filter(a => (parseFloat(a.amount)||0) > 0).map(a =>
+            `<tr><td style="padding:4px 0 4px 12px;color:var(--text2);">${a.name}${a.taxable ? '' : ' <span style="font-size:10px;color:var(--text3);">(non-taxable)</span>'}</td><td class="text-right mono">${fmt(parseFloat(a.amount)||0)}</td></tr>`
+          ).join('')}
           <tr><td style="padding:6px 0;color:var(--text2);">Gross Pay</td><td class="text-right mono">${fmt(entry.grossPay||entry.basePay)}</td></tr>
           <tr style="border-top:1px solid var(--border);"><td style="padding:6px 0;color:var(--text2);font-weight:500;" colspan="2">Deductions</td></tr>
           ${entry.statutory && entry.statutory.epfEmp > 0 ? `<tr><td style="padding:4px 0 4px 12px;color:var(--text2);">EPF (Employee 11%)</td><td class="text-right mono text-red">(${fmt(entry.statutory.epfEmp)})</td></tr>` : ''}
@@ -9607,6 +9783,79 @@ function viewPayslip(runId, staffId) {
 
 let editingStaffId = null;
 
+// ============================================================
+// STAFF ALLOWANCES — UI helpers
+// ============================================================
+// Common allowance presets — users can also type custom names
+const COMMON_ALLOWANCES = [
+  { name: 'Transport Allowance',    taxable: false },
+  { name: 'Meal Allowance',          taxable: false },
+  { name: 'Phone Allowance',         taxable: false },
+  { name: 'Housing Allowance',       taxable: true  },
+  { name: 'Attendance Bonus',        taxable: true  },
+  { name: 'Performance Incentive',   taxable: true  },
+  { name: 'Production Bonus',        taxable: true  },
+  { name: 'Shift Allowance',         taxable: true  },
+];
+
+function renderStaffAllowanceRows(allowances) {
+  const listEl = document.getElementById('staff-allowances-list');
+  listEl.innerHTML = (allowances || []).map((a, idx) => `
+    <div class="staff-allowance-row" style="display:flex;gap:6px;align-items:center;padding:6px;background:var(--bg);border-radius:var(--radius-sm);">
+      <input type="text" value="${a.name || ''}" placeholder="e.g. Transport" list="allowance-presets"
+        style="flex:2;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;"
+        data-field="name" data-idx="${idx}">
+      <input type="number" min="0" step="0.01" value="${a.amount || 0}" placeholder="0.00"
+        style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:right;"
+        data-field="amount" data-idx="${idx}">
+      <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);white-space:nowrap;cursor:pointer;" title="If checked, this allowance is added to gross pay and EPF/SOCSO/EIS applies to it.">
+        <input type="checkbox" ${a.taxable ? 'checked' : ''} data-field="taxable" data-idx="${idx}"
+          style="width:13px;height:13px;accent-color:var(--green);cursor:pointer;">
+        EPF-able
+      </label>
+      <button type="button" class="btn btn-outline btn-sm" style="padding:4px 8px;font-size:11px;color:var(--red);"
+        onclick="removeStaffAllowanceRow(${idx})" title="Remove">×</button>
+    </div>`).join('') +
+    `<datalist id="allowance-presets">
+      ${COMMON_ALLOWANCES.map(p => `<option value="${p.name}">`).join('')}
+    </datalist>`;
+
+  // Wire up change handlers — read straight into staffAllowancesDraft
+  listEl.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', (ev) => {
+      const idx   = parseInt(ev.target.dataset.idx);
+      const field = ev.target.dataset.field;
+      if (!staffAllowancesDraft[idx]) return;
+      if (field === 'taxable') {
+        staffAllowancesDraft[idx].taxable = ev.target.checked;
+      } else if (field === 'amount') {
+        staffAllowancesDraft[idx].amount = parseFloat(ev.target.value) || 0;
+      } else {
+        staffAllowancesDraft[idx][field] = ev.target.value;
+        // Auto-set taxable default when a preset name is typed
+        const preset = COMMON_ALLOWANCES.find(p => p.name.toLowerCase() === ev.target.value.toLowerCase());
+        if (preset) {
+          staffAllowancesDraft[idx].taxable = preset.taxable;
+          // Re-render so checkbox updates
+          renderStaffAllowanceRows(staffAllowancesDraft);
+        }
+      }
+    });
+  });
+}
+
+let staffAllowancesDraft = []; // working copy while modal is open
+
+function addStaffAllowanceRow() {
+  staffAllowancesDraft.push({ name: '', amount: 0, taxable: false });
+  renderStaffAllowanceRows(staffAllowancesDraft);
+}
+
+function removeStaffAllowanceRow(idx) {
+  staffAllowancesDraft.splice(idx, 1);
+  renderStaffAllowanceRows(staffAllowancesDraft);
+}
+
 function openStaffModal(id) {
   editingStaffId = id || null;
   document.getElementById('staff-modal-title').textContent = id ? 'Edit Staff Member' : 'Add Staff Member';
@@ -9633,6 +9882,8 @@ function openStaffModal(id) {
     document.getElementById('staff-bank').value            = s.bank||'';
     document.getElementById('staff-bank-acc').value        = s.bankAcc||'';
     document.getElementById('staff-notes').value           = s.notes||'';
+    staffAllowancesDraft = (s.allowances || []).map(a => ({ ...a }));
+    renderStaffAllowanceRows(staffAllowancesDraft);
     togglePayRateLabel();
   } else {
     document.getElementById('staff-name').value     = '';
@@ -9654,6 +9905,8 @@ function openStaffModal(id) {
     document.getElementById('staff-bank').value            = '';
     document.getElementById('staff-bank-acc').value        = '';
     document.getElementById('staff-notes').value           = '';
+    staffAllowancesDraft = [];
+    renderStaffAllowanceRows(staffAllowancesDraft);
     togglePayRateLabel();
   }
   openModal('modal-staff');
@@ -9683,6 +9936,11 @@ function saveStaff() {
     bank:           document.getElementById('staff-bank').value,
     bankAcc:        document.getElementById('staff-bank-acc').value.trim(),
     notes:          document.getElementById('staff-notes').value.trim(),
+    allowances:     staffAllowancesDraft.filter(a => a.name && a.name.trim()).map(a => ({
+      name:    a.name.trim(),
+      amount:  parseFloat(a.amount) || 0,
+      taxable: !!a.taxable,
+    })),
   };
   if (editingStaffId) {
     const idx = DB.staff.findIndex(s => s.id === editingStaffId);
