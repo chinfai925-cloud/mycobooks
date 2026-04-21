@@ -2496,7 +2496,7 @@ tr:hover td { background:var(--bg); }
         <div class="form-group" style="grid-column:1/-1"><label>Full Name</label><input type="text" id="staff-name" placeholder="Full name"></div>
         <div class="form-group"><label>Role / Position</label><input type="text" id="staff-role" placeholder="e.g. Lorry Driver"></div>
         <div class="form-group"><label>Department</label>
-          <select id="staff-dept"><option>Production</option><option>Harvesting</option><option>Packaging</option><option>Administration</option><option>Delivery</option><option>Maintenance</option></select>
+          <select id="staff-dept"><option>Production</option><option>Harvesting</option><option>Packaging</option><option>Administration</option><option>Delivery</option><option>Maintenance</option><option>Sales</option></select>
         </div>
         <div class="form-group"><label>Pay Type</label>
           <select id="staff-pay-type" onchange="togglePayRateLabel()">
@@ -5241,13 +5241,30 @@ function openOrderModal(id) {
   document.getElementById('so-priority').value = 'Normal';
 
   // Populate salesperson dropdown — always include current user even if not in staff list
-  const staffNames = DB.staff.map(s => s.name);
+  // Prioritize staff in the Sales department; fall back to all staff if none are assigned yet
+  const salesStaff = DB.staff.filter(s => s.dept === 'Sales');
+  const otherStaff = DB.staff.filter(s => s.dept !== 'Sales');
   const currentName = DB.currentUser ? DB.currentUser.name : '';
-  const extraOption = currentName && !staffNames.includes(currentName)
+  const allListedNames = DB.staff.map(s => s.name);
+  const extraOption = currentName && !allListedNames.includes(currentName)
     ? `<option value="${currentName}">${currentName}</option>` : '';
-  document.getElementById('so-salesperson').innerHTML =
-    '<option value="">— Select —</option>' + extraOption +
-    DB.staff.map(s=>`<option value="${s.name}">${s.name}</option>`).join('');
+
+  let dropdownHtml = '<option value="">— Select —</option>' + extraOption;
+  if (salesStaff.length > 0) {
+    // Show Sales dept as the primary group, others under a secondary group
+    dropdownHtml += `<optgroup label="Sales Department">`
+      + salesStaff.map(s => `<option value="${s.name}">${s.name}</option>`).join('')
+      + `</optgroup>`;
+    if (otherStaff.length > 0) {
+      dropdownHtml += `<optgroup label="Other Staff">`
+        + otherStaff.map(s => `<option value="${s.name}">${s.name}</option>`).join('')
+        + `</optgroup>`;
+    }
+  } else {
+    // No Sales dept staff — fall back to showing all staff (original behavior)
+    dropdownHtml += DB.staff.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+  }
+  document.getElementById('so-salesperson').innerHTML = dropdownHtml;
 
   // Auto-fill and lock for salesperson role
   if (can('onlyOrders') && DB.currentUser) {
