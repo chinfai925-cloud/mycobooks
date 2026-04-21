@@ -467,7 +467,6 @@ tr:hover td { background:var(--bg); }
           <div class="page-subtitle">Record and track all farm expenditures</div>
         </div>
         <div class="flex-row">
-          <button class="btn btn-outline" onclick="openCategoriesModal('expense')" title="Manage expense categories">⚙ Categories</button>
           <button id="btn-add-expense" class="btn btn-primary" onclick="resetExpModal();addExpLine();populateSuppDatalist();openModal('modal-expense')">+ Add Expense</button>
         </div>
       </div>
@@ -604,8 +603,6 @@ tr:hover td { background:var(--bg); }
         <button id="inv-tab-1" onclick="switchInvTab(1)" class="btn btn-outline" style="border-bottom:2px solid var(--green);color:var(--green);border-radius:var(--radius-sm) var(--radius-sm) 0 0;">🧾 Invoices</button>
         <button id="inv-tab-2" onclick="switchInvTab(2)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">👤 Customer Statement</button>
         <button id="inv-tab-3" onclick="switchInvTab(3)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">💳 Payment History</button>
-        <button id="inv-tab-4" onclick="switchInvTab(4)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">📊 Aging</button>
-        <button id="inv-tab-5" onclick="switchInvTab(5)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">✓ Reconciliation</button>
       </div>
 
       <!-- Tab 1: Invoices -->
@@ -678,55 +675,6 @@ tr:hover td { background:var(--bg); }
         </div>
         <div id="inv-pay-hist"></div>
       </div>
-
-      <!-- Tab 4: Aging Report -->
-      <div id="inv-panel-4" style="display:none;">
-        <div class="card" style="margin-bottom:16px;">
-          <div class="card-body" style="padding:12px 16px;">
-            <div class="flex-row">
-              <input class="search-bar" placeholder="Search customer..." id="aging-search" oninput="renderAging()" style="width:240px;">
-              <select class="select-filter" id="aging-bucket" onchange="renderAging()">
-                <option value="">All buckets</option>
-                <option value="current">Current (not due)</option>
-                <option value="0-30">0–30 days overdue</option>
-                <option value="31-60">31–60 days overdue</option>
-                <option value="61-90">61–90 days overdue</option>
-                <option value="90+">90+ days overdue</option>
-              </select>
-              <span id="aging-summary" style="margin-left:auto;font-size:13px;color:var(--text2);"></span>
-              <button class="btn btn-outline btn-sm" onclick="printAgingReport()">🖨 Print</button>
-            </div>
-          </div>
-        </div>
-        <div id="aging-content"></div>
-      </div>
-
-      <!-- Tab 5: Reconciliation -->
-      <div id="inv-panel-5" style="display:none;">
-        <div class="card" style="margin-bottom:16px;">
-          <div class="card-body" style="padding:12px 16px;">
-            <div class="flex-row">
-              <select class="select-filter" id="recon-account" onchange="renderReconciliation()" style="min-width:180px;">
-                <option value="">— Select account —</option>
-              </select>
-              <select class="select-filter" id="recon-month" onchange="renderReconciliation()">
-                <option value="">All months</option>
-                <option value="2026-04">April 2026</option>
-                <option value="2026-03">March 2026</option>
-                <option value="2026-02">February 2026</option>
-                <option value="2026-01">January 2026</option>
-              </select>
-              <select class="select-filter" id="recon-status" onchange="renderReconciliation()">
-                <option value="">All</option>
-                <option value="unreconciled">Unreconciled only</option>
-                <option value="reconciled">Reconciled only</option>
-              </select>
-              <span id="recon-summary" style="margin-left:auto;font-size:13px;color:var(--text2);"></span>
-            </div>
-          </div>
-        </div>
-        <div id="recon-content"></div>
-      </div>
     </div>
 
     <!-- PRODUCTS -->
@@ -736,10 +684,7 @@ tr:hover td { background:var(--bg); }
           <div class="page-title">Products</div>
           <div class="page-subtitle">Manage your mushroom catalogue, prices, and units</div>
         </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-outline" onclick="openCategoriesModal('product')" title="Manage product categories">⚙ Categories</button>
-          <button id="btn-add-product" class="btn btn-primary" onclick="openProductModal()">+ Add Product</button>
-        </div>
+        <button id="btn-add-product" class="btn btn-primary" onclick="openProductModal()">+ Add Product</button>
       </div>
       <div class="card" style="margin-bottom:16px;">
         <div class="card-body" style="padding:12px 16px;">
@@ -764,10 +709,7 @@ tr:hover td { background:var(--bg); }
           <div class="page-title">Suppliers</div>
           <div class="page-subtitle">Manage your vendors and supply sources</div>
         </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-outline" onclick="openCategoriesModal('supplier')" title="Manage supplier categories">⚙ Categories</button>
-          <button id="btn-add-supplier" class="btn btn-primary" onclick="openSupplierModal()">+ Add Supplier</button>
-        </div>
+        <button id="btn-add-supplier" class="btn btn-primary" onclick="openSupplierModal()">+ Add Supplier</button>
       </div>
       <div class="card" style="margin-bottom:16px;">
         <div class="card-body" style="padding:12px 16px;">
@@ -893,10 +835,7 @@ tr:hover td { background:var(--bg); }
           <div class="page-title">Inventory & Supplies</div>
           <div class="page-subtitle">Track stock levels and reorder points</div>
         </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-outline" onclick="openCategoriesModal('inventory')" title="Manage inventory categories">⚙ Categories</button>
-          <button id="btn-add-inventory" class="btn btn-primary" onclick="openModal('modal-inventory')">+ Add Item</button>
-        </div>
+        <button id="btn-add-inventory" class="btn btn-primary" onclick="openModal('modal-inventory')">+ Add Item</button>
       </div>
       <div class="metrics-grid" id="inv-metrics" style="grid-template-columns:repeat(3,1fr);"></div>
       <div class="card" style="margin-bottom:16px;">
@@ -2557,7 +2496,7 @@ tr:hover td { background:var(--bg); }
         <div class="form-group" style="grid-column:1/-1"><label>Full Name</label><input type="text" id="staff-name" placeholder="Full name"></div>
         <div class="form-group"><label>Role / Position</label><input type="text" id="staff-role" placeholder="e.g. Lorry Driver"></div>
         <div class="form-group"><label>Department</label>
-          <select id="staff-dept"><option>Production</option><option>Harvesting</option><option>Packaging</option><option>Administration</option><option>Delivery</option></select>
+          <select id="staff-dept"><option>Production</option><option>Harvesting</option><option>Packaging</option><option>Administration</option><option>Delivery</option><option>Maintenance</option></select>
         </div>
         <div class="form-group"><label>Pay Type</label>
           <select id="staff-pay-type" onchange="togglePayRateLabel()">
@@ -2701,56 +2640,6 @@ tr:hover td { background:var(--bg); }
       <div class="form-actions" style="margin-top:16px;">
         <button class="btn btn-outline" onclick="closeModal('modal-mark-exp-paid')">Cancel</button>
         <button class="btn btn-primary" onclick="confirmExpensePaid()">Confirm Payment</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Edit Expense Modal -->
-<div class="modal-backdrop" id="modal-edit-expense">
-  <div class="modal" style="width:560px;">
-    <div class="modal-head">
-      <span class="modal-title">Edit Expense</span>
-      <button class="modal-close" onclick="closeModal('modal-edit-expense')">×</button>
-    </div>
-    <div class="modal-body">
-      <input type="hidden" id="edit-exp-id">
-      <div class="form-grid form-grid-2">
-        <div class="form-group"><label>Date</label>
-          <input type="date" id="edit-exp-date" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
-        </div>
-        <div class="form-group"><label>Amount (RM)</label>
-          <input type="number" min="0" step="0.01" id="edit-exp-amount" placeholder="0.00" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
-        </div>
-        <div class="form-group" style="grid-column:1/-1"><label>Description</label>
-          <input type="text" id="edit-exp-desc" placeholder="What was this expense for?" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
-        </div>
-        <div class="form-group"><label>Category</label>
-          <select id="edit-exp-cat" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
-        </div>
-        <div class="form-group"><label>Supplier / Payee</label>
-          <input type="text" id="edit-exp-supplier" list="supp-datalist" placeholder="Who was paid?" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
-        </div>
-        <div class="form-group"><label>Status</label>
-          <select id="edit-exp-status" onchange="toggleEditExpStatusFields()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
-            <option value="paid">Paid</option>
-            <option value="unpaid">Unpaid</option>
-          </select>
-        </div>
-        <div class="form-group" id="edit-exp-account-group"><label>Paid from account</label>
-          <select id="edit-exp-account" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
-        </div>
-        <div class="form-group" id="edit-exp-due-group" style="display:none;"><label>Due date</label>
-          <input type="date" id="edit-exp-due" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
-        </div>
-        <div class="form-group" style="grid-column:1/-1"><label>Notes</label>
-          <input type="text" id="edit-exp-notes" placeholder="Optional notes..." style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
-        </div>
-      </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:10px;" id="edit-exp-attachments"></div>
-      <div class="form-actions" style="margin-top:16px;">
-        <button class="btn btn-outline" onclick="closeModal('modal-edit-expense')">Cancel</button>
-        <button class="btn btn-primary" onclick="saveEditExpense()">Save Changes</button>
       </div>
     </div>
   </div>
@@ -3135,42 +3024,6 @@ tr:hover td { background:var(--bg); }
       <div class="form-actions">
         <button class="btn btn-outline" onclick="closeModal('modal-product')">Cancel</button>
         <button class="btn btn-primary" onclick="saveProduct()">Save Product</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Manage Categories Modal -->
-<div class="modal-backdrop" id="modal-categories">
-  <div class="modal" style="width:520px;">
-    <div class="modal-head">
-      <span class="modal-title" id="cat-modal-title">Manage Categories</span>
-      <button class="modal-close" onclick="closeModal('modal-categories')">×</button>
-    </div>
-    <div class="modal-body">
-      <!-- Type switcher -->
-      <div style="display:flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:3px;margin-bottom:14px;">
-        <button id="cat-type-supplier"  onclick="setCategoryType('supplier')"  class="btn btn-primary btn-sm" style="flex:1;font-size:12px;">Supplier</button>
-        <button id="cat-type-inventory" onclick="setCategoryType('inventory')" class="btn btn-outline btn-sm" style="flex:1;font-size:12px;background:transparent;border:none;">Inventory</button>
-        <button id="cat-type-product"   onclick="setCategoryType('product')"   class="btn btn-outline btn-sm" style="flex:1;font-size:12px;background:transparent;border:none;">Product</button>
-        <button id="cat-type-expense"   onclick="setCategoryType('expense')"   class="btn btn-outline btn-sm" style="flex:1;font-size:12px;background:transparent;border:none;">Expense</button>
-      </div>
-
-      <div style="font-size:12px;color:var(--text2);margin-bottom:10px;" id="cat-type-help">Edit the categories available for suppliers. Changes apply immediately to dropdowns.</div>
-
-      <!-- Add new -->
-      <div style="display:flex;gap:6px;margin-bottom:12px;">
-        <input type="text" id="cat-new-input" placeholder="New category name..." style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;" onkeydown="if(event.key==='Enter'){addCategory();event.preventDefault();}">
-        <button class="btn btn-primary btn-sm" onclick="addCategory()">+ Add</button>
-      </div>
-
-      <!-- List -->
-      <div id="cat-list" style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;max-height:340px;overflow-y:auto;"></div>
-
-      <div style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.5;">💡 Renaming a category will update all existing records using the old name. Categories in use cannot be deleted — reassign those records first.</div>
-
-      <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal('modal-categories')">Done</button>
       </div>
     </div>
   </div>
@@ -3592,11 +3445,6 @@ const DB = {
   payments: [],
   creditNotes: [],
   debitNotes: [],
-  // Editable category lists — managed via "Manage Categories" modal
-  supplierCategories: ['Spawn','Substrate','Packaging','Chemicals','Equipment','Other'],
-  inventoryCategories: ['Spawn','Substrate','Packaging','Chemicals','Equipment','Other'],
-  productCategories: ['Fresh','Dried','Processed','Bundle','Frozen','Powdered','Extract'],
-  expenseCategories: ['Supplies','Utilities','Transport','Maintenance','Payroll','Other'],
   company: { name:'', regno:'', phone:'', email:'', address:'', bank:'', bankacc:'', footer:'Thank you for your business!' },
   nextIds: { expenses:1, sales:1, invoices:1, inventory:1, staff:1, customers:1, products:1, accounts:1, users:1, suppliers:1, payrollRuns:1, wageAdvances:1, transfers:1, cashflowItems:1, loans:1, claims:1, recurringExpenses:1, batches:1, harvests:1, packings:1, packingRates:1, salesOrders:1, lorries:1, refuels:1, maintenance:1, trips:1, routeRates:1, payments:1, creditNotes:1, debitNotes:1 }
 };
@@ -3644,8 +3492,6 @@ function doLogin() {
     populateProductSelects();
     populateAccountSelects();
     populateStatementAccounts();
-    try { recomputeAllInvoiceStatuses(); } catch(e) { console.error('recomputeAllInvoiceStatuses:', e); }
-    try { populateCategorySelects(); } catch(e) { console.error('populateCategorySelects:', e); }
     renderDashboard();
     if (typeof applyCurrencyLabels === 'function') applyCurrencyLabels();
     startAutoSave();
@@ -7633,7 +7479,6 @@ function renderExpenses() {
           <td class="text-right text-red mono">${amountDisplay(e.amount)}</td>
           <td style="display:flex;gap:4px;padding-top:10px;flex-wrap:wrap;">
             ${e.supplierInvoice ? `<button class="btn btn-outline btn-sm" onclick="viewSuppInvoice(${e.id})" style="font-size:11px;">📋 Inv</button>` : ''}
-            ${can('canEdit') ? `<button class="btn btn-outline btn-sm" onclick="editExpense(${e.id})" style="font-size:11px;">Edit</button>` : ''}
             ${!isPaid && can('canEdit') ? `<button class="btn btn-sm" style="background:var(--green-light);color:var(--green);font-size:11px;border:none;" onclick="markExpensePaid(${e.id})">Mark Paid</button>` : ''}
             ${can('canDelete') ? `<button class="btn btn-danger btn-sm" onclick="deleteExpense(${e.id})">Del</button>` : ''}
           </td>
@@ -7662,104 +7507,6 @@ function confirmExpensePaid() {
   e.paid    = account;
   closeModal('modal-mark-exp-paid');
   showToast(`Expense paid — recorded to ${account}`);
-  renderExpenses();
-}
-
-// ============================================================
-// EDIT EXPENSE
-// ============================================================
-function editExpense(id) {
-  const e = DB.expenses.find(x => x.id === id);
-  if (!e) { showToast('Expense not found', 'error'); return; }
-
-  document.getElementById('edit-exp-id').value      = id;
-  document.getElementById('edit-exp-date').value    = e.date || '';
-  document.getElementById('edit-exp-amount').value  = e.amount || '';
-  document.getElementById('edit-exp-desc').value    = e.desc || '';
-  document.getElementById('edit-exp-supplier').value = e.supplier || '';
-  document.getElementById('edit-exp-notes').value   = e.notes || '';
-  document.getElementById('edit-exp-due').value     = e.dueDate || '';
-
-  // Populate category dropdown from DB
-  const catSel = document.getElementById('edit-exp-cat');
-  const cats   = (DB.expenseCategories && DB.expenseCategories.length) ? DB.expenseCategories : ['Supplies','Utilities','Transport','Maintenance','Payroll','Other'];
-  // Include the current category even if it's no longer in the master list (legacy data)
-  const current = e.cat || cats[0];
-  const allCats = cats.includes(current) ? cats : [current, ...cats];
-  catSel.innerHTML = allCats.map(c => `<option value="${c}"${c===current?' selected':''}>${c}</option>`).join('');
-
-  // Populate account dropdown
-  const acctSel = document.getElementById('edit-exp-account');
-  const accounts = (DB.accounts || []).map(a => a.name);
-  const currentAcct = e.account || e.paid || (accounts[0] || '');
-  // Include legacy account even if it was renamed/deleted
-  const allAccts = currentAcct && !accounts.includes(currentAcct) ? [currentAcct, ...accounts] : accounts;
-  acctSel.innerHTML = allAccts.map(a => `<option value="${a}"${a===currentAcct?' selected':''}>${a}</option>`).join('');
-
-  // Populate supplier datalist so autocomplete works
-  if (typeof populateSuppDatalist === 'function') populateSuppDatalist();
-
-  // Status
-  const status = (e.status || 'paid');
-  document.getElementById('edit-exp-status').value = status;
-  toggleEditExpStatusFields();
-
-  // Attachment info (read-only — editing the file is done via the row's attach button)
-  const attach = document.getElementById('edit-exp-attachments');
-  const bits = [];
-  if (e.receipt) bits.push('📎 Receipt attached');
-  if (e.supplierInvoice) bits.push('📋 Supplier invoice attached');
-  attach.textContent = bits.length ? bits.join(' · ') + ' (manage attachments from the row buttons)' : 'No attachments. Use the receipt button on the row to add one.';
-
-  openModal('modal-edit-expense');
-}
-
-function toggleEditExpStatusFields() {
-  const status = document.getElementById('edit-exp-status').value;
-  document.getElementById('edit-exp-account-group').style.display = (status === 'paid')   ? '' : 'none';
-  document.getElementById('edit-exp-due-group').style.display     = (status === 'unpaid') ? '' : 'none';
-}
-
-function saveEditExpense() {
-  const id     = parseInt(document.getElementById('edit-exp-id').value);
-  const e      = DB.expenses.find(x => x.id === id);
-  if (!e) { showToast('Expense not found', 'error'); return; }
-
-  const date   = document.getElementById('edit-exp-date').value;
-  const amount = parseFloat(document.getElementById('edit-exp-amount').value);
-  const desc   = document.getElementById('edit-exp-desc').value.trim();
-  const cat    = document.getElementById('edit-exp-cat').value;
-  const supp   = document.getElementById('edit-exp-supplier').value.trim();
-  const status = document.getElementById('edit-exp-status').value;
-  const notes  = document.getElementById('edit-exp-notes').value.trim();
-
-  // Validation
-  if (!date)        { showToast('Date is required', 'error'); return; }
-  if (!desc)        { showToast('Description is required', 'error'); return; }
-  if (isNaN(amount) || amount <= 0) { showToast('Amount must be greater than zero', 'error'); return; }
-
-  // Apply changes
-  e.date     = date;
-  e.amount   = amount;
-  e.desc     = desc;
-  e.cat      = cat;
-  e.supplier = supp;
-  e.status   = status;
-  e.notes    = notes;
-
-  if (status === 'paid') {
-    const acct = document.getElementById('edit-exp-account').value;
-    e.account = acct;
-    e.paid    = acct;
-    e.dueDate = ''; // clear the unpaid-only field
-  } else {
-    const due = document.getElementById('edit-exp-due').value;
-    e.dueDate = due || '';
-    // Keep e.account/paid as-is for historical reference; rendering logic hides them when unpaid
-  }
-
-  closeModal('modal-edit-expense');
-  showToast('Expense updated');
   renderExpenses();
 }
 
@@ -7855,7 +7602,7 @@ function renderExpLines() {
   const emptyRow = document.getElementById('exp-empty-row');
   if (emptyRow) emptyRow.remove();
 
-  const cats     = (DB.expenseCategories && DB.expenseCategories.length) ? DB.expenseCategories : ['Supplies','Utilities','Transport','Maintenance','Payroll','Other'];
+  const cats     = ['Supplies','Utilities','Transport','Maintenance','Payroll','Other'];
   const acctOpts = DB.accounts.map(a => `<option value="${a.name}">${a.name}</option>`).join('');
 
   expLines.forEach(l => {
@@ -8271,20 +8018,15 @@ function autoFillInvPrice() {}
 let invTab = 1;
 function switchInvTab(n) {
   invTab = n;
-  [1,2,3,4,5].forEach(i => {
-    const panel = document.getElementById('inv-panel-'+i);
-    if (panel) panel.style.display = i===n ? '' : 'none';
+  [1,2,3].forEach(i => {
+    document.getElementById('inv-panel-'+i).style.display = i===n ? '' : 'none';
     const btn = document.getElementById('inv-tab-'+i);
-    if (btn) {
-      btn.style.borderBottomColor = i===n ? 'var(--green)' : 'transparent';
-      btn.style.color = i===n ? 'var(--green)' : 'var(--text)';
-    }
+    btn.style.borderBottomColor = i===n ? 'var(--green)' : 'transparent';
+    btn.style.color = i===n ? 'var(--green)' : 'var(--text)';
   });
   if (n===1) renderInvoices();
   if (n===2) { populateStmtCustomers(); renderCustomerStatement(); }
   if (n===3) { populatePayHistCustomers(); renderPaymentHistory(); }
-  if (n===4) renderAging();
-  if (n===5) { populateReconAccounts(); renderReconciliation(); }
 }
 
 function populateStmtCustomers() {
@@ -8548,21 +8290,6 @@ function reprintReceipt(payId) {
   printReceipt(p, inv);
 }
 
-// Invoice sort state — persists across renders within the session
-let invSortKey = 'date';
-let invSortDir = 'desc'; // 'asc' | 'desc'
-
-function setInvSort(key) {
-  if (invSortKey === key) {
-    invSortDir = (invSortDir === 'asc') ? 'desc' : 'asc';
-  } else {
-    invSortKey = key;
-    // Sensible defaults per column: text asc, numbers/dates desc
-    invSortDir = (key === 'no' || key === 'customer' || key === 'status') ? 'asc' : 'desc';
-  }
-  renderInvoices();
-}
-
 function renderInvoices() {
   const search = document.getElementById('inv-search').value.toLowerCase();
   const status = document.getElementById('inv-status-filter').value;
@@ -8571,45 +8298,18 @@ function renderInvoices() {
     (!search || i.customer.toLowerCase().includes(search) || i.no.toLowerCase().includes(search)) &&
     (!status || i.status === status) &&
     (!month  || (i.date||'').startsWith(month))
-  );
-
-  // Apply sort
-  const dir = invSortDir === 'asc' ? 1 : -1;
-  const getVal = (i) => {
-    switch (invSortKey) {
-      case 'no':       return (i.no||'').toLowerCase();
-      case 'customer': return (i.customer||'').toLowerCase();
-      case 'date':     return i.date || '';
-      case 'due':      return i.due || '';
-      case 'status':   return (i.status||'').toLowerCase();
-      case 'total':    return i.total || 0;
-      default:         return '';
-    }
-  };
-  data.sort((a,b) => {
-    const va = getVal(a), vb = getVal(b);
-    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
-    return String(va).localeCompare(String(vb)) * dir;
-  });
+  ).sort((a,b) => b.date.localeCompare(a.date));
 
   const total = data.reduce((s,i) => s+i.total, 0);
   document.getElementById('inv-total').textContent = `${data.length} invoices · Total: ${fmt(total)}`;
 
   const statusMap = {Paid:'badge-green',Pending:'badge-amber',Overdue:'badge-red',Draft:'badge-gray',Partial:'badge-blue'};
-
-  // Helper to render a sortable header
-  const arrow = (k) => invSortKey === k ? (invSortDir === 'asc' ? ' ↑' : ' ↓') : '';
-  const activeStyle = (k) => invSortKey === k ? 'color:var(--text);font-weight:600;' : '';
-  const sortTh = (k, label, extraClass) => `<th${extraClass?' class="'+extraClass+'"':''} style="cursor:pointer;user-select:none;${activeStyle(k)}" onclick="setInvSort('${k}')" title="Sort by ${label}">${label}${arrow(k)}</th>`;
-
   document.getElementById('inv-table').innerHTML = data.length === 0
     ? '<div class="empty-state"><div class="icon">🧾</div><p>No invoices found</p></div>'
     : `<table>
-      <thead><tr>${sortTh('no','Invoice No.')}${sortTh('customer','Customer')}<th>Items</th>${sortTh('date','Issue Date')}${sortTh('due','Due Date')}${sortTh('status','Status')}${sortTh('total','Amount','text-right')}<th></th></tr></thead>
-      <tbody>${data.map(i => {
-        const isLocked = (DB.payments||[]).some(p => p.invoiceId === i.id);
-        return `<tr>
-        <td style="font-family:'DM Mono',monospace;font-size:12px;">${isLocked?'<span title="Locked: has payments" style="color:var(--text3);margin-right:4px;">🔒</span>':''}${i.no}</td>
+      <thead><tr><th>Invoice No.</th><th>Customer</th><th>Items</th><th>Issue Date</th><th>Due Date</th><th>Status</th><th class="text-right">Amount</th><th></th></tr></thead>
+      <tbody>${data.map(i => `<tr>
+        <td style="font-family:'DM Mono',monospace;font-size:12px;">${i.no}</td>
         <td><div style="font-weight:500">${i.customer}</div><div style="font-size:11px;color:var(--text2)">${i.address||''}</div></td>
         <td style="font-size:12px;color:var(--text2);">${i.lines ? i.lines.map(l=>`${l.product} ×${l.qty}`).join('<br>') : (i.product ? `${i.product} ×${i.qty}` : '—')}</td>
         <td style="color:var(--text2)">${fmtDate(i.date)}</td>
@@ -8623,13 +8323,12 @@ function renderInvoices() {
         <td style="display:flex;gap:4px;padding-top:10px;">
           <button class="btn btn-outline btn-sm" onclick="printInvoice(${i.id})" title="Print Invoice">🖨 Inv</button>
           <button class="btn btn-outline btn-sm" onclick="printDO(${i.id})" title="Print Delivery Order">📦 DO</button>
-          ${can('canEdit') ? `<button class="btn btn-outline btn-sm" onclick="editInvoice(${i.id})" title="${isLocked?'Locked — void payments first':'Edit invoice'}"${isLocked?' style="opacity:0.5;"':''}>${isLocked?'🔒 Edit':'Edit'}</button>` : ''}
+          ${can('canEdit') ? `<button class="btn btn-outline btn-sm" onclick="editInvoice(${i.id})">Edit</button>` : ''}
           ${can('canEdit') && (i.status==='Pending'||i.status==='Overdue'||i.status==='Partial'||i.status==='Draft')?`<button class="btn btn-sm" style="background:var(--green-light);color:var(--green);font-size:11px;border:none;" onclick="markInvoicePaid(${i.id})">+ Payment</button>`:''}
           ${can('canEdit') && i.status==='Paid'?`<button class="btn btn-outline btn-sm" onclick="viewPayments(${i.id})" style="font-size:11px;">Payments</button>`:''}
           ${can('canDelete') ? `<button class="btn btn-danger btn-sm" onclick="deleteInvoice(${i.id})">Del</button>` : ''}
         </td>
-      </tr>`;
-      }).join('')}</tbody>
+      </tr>`).join('')}</tbody>
     </table>`;
 }
 
@@ -8897,15 +8596,6 @@ function printDO(id) {
 function editInvoice(id) {
   const inv = DB.invoices.find(i => i.id === id);
   if (!inv) return;
-  // LOCK: invoices with payments can't be edited until payments are voided
-  const payments = (DB.payments||[]).filter(p => p.invoiceId === id);
-  if (payments.length > 0) {
-    const totalPaid = payments.reduce((s,p) => s + (p.amount||0), 0);
-    const cs = (inv.currency === 'SGD') ? 'SGD' : 'RM';
-    const msg = `This invoice is locked from editing because it has ${payments.length} payment${payments.length>1?'s':''} recorded (total ${cs} ${totalPaid.toFixed(2)}).\n\nTo edit the invoice, first void or delete the payment(s) from the Payment History tab.\n\nYou can still view or print the invoice.`;
-    alert(msg);
-    return;
-  }
   editingInvoiceId = id;
   document.getElementById('inv-modal-heading').textContent = 'Edit Invoice';
   document.getElementById('inv-no').value = inv.no;
@@ -9027,331 +8717,6 @@ function createSalesFromInvoice(inv, account) {
       invoiceRef: inv.no
     });
   });
-}
-
-// ============================================================
-// DERIVED STATUS — single source of truth for invoice.status
-// ============================================================
-function computeInvoiceStatus(inv) {
-  if (!inv) return 'Draft';
-  // Preserve explicit Draft and Voided states (not derivable from payments)
-  if (inv.status === 'Draft' || inv.status === 'Voided') return inv.status;
-  const paid    = (DB.payments||[]).filter(p => p.invoiceId === inv.id).reduce((s,p) => s + (p.amount||0), 0);
-  const credits = (typeof getTotalCreditsForInvoice === 'function') ? getTotalCreditsForInvoice(inv.id) : 0;
-  const settled = paid + credits;
-  const total   = inv.total || 0;
-  if (settled >= total && total > 0) return 'Paid';
-  if (settled > 0) return 'Partial';
-  // No settlement yet — overdue if due date passed
-  if (inv.due) {
-    const today = new Date(); today.setHours(0,0,0,0);
-    const dueD  = new Date(inv.due + 'T00:00:00');
-    if (dueD < today) return 'Overdue';
-  }
-  return 'Pending';
-}
-
-function recomputeAllInvoiceStatuses() {
-  let changed = 0;
-  (DB.invoices||[]).forEach(inv => {
-    const s = computeInvoiceStatus(inv);
-    if (inv.status !== s) { inv.status = s; changed++; }
-    // Clear account on non-paid invoices to avoid stale data
-    if (s !== 'Paid' && inv.account) inv.account = '';
-  });
-  return changed;
-}
-
-// ============================================================
-// AGING REPORT
-// ============================================================
-// (uses existing getInvoiceBalance() defined later in the file)
-
-function getAgingBucket(inv) {
-  // Not due yet → current; otherwise bucket by days overdue
-  const today = new Date(); today.setHours(0,0,0,0);
-  if (!inv.due) return 'current';
-  const dueD = new Date(inv.due + 'T00:00:00');
-  const diffDays = Math.floor((today - dueD) / 86400000);
-  if (diffDays < 0)  return 'current';
-  if (diffDays <= 30) return '0-30';
-  if (diffDays <= 60) return '31-60';
-  if (diffDays <= 90) return '61-90';
-  return '90+';
-}
-
-function renderAging() {
-  const search = ((document.getElementById('aging-search')||{}).value||'').toLowerCase();
-  const bucketFilter = (document.getElementById('aging-bucket')||{}).value||'';
-
-  // Collect outstanding invoices (anything with balance > 0, excluding Draft/Voided)
-  const outstanding = (DB.invoices||[]).filter(inv => {
-    if (inv.status === 'Draft' || inv.status === 'Voided') return false;
-    return getInvoiceBalance(inv) > 0.005;
-  });
-
-  // Group by customer, then by bucket
-  const byCust = {};
-  outstanding.forEach(inv => {
-    const cust = inv.customer || '(unknown)';
-    if (!byCust[cust]) byCust[cust] = { current:[], '0-30':[], '31-60':[], '61-90':[], '90+':[] };
-    const b = getAgingBucket(inv);
-    byCust[cust][b].push(inv);
-  });
-
-  // Build rows, applying search + bucket filter
-  let grandTotals = { current:0, '0-30':0, '31-60':0, '61-90':0, '90+':0, all:0 };
-  const rows = Object.keys(byCust).sort().filter(c => !search || c.toLowerCase().includes(search)).map(cust => {
-    const buckets = byCust[cust];
-    const totals  = { current:0, '0-30':0, '31-60':0, '61-90':0, '90+':0 };
-    Object.keys(totals).forEach(k => {
-      totals[k] = buckets[k].reduce((s,i) => s + getInvoiceBalance(i), 0);
-    });
-    const custTotal = Object.values(totals).reduce((a,b)=>a+b, 0);
-    // Apply bucket filter (hide customer if their filtered-bucket total is 0)
-    if (bucketFilter && totals[bucketFilter] <= 0) return null;
-    // Accumulate grand totals (respecting bucket filter)
-    if (bucketFilter) {
-      grandTotals[bucketFilter] += totals[bucketFilter];
-      grandTotals.all += totals[bucketFilter];
-    } else {
-      Object.keys(totals).forEach(k => grandTotals[k] += totals[k]);
-      grandTotals.all += custTotal;
-    }
-    const cell = (v, color) => v > 0
-      ? `<td class="text-right mono" style="color:${color};font-weight:500;">${fmt(v)}</td>`
-      : `<td class="text-right mono" style="color:var(--text3);">—</td>`;
-    return `<tr>
-      <td style="font-weight:500;">${cust}</td>
-      ${cell(totals.current, 'var(--text2)')}
-      ${cell(totals['0-30'],  'var(--amber)')}
-      ${cell(totals['31-60'], '#d97706')}
-      ${cell(totals['61-90'], 'var(--red)')}
-      ${cell(totals['90+'],   '#991b1b')}
-      <td class="text-right mono" style="font-weight:600;">${fmt(custTotal)}</td>
-    </tr>`;
-  }).filter(Boolean);
-
-  document.getElementById('aging-summary').textContent = `${rows.length} customer${rows.length!==1?'s':''} · Total outstanding: ${fmt(grandTotals.all)}`;
-
-  if (rows.length === 0) {
-    document.getElementById('aging-content').innerHTML = '<div class="card"><div class="empty-state"><div class="icon">✨</div><p>No outstanding invoices — you\'re all caught up!</p></div></div>';
-    return;
-  }
-
-  const bucketTotalCell = (v, color) => v > 0
-    ? `<td class="text-right mono" style="color:${color};font-weight:700;">${fmt(v)}</td>`
-    : `<td class="text-right mono" style="color:var(--text3);">—</td>`;
-
-  document.getElementById('aging-content').innerHTML = `
-    <div class="card">
-      <div class="table-wrap"><table>
-        <thead><tr>
-          <th>Customer</th>
-          <th class="text-right">Current<br><span style="font-size:10px;color:var(--text3);font-weight:400;">Not yet due</span></th>
-          <th class="text-right">0–30<br><span style="font-size:10px;color:var(--text3);font-weight:400;">days overdue</span></th>
-          <th class="text-right">31–60<br><span style="font-size:10px;color:var(--text3);font-weight:400;">days overdue</span></th>
-          <th class="text-right">61–90<br><span style="font-size:10px;color:var(--text3);font-weight:400;">days overdue</span></th>
-          <th class="text-right">90+<br><span style="font-size:10px;color:var(--text3);font-weight:400;">days overdue</span></th>
-          <th class="text-right">Total</th>
-        </tr></thead>
-        <tbody>${rows.join('')}</tbody>
-        <tfoot>
-          <tr style="background:var(--bg);border-top:2px solid var(--border);">
-            <td style="font-weight:700;">TOTALS</td>
-            ${bucketTotalCell(grandTotals.current, 'var(--text2)')}
-            ${bucketTotalCell(grandTotals['0-30'],  'var(--amber)')}
-            ${bucketTotalCell(grandTotals['31-60'], '#d97706')}
-            ${bucketTotalCell(grandTotals['61-90'], 'var(--red)')}
-            ${bucketTotalCell(grandTotals['90+'],   '#991b1b')}
-            <td class="text-right mono" style="font-weight:700;color:var(--green);">${fmt(grandTotals.all)}</td>
-          </tr>
-        </tfoot>
-      </table></div>
-    </div>`;
-}
-
-function printAgingReport() {
-  const co = DB.company || {};
-  const today = new Date().toLocaleDateString('en-MY', {day:'2-digit',month:'long',year:'numeric'});
-  const outstanding = (DB.invoices||[]).filter(inv => {
-    if (inv.status === 'Draft' || inv.status === 'Voided') return false;
-    return getInvoiceBalance(inv) > 0.005;
-  });
-  const byCust = {};
-  outstanding.forEach(inv => {
-    const c = inv.customer || '(unknown)';
-    if (!byCust[c]) byCust[c] = { current:0, '0-30':0, '31-60':0, '61-90':0, '90+':0 };
-    byCust[c][getAgingBucket(inv)] += getInvoiceBalance(inv);
-  });
-  const tot = { current:0, '0-30':0, '31-60':0, '61-90':0, '90+':0, all:0 };
-  const rowsHtml = Object.keys(byCust).sort().map(c => {
-    const b = byCust[c];
-    const sum = b.current + b['0-30'] + b['31-60'] + b['61-90'] + b['90+'];
-    Object.keys(b).forEach(k => tot[k] += b[k]);
-    tot.all += sum;
-    const td = v => v > 0 ? `<td style="text-align:right;padding:7px 10px;border-bottom:1px solid #e5e7eb;">${fmt(v)}</td>` : `<td style="text-align:right;padding:7px 10px;border-bottom:1px solid #e5e7eb;color:#9ca3af;">—</td>`;
-    return `<tr><td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;">${c}</td>${td(b.current)}${td(b['0-30'])}${td(b['31-60'])}${td(b['61-90'])}${td(b['90+'])}<td style="text-align:right;padding:7px 10px;border-bottom:1px solid #e5e7eb;font-weight:600;">${fmt(sum)}</td></tr>`;
-  }).join('');
-  const win = window.open('','_blank');
-  win.document.write(`<!DOCTYPE html><html><head><title>Aging Report</title>
-    <style>
-      *{margin:0;padding:0;box-sizing:border-box;}
-      body{font-family:'Segoe UI',sans-serif;font-size:12px;color:#111;padding:32px;max-width:900px;margin:0 auto;}
-      .header{border-bottom:2px solid #166534;padding-bottom:14px;margin-bottom:20px;}
-      .company{font-size:20px;font-weight:700;color:#166534;}
-      .title{font-size:22px;font-weight:700;margin-top:4px;}
-      .asof{font-size:11px;color:#6b7280;margin-top:4px;}
-      table{width:100%;border-collapse:collapse;margin-bottom:18px;}
-      th{background:#f0fdf4;padding:9px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#6b7280;letter-spacing:0.04em;border-bottom:2px solid #166534;}
-      th.right{text-align:right;}
-      tfoot td{font-weight:700;border-top:2px solid #166534;padding-top:9px;background:#f9fafb;}
-      .footer{margin-top:22px;text-align:center;font-size:10px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:12px;}
-      @media print { body { padding:16px; } button { display:none; } }
-    </style></head><body>
-    <div class="header">
-      <div class="company">${co.name||'🍄 MycoBooks'}</div>
-      <div class="title">Accounts Receivable Aging</div>
-      <div class="asof">As of ${today}</div>
-    </div>
-    <table>
-      <thead><tr>
-        <th>Customer</th>
-        <th class="right">Current</th>
-        <th class="right">0–30 days</th>
-        <th class="right">31–60 days</th>
-        <th class="right">61–90 days</th>
-        <th class="right">90+ days</th>
-        <th class="right">Total</th>
-      </tr></thead>
-      <tbody>${rowsHtml || '<tr><td colspan="7" style="text-align:center;padding:20px;color:#9ca3af;">No outstanding invoices</td></tr>'}</tbody>
-      <tfoot><tr>
-        <td style="padding:9px 10px;">TOTALS</td>
-        <td style="text-align:right;padding:9px 10px;">${fmt(tot.current)}</td>
-        <td style="text-align:right;padding:9px 10px;">${fmt(tot['0-30'])}</td>
-        <td style="text-align:right;padding:9px 10px;">${fmt(tot['31-60'])}</td>
-        <td style="text-align:right;padding:9px 10px;">${fmt(tot['61-90'])}</td>
-        <td style="text-align:right;padding:9px 10px;">${fmt(tot['90+'])}</td>
-        <td style="text-align:right;padding:9px 10px;color:#166534;">${fmt(tot.all)}</td>
-      </tr></tfoot>
-    </table>
-    <div class="footer">Generated ${today} · ${co.name||'MycoBooks'}</div>
-    <div style="text-align:center;margin-top:20px;"><button onclick="window.print()" style="padding:8px 22px;background:#166534;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;">🖨 Print</button></div>
-  </body></html>`);
-  win.document.close();
-}
-
-// ============================================================
-// RECONCILIATION VIEW
-// ============================================================
-function populateReconAccounts() {
-  const sel = document.getElementById('recon-account');
-  if (!sel) return;
-  const cur = sel.value;
-  // Gather accounts from both DB.accounts and any accounts actually used on payments
-  const usedAccounts = new Set((DB.payments||[]).map(p => p.account).filter(Boolean));
-  (DB.accounts||[]).forEach(a => usedAccounts.add(a.name));
-  const accounts = [...usedAccounts].sort();
-  sel.innerHTML = '<option value="">— Select account —</option>' + accounts.map(a => `<option value="${a}"${a===cur?' selected':''}>${a}</option>`).join('');
-}
-
-function renderReconciliation() {
-  const account = (document.getElementById('recon-account')||{}).value||'';
-  const month   = (document.getElementById('recon-month')||{}).value||'';
-  const statusF = (document.getElementById('recon-status')||{}).value||'';
-
-  if (!account) {
-    document.getElementById('recon-content').innerHTML = '<div class="card"><div class="empty-state"><div class="icon">🏦</div><p>Select a bank account to begin reconciling</p><p style="font-size:12px;color:var(--text2);margin-top:6px;">Tick off each payment as you match it against your bank statement</p></div></div>';
-    document.getElementById('recon-summary').textContent = '';
-    return;
-  }
-
-  let payments = (DB.payments||[]).filter(p => p.account === account);
-  if (month) payments = payments.filter(p => (p.date||'').startsWith(month));
-  if (statusF === 'reconciled')   payments = payments.filter(p => p.reconciled);
-  if (statusF === 'unreconciled') payments = payments.filter(p => !p.reconciled);
-  payments.sort((a,b) => (a.date||'').localeCompare(b.date||''));
-
-  const total        = payments.reduce((s,p) => s + (p.amount||0), 0);
-  const reconTotal   = payments.filter(p => p.reconciled).reduce((s,p) => s + (p.amount||0), 0);
-  const unreconTotal = total - reconTotal;
-
-  document.getElementById('recon-summary').textContent =
-    `${payments.length} payment${payments.length!==1?'s':''} · Reconciled: ${fmt(reconTotal)} · Unreconciled: ${fmt(unreconTotal)}`;
-
-  if (payments.length === 0) {
-    document.getElementById('recon-content').innerHTML = '<div class="card"><div class="empty-state"><div class="icon">📭</div><p>No payments match the current filters</p></div></div>';
-    return;
-  }
-
-  const rows = payments.map(p => {
-    const inv = (DB.invoices||[]).find(i => i.id === p.invoiceId);
-    const invNo = inv ? inv.no : '(deleted)';
-    const cust  = inv ? inv.customer : '—';
-    const reconciledOn = p.reconciledDate ? fmtDate(p.reconciledDate) : '';
-    return `<tr style="${p.reconciled?'background:#f0fdf4;':''}">
-      <td style="width:34px;text-align:center;">
-        <input type="checkbox" ${p.reconciled?'checked':''} onchange="togglePaymentReconciled(${p.id}, this.checked)" style="cursor:pointer;width:16px;height:16px;" title="Mark as reconciled">
-      </td>
-      <td style="color:var(--text2);white-space:nowrap;">${fmtDate(p.date)}</td>
-      <td style="font-family:'DM Mono',monospace;font-size:12px;">${invNo}</td>
-      <td>${cust}</td>
-      <td style="font-size:12px;color:var(--text2);">${p.reference||'—'}</td>
-      <td class="text-right mono" style="font-weight:500;color:var(--green);">${fmt(p.amount||0)}</td>
-      <td style="font-size:11px;color:${p.reconciled?'var(--green)':'var(--text3)'};">${p.reconciled?('✓ '+reconciledOn):'Not reconciled'}</td>
-    </tr>`;
-  }).join('');
-
-  document.getElementById('recon-content').innerHTML = `
-    <div class="card" style="margin-bottom:12px;">
-      <div class="card-body" style="padding:14px 18px;display:flex;gap:20px;flex-wrap:wrap;">
-        <div><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.04em;">Total Deposits</div><div style="font-size:20px;font-weight:700;margin-top:2px;">${fmt(total)}</div></div>
-        <div><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.04em;">Reconciled</div><div style="font-size:20px;font-weight:700;margin-top:2px;color:var(--green);">${fmt(reconTotal)}</div></div>
-        <div><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.04em;">Unreconciled</div><div style="font-size:20px;font-weight:700;margin-top:2px;color:${unreconTotal>0?'var(--amber)':'var(--text3)'};">${fmt(unreconTotal)}</div></div>
-        <div style="margin-left:auto;display:flex;gap:6px;align-items:center;">
-          <button class="btn btn-outline btn-sm" onclick="reconMarkAll(true)">✓ Tick all visible</button>
-          <button class="btn btn-outline btn-sm" onclick="reconMarkAll(false)">Untick all visible</button>
-        </div>
-      </div>
-    </div>
-    <div class="card"><div class="table-wrap"><table>
-      <thead><tr>
-        <th style="width:34px;"></th>
-        <th>Date</th>
-        <th>Invoice</th>
-        <th>Customer</th>
-        <th>Reference</th>
-        <th class="text-right">Amount</th>
-        <th>Status</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div></div>`;
-}
-
-function togglePaymentReconciled(payId, checked) {
-  const p = (DB.payments||[]).find(x => x.id === payId);
-  if (!p) return;
-  p.reconciled = !!checked;
-  p.reconciledDate = checked ? new Date().toISOString().slice(0,10) : null;
-  renderReconciliation();
-}
-
-function reconMarkAll(checked) {
-  const account = (document.getElementById('recon-account')||{}).value||'';
-  const month   = (document.getElementById('recon-month')||{}).value||'';
-  const statusF = (document.getElementById('recon-status')||{}).value||'';
-  if (!account) return;
-  let payments = (DB.payments||[]).filter(p => p.account === account);
-  if (month) payments = payments.filter(p => (p.date||'').startsWith(month));
-  if (statusF === 'reconciled')   payments = payments.filter(p => p.reconciled);
-  if (statusF === 'unreconciled') payments = payments.filter(p => !p.reconciled);
-  const today = new Date().toISOString().slice(0,10);
-  payments.forEach(p => {
-    p.reconciled = !!checked;
-    p.reconciledDate = checked ? today : null;
-  });
-  showToast(checked ? `Marked ${payments.length} payment${payments.length!==1?'s':''} as reconciled` : `Unticked ${payments.length} payment${payments.length!==1?'s':''}`);
-  renderReconciliation();
 }
 
 function markInvoicePaid(id) {
@@ -9490,12 +8855,6 @@ function printReceipt(payment, inv) {
 
 
 function deleteInvoice(id) {
-  // LOCK: invoices with payments can't be deleted until payments are voided
-  const payments = (DB.payments||[]).filter(p => p.invoiceId === id);
-  if (payments.length > 0) {
-    alert(`This invoice cannot be deleted because it has ${payments.length} payment${payments.length>1?'s':''} recorded.\n\nPlease void or delete the payment(s) first from the Payment History tab.`);
-    return;
-  }
   if (!confirm('Delete this invoice? Any linked sales records will also be removed.')) return;
   const inv = DB.invoices.find(i => i.id === id);
   DB.invoices = DB.invoices.filter(i => i.id !== id);
@@ -10718,239 +10077,6 @@ function setSuppView(v) {
   if (btnGrid) { btnGrid.className = v==='grid'?'btn btn-primary btn-sm':'btn btn-outline btn-sm'; btnGrid.style.cssText = v==='grid'?'font-size:11px;padding:3px 10px;':'font-size:11px;padding:3px 10px;background:transparent;border:none;'; }
   if (btnList) { btnList.className = v==='list'?'btn btn-primary btn-sm':'btn btn-outline btn-sm'; btnList.style.cssText = v==='list'?'font-size:11px;padding:3px 10px;':'font-size:11px;padding:3px 10px;background:transparent;border:none;'; }
   renderSuppliers();
-}
-
-// ============================================================
-// CATEGORY MANAGEMENT (supplier / inventory / product)
-// ============================================================
-let currentCategoryType = 'supplier';
-
-const CATEGORY_CONFIG = {
-  supplier: {
-    dbKey: 'supplierCategories',
-    label: 'supplier',
-    recordCollection: 'suppliers',
-    recordField: 'cat',
-    selectIds: ['supp-cat','supp-cat-filter'],
-    hasAllOption: { 'supp-cat-filter': true },   // filter dropdowns get an "All categories" option
-    datalistId: null,
-    helpText: 'Edit the categories available for suppliers. Changes apply immediately to dropdowns.'
-  },
-  inventory: {
-    dbKey: 'inventoryCategories',
-    label: 'inventory item',
-    recordCollection: 'inventory',
-    recordField: 'cat',
-    selectIds: ['item-cat','inv-cat-filter'],
-    hasAllOption: { 'inv-cat-filter': true },
-    datalistId: null,
-    helpText: 'Edit the categories available for inventory items (spawn, substrate, packaging, etc).'
-  },
-  product: {
-    dbKey: 'productCategories',
-    label: 'product',
-    recordCollection: 'products',
-    recordField: 'cat',
-    selectIds: ['prod-cat-filter'],             // only the filter is a <select>
-    hasAllOption: { 'prod-cat-filter': true },
-    datalistId: 'prod-cat-list',                // product uses a <datalist> as suggestions
-    helpText: 'Edit the product category suggestions. Products use free-text entry with these as suggestions.'
-  },
-  expense: {
-    dbKey: 'expenseCategories',
-    label: 'expense',
-    // Expenses live inside expLines on each record, so recordCollection/recordField
-    // aren't meaningful here. We handle usage counting specially below.
-    recordCollection: '__expenseLines',
-    recordField: 'cat',
-    selectIds: ['exp-cat-filter'],              // only the top filter is a static select
-    hasAllOption: { 'exp-cat-filter': true },
-    datalistId: null,
-    helpText: 'Edit expense categories. Per-row dropdowns inside the expense modal rebuild from this list.'
-  }
-};
-
-function openCategoriesModal(type) {
-  currentCategoryType = type || 'supplier';
-  setCategoryType(currentCategoryType);
-  openModal('modal-categories');
-}
-
-function setCategoryType(type) {
-  currentCategoryType = type;
-  ['supplier','inventory','product','expense'].forEach(t => {
-    const btn = document.getElementById('cat-type-'+t);
-    if (!btn) return;
-    if (t === type) {
-      btn.className = 'btn btn-primary btn-sm';
-      btn.style.cssText = 'flex:1;font-size:12px;';
-    } else {
-      btn.className = 'btn btn-outline btn-sm';
-      btn.style.cssText = 'flex:1;font-size:12px;background:transparent;border:none;';
-    }
-  });
-  const help = document.getElementById('cat-type-help');
-  if (help) help.textContent = CATEGORY_CONFIG[type].helpText;
-  document.getElementById('cat-modal-title').textContent = 'Manage ' + type.charAt(0).toUpperCase() + type.slice(1) + ' Categories';
-  renderCategoryList();
-}
-
-function renderCategoryList() {
-  const cfg  = CATEGORY_CONFIG[currentCategoryType];
-  const list = DB[cfg.dbKey] || [];
-  const container = document.getElementById('cat-list');
-  if (!container) return;
-  if (list.length === 0) {
-    container.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px;">No categories yet. Add one above.</div>';
-    return;
-  }
-  // Count usage for each category
-  const usage = {};
-  if (currentCategoryType === 'expense') {
-    // Expenses are nested — count across every expLines row on every expense record,
-    // and also the legacy top-level .cat field on older expense records.
-    list.forEach(c => { usage[c] = 0; });
-    (DB.expenses || []).forEach(e => {
-      if (e.cat && usage[e.cat] !== undefined) usage[e.cat]++;   // legacy flat expenses
-      (e.expLines || []).forEach(ln => {
-        if (ln && ln.cat && usage[ln.cat] !== undefined) usage[ln.cat]++;
-      });
-    });
-  } else {
-    const records = DB[cfg.recordCollection] || [];
-    list.forEach(c => { usage[c] = records.filter(r => (r||{})[cfg.recordField] === c).length; });
-  }
-
-  container.innerHTML = list.map((name, idx) => {
-    const count = usage[name] || 0;
-    const inUse = count > 0;
-    return `<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;${idx>0?'border-top:1px solid var(--border);':''}">
-      <span style="flex:1;font-size:13px;font-weight:500;">${name}</span>
-      <span style="font-size:11px;color:var(--text3);min-width:70px;text-align:right;">${inUse?count+' in use':'unused'}</span>
-      <button class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 8px;" onclick="renameCategory(${idx})" title="Rename">✎</button>
-      <button class="btn btn-sm" style="font-size:11px;padding:3px 8px;background:${inUse?'var(--bg)':'#fee2e2'};color:${inUse?'var(--text3)':'var(--red)'};border:1px solid ${inUse?'var(--border)':'#fecaca'};${inUse?'cursor:not-allowed;':''}" onclick="deleteCategory(${idx})" title="${inUse?'Cannot delete — in use':'Delete'}">🗑</button>
-    </div>`;
-  }).join('');
-}
-
-function addCategory() {
-  const input = document.getElementById('cat-new-input');
-  const name  = (input.value||'').trim();
-  if (!name) return;
-  const cfg  = CATEGORY_CONFIG[currentCategoryType];
-  const list = DB[cfg.dbKey] || [];
-  // Case-insensitive duplicate check
-  if (list.some(c => c.toLowerCase() === name.toLowerCase())) {
-    alert(`"${name}" already exists in the ${currentCategoryType} categories.`);
-    return;
-  }
-  list.push(name);
-  DB[cfg.dbKey] = list;
-  input.value = '';
-  showToast(`Added "${name}"`);
-  renderCategoryList();
-  populateCategorySelects();
-}
-
-function renameCategory(idx) {
-  const cfg  = CATEGORY_CONFIG[currentCategoryType];
-  const list = DB[cfg.dbKey] || [];
-  const oldName = list[idx];
-  if (!oldName) return;
-  const newName = prompt(`Rename "${oldName}" to:`, oldName);
-  if (newName === null) return;
-  const trimmed = newName.trim();
-  if (!trimmed) return;
-  if (trimmed === oldName) return;
-  if (list.some((c,i) => i !== idx && c.toLowerCase() === trimmed.toLowerCase())) {
-    alert(`"${trimmed}" already exists. Pick a different name.`);
-    return;
-  }
-  // Count how many records will be affected
-  let affected = 0;
-  if (currentCategoryType === 'expense') {
-    (DB.expenses || []).forEach(e => {
-      if (e.cat === oldName) affected++;
-      (e.expLines || []).forEach(ln => { if (ln && ln.cat === oldName) affected++; });
-    });
-  } else {
-    const records = DB[cfg.recordCollection] || [];
-    affected = records.filter(r => (r||{})[cfg.recordField] === oldName).length;
-  }
-  let updateRecords = false;
-  if (affected > 0) {
-    updateRecords = confirm(`${affected} ${cfg.label}${affected>1?' entries':''} currently use "${oldName}".\n\nClick OK to rename them to "${trimmed}" as well.\nClick Cancel to rename only the category (existing records will keep the old name).`);
-  }
-  list[idx] = trimmed;
-  DB[cfg.dbKey] = list;
-  if (updateRecords) {
-    if (currentCategoryType === 'expense') {
-      (DB.expenses || []).forEach(e => {
-        if (e.cat === oldName) e.cat = trimmed;
-        (e.expLines || []).forEach(ln => { if (ln && ln.cat === oldName) ln.cat = trimmed; });
-      });
-    } else {
-      const records = DB[cfg.recordCollection] || [];
-      records.forEach(r => { if (r && r[cfg.recordField] === oldName) r[cfg.recordField] = trimmed; });
-    }
-  }
-  showToast(`Renamed to "${trimmed}"${updateRecords ? ' · updated '+affected+' record'+(affected>1?'s':'') : ''}`);
-  renderCategoryList();
-  populateCategorySelects();
-  // Refresh whichever list is on screen
-  if (currentCategoryType === 'supplier' && typeof renderSuppliers === 'function') renderSuppliers();
-  if (currentCategoryType === 'inventory' && typeof renderInventory === 'function') renderInventory();
-  if (currentCategoryType === 'product' && typeof renderProducts === 'function') renderProducts();
-  if (currentCategoryType === 'expense' && typeof renderExpenses === 'function') renderExpenses();
-}
-
-function deleteCategory(idx) {
-  const cfg  = CATEGORY_CONFIG[currentCategoryType];
-  const list = DB[cfg.dbKey] || [];
-  const name = list[idx];
-  if (!name) return;
-  // Block deletion if in use
-  let inUseCount = 0;
-  if (currentCategoryType === 'expense') {
-    (DB.expenses || []).forEach(e => {
-      if (e.cat === name) inUseCount++;
-      (e.expLines || []).forEach(ln => { if (ln && ln.cat === name) inUseCount++; });
-    });
-  } else {
-    const records = DB[cfg.recordCollection] || [];
-    inUseCount = records.filter(r => (r||{})[cfg.recordField] === name).length;
-  }
-  if (inUseCount > 0) {
-    alert(`Cannot delete "${name}" — ${inUseCount} ${cfg.label}${inUseCount>1?' entries are':' is'} using this category.\n\nReassign those records to another category first, then try deleting again.`);
-    return;
-  }
-  if (!confirm(`Delete category "${name}"? This cannot be undone.`)) return;
-  list.splice(idx, 1);
-  DB[cfg.dbKey] = list;
-  showToast(`Deleted "${name}"`);
-  renderCategoryList();
-  populateCategorySelects();
-}
-
-// Rebuild every category-driven <select> and <datalist> from DB
-function populateCategorySelects() {
-  Object.keys(CATEGORY_CONFIG).forEach(type => {
-    const cfg  = CATEGORY_CONFIG[type];
-    const list = DB[cfg.dbKey] || [];
-    // Rebuild selects
-    (cfg.selectIds || []).forEach(id => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      const current = el.value;
-      const allOpt  = (cfg.hasAllOption && cfg.hasAllOption[id]) ? '<option value="">All categories</option>' : '';
-      el.innerHTML = allOpt + list.map(c => `<option value="${c}"${c===current?' selected':''}>${c}</option>`).join('');
-    });
-    // Rebuild datalist (product suggestions)
-    if (cfg.datalistId) {
-      const dl = document.getElementById(cfg.datalistId);
-      if (dl) dl.innerHTML = list.map(c => `<option value="${c}">${c}</option>`).join('');
-    }
-  });
 }
 
 function renderSuppliers() {
