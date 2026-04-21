@@ -3315,6 +3315,16 @@ async function sbLoad() {
     showToast('Could not connect to cloud', 'error');
     console.error('Supabase load error:', e);
   }
+  // ---- MIGRATION: strip legacy packSize / customSize from Sales Orders ----
+  // (Sales Orders no longer use pack size — we keep Packing's pack sizes intact)
+  try {
+    (DB.salesOrders || []).forEach(o => {
+      const stripLine = l => { if (l && typeof l === 'object') { delete l.packSize; delete l.customSize; } };
+      (o.customers || []).forEach(c => (c.lines || []).forEach(stripLine));
+      (o.lines     || []).forEach(stripLine);
+      (o.dispatch  || []).forEach(d => (d.items || []).forEach(i => { if (i) delete i.packSize; }));
+    });
+  } catch(e) { console.warn('Sales Order packSize migration skipped:', e.message); }
   showLoading(false);
 }
 
@@ -5225,9 +5235,9 @@ function renderPerLorry() {
 // SALES ORDERS
 // ============================================================
 let editingOrderId  = null;
-let soCustomers     = []; // [{ id, customer, lines:[{id,product,packSize,qty,price,total}] }]
+let soCustomers     = []; // [{ id, customer, lines:[{id,product,qty,price,total}] }]
 let dispatchOrderId = null;
-let dispatchTeams   = []; // [{ id, team, items:[{lineId,product,packSize,qty}], notes }]
+let dispatchTeams   = []; // [{ id, team, items:[{lineId,product,qty}], notes }]
 let soTab           = 1;
 
 const SO_STATUSES   = ['New','Confirmed','Packing','Packed','Delivered','Cancelled'];
@@ -5324,7 +5334,7 @@ function removeSoCustomer(cid) {
 function addSoLine(cid) {
   const cust = soCustomers.find(c=>c.id===cid);
   if (!cust) return;
-  cust.lines.push({ id: Date.now()+Math.random(), product:'', packSize:0.5, qty:1, price:0, total:0 });
+  cust.lines.push({ id: Date.now()+Math.random(), product:'', qty:1, price:0, total:0 });
   renderSoCustomers();
 }
 
@@ -5348,11 +5358,7 @@ function setSoLineField(cid, lid, field, val) {
   const l = cust.lines.find(x=>x.id===lid);
   if (!l) return;
   l[field] = val;
-  if (field==='packSize' && val==='custom') { /* wait for custom size */ }
-  const size = l.packSize==='custom' ? parseFloat(l.customSize)||0 : parseFloat(l.packSize)||0;
   l.total = parseFloat(((parseInt(l.qty)||0) * (parseFloat(l.price)||0)).toFixed(2));
-  const kgCell = document.getElementById(`so-line-kg-${lid}`);
-  if (kgCell) kgCell.textContent = ((parseInt(l.qty)||0)*size).toFixed(2)+' kg';
   const totCell = document.getElementById(`so-line-total-${lid}`);
   if (totCell) totCell.textContent = currSym()+l.total.toFixed(2);
   updateSoOrderTotal();
@@ -5403,17 +5409,12 @@ function renderSoCustomers() {
       <table style="width:100%;border-collapse:collapse;">
         <thead><tr style="background:var(--bg);">
           <th style="padding:6px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:left;border-bottom:1px solid var(--border);">Product</th>
-          <th style="padding:6px 8px;font-size:11px;font-weight:500;color:var(--text2);width:110px;border-bottom:1px solid var(--border);">Pack Size</th>
           <th style="padding:6px 8px;font-size:11px;font-weight:500;color:var(--text2);width:70px;text-align:center;border-bottom:1px solid var(--border);">Qty</th>
-          <th style="padding:6px 8px;font-size:11px;font-weight:500;color:var(--text2);width:80px;text-align:right;border-bottom:1px solid var(--border);">Price/pack</th>
-          <th style="padding:6px 8px;font-size:11px;font-weight:500;color:var(--text2);width:75px;text-align:right;border-bottom:1px solid var(--border);">kg</th>
+          <th style="padding:6px 8px;font-size:11px;font-weight:500;color:var(--text2);width:80px;text-align:right;border-bottom:1px solid var(--border);">Price</th>
           <th style="padding:6px 8px;font-size:11px;font-weight:500;color:var(--text2);width:85px;text-align:right;border-bottom:1px solid var(--border);">Amount</th>
           <th style="width:24px;border-bottom:1px solid var(--border);"></th>
         </tr></thead>
         <tbody>${c.lines.map(l => {
-          const isCustom = l.packSize==='custom';
-          const size = isCustom ? parseFloat(l.customSize)||0 : parseFloat(l.packSize)||0;
-          const kg   = ((parseInt(l.qty)||0)*size).toFixed(2);
           const prodInList = DB.products.some(p=>p.name===l.product);
           const prodControl = (prodInList||!l.product)
             ? `<select style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;"
@@ -5426,13 +5427,6 @@ function renderSoCustomers() {
             : `<input type="text" value="${l.product}" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;" oninput="setSoLineField(${c.id},${l.id},'product',this.value)">`;
           return `<tr>
             <td style="padding:4px 8px;">${prodControl}</td>
-            <td style="padding:4px 4px;">
-              <select style="width:100%;padding:4px 4px;border:1px solid var(--border);border-radius:4px;font-size:11px;font-family:inherit;"
-                onchange="setSoLineField(${c.id},${l.id},'packSize',this.value);renderSoCustomers()">
-                ${PK_PACK_SIZES.map(s=>`<option value="${s.val}"${String(l.packSize)===String(s.val)?' selected':''}>${s.label}</option>`).join('')}
-              </select>
-              ${isCustom?`<input type="number" value="${l.customSize||''}" placeholder="kg" min="0" step="0.01" style="width:100%;margin-top:2px;padding:3px 4px;border:1px solid var(--border);border-radius:4px;font-size:11px;" oninput="setSoLineField(${c.id},${l.id},'customSize',this.value)">`:'' }
-            </td>
             <td style="padding:4px 4px;text-align:center;">
               <input type="number" value="${l.qty||1}" min="1" style="width:54px;padding:4px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:center;"
                 oninput="setSoLineField(${c.id},${l.id},'qty',this.value)">
@@ -5441,7 +5435,6 @@ function renderSoCustomers() {
               <input type="number" value="${l.price||''}" min="0" step="0.01" placeholder="0.00" style="width:68px;padding:4px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:right;"
                 oninput="setSoLineField(${c.id},${l.id},'price',this.value)">
             </td>
-            <td style="padding:4px 6px;text-align:right;font-family:'DM Mono',monospace;font-size:11px;color:var(--text2);" id="so-line-kg-${l.id}">${kg} kg</td>
             <td style="padding:4px 8px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;font-weight:500;color:var(--green);" id="so-line-total-${l.id}">RM ${(l.total||0).toFixed(2)}</td>
             <td style="padding:4px 2px;text-align:center;">
               <button onclick="removeSoLine(${c.id},${l.id})" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;line-height:1;">×</button>
@@ -5581,8 +5574,7 @@ function renderOrders() {
             <div style="font-size:12px;font-weight:600;margin-bottom:4px;padding-bottom:4px;border-bottom:1px solid var(--border);">${c.customer}</div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;">
               ${(c.lines||[]).map(l=>{
-                const sz = l.packSize==='custom'?((l.customSize||0)*1000)+'g custom':PK_PACK_SIZES.find(s=>String(s.val)===String(l.packSize))?.label||l.packSize;
-                return `<span style="font-size:12px;background:var(--bg);padding:3px 8px;border-radius:var(--radius-sm);">${l.product||'—'} <span class="badge badge-blue" style="font-size:10px;">${sz}</span> × <strong>${l.qty}</strong> <span style="color:var(--green);">RM ${(l.total||0).toFixed(2)}</span></span>`;
+                return `<span style="font-size:12px;background:var(--bg);padding:3px 8px;border-radius:var(--radius-sm);">${l.product||'—'} × <strong>${l.qty}</strong> <span style="color:var(--green);">RM ${(l.total||0).toFixed(2)}</span></span>`;
               }).join('')}
             </div>
           </div>`).join('')}
@@ -5616,8 +5608,7 @@ function openDispatchModal(orderId) {
       <div style="margin-bottom:4px;">
         <span style="font-size:12px;font-weight:500;">${c.customer}: </span>
         ${(c.lines||[]).map(l=>{
-          const sz = l.packSize==='custom'?((l.customSize||0)*1000)+'g':PK_PACK_SIZES.find(s=>String(s.val)===String(l.packSize))?.label||l.packSize;
-          return `<span style="font-size:12px;color:var(--text2);margin-right:10px;"><strong>${l.product}</strong> ${sz} × ${l.qty}</span>`;
+          return `<span style="font-size:12px;color:var(--text2);margin-right:10px;"><strong>${l.product}</strong> × ${l.qty}</span>`;
         }).join('')}
       </div>`).join('')}
     ${o.deliveryDate?`<div style="font-size:11px;color:var(--text2);margin-top:4px;">📅 Deliver by ${fmtDate(o.deliveryDate)}</div>`:''}`;
@@ -5651,7 +5642,7 @@ function autoDispatch() {
     dispatchTeams.forEach((t, i) => {
       const assignedQty = perTeam + (i === 0 ? remainder : 0); // remainder to first team
       if (assignedQty > 0) {
-        t.items.push({ lineId: l.id, product: l.product, packSize: l.packSize, qty: assignedQty });
+        t.items.push({ lineId: l.id, product: l.product, qty: assignedQty });
       }
     });
   });
@@ -5697,16 +5688,15 @@ function renderDispatchTeams() {
       <div style="padding:10px 12px;">
         <div style="font-size:11px;font-weight:500;color:var(--text2);margin-bottom:6px;">Assign packs to this team:</div>
         ${allLines.map(l=>{
-          const sz = l.packSize==='custom'?((l.customSize||0)*1000)+'g':PK_PACK_SIZES.find(s=>String(s.val)===String(l.packSize))?.label||l.packSize;
           const assigned = (t.items||[]).find(i=>i.lineId===l.id);
           return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
             <span style="font-size:12px;color:var(--text2);width:90px;flex-shrink:0;">${l.customer}</span>
-            <span style="flex:1;font-size:12px;font-weight:500;">${l.product} <span class="badge badge-blue" style="font-size:10px;">${sz}</span></span>
+            <span style="flex:1;font-size:12px;font-weight:500;">${l.product}</span>
             <span style="font-size:11px;color:var(--text2);">of ${l.qty}</span>
             <input type="number" value="${assigned?assigned.qty:''}" min="0" max="${l.qty}" placeholder="0"
               style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:center;"
-              oninput="setDispatchItem(${t.id},${l.id},'${l.product}','${l.packSize}',this.value)">
-            <span style="font-size:11px;color:var(--text2);">packs</span>
+              oninput="setDispatchItem(${t.id},${l.id},'${l.product}',this.value)">
+            <span style="font-size:11px;color:var(--text2);">qty</span>
           </div>`;
         }).join('')}
       </div>
@@ -5718,14 +5708,14 @@ function setDispatchTeam(tid, field, val) {
   if (t) t[field] = val;
 }
 
-function setDispatchItem(tid, lineId, product, packSize, val) {
+function setDispatchItem(tid, lineId, product, val) {
   const t = dispatchTeams.find(x=>x.id===tid);
   if (!t) return;
   if (!t.items) t.items = [];
   const existing = t.items.find(i=>i.lineId===lineId);
   const qty = parseInt(val)||0;
   if (existing) existing.qty = qty;
-  else t.items.push({ lineId, product, packSize, qty });
+  else t.items.push({ lineId, product, qty });
 }
 
 function saveDispatch() {
@@ -5784,9 +5774,8 @@ function renderDispatchByTeam(orders) {
     entries.forEach(({ o, d }) => {
       if (!d) return;
       (d.items || []).filter(i => i.qty > 0).forEach(i => {
-        const sz = PK_PACK_SIZES.find(s => String(s.val) === String(i.packSize))?.label || i.packSize;
-        const key = `${i.product}|${sz}`;
-        if (!productSummary[key]) productSummary[key] = { product: i.product, size: sz, qty: 0 };
+        const key = i.product;
+        if (!productSummary[key]) productSummary[key] = { product: i.product, qty: 0 };
         productSummary[key].qty += i.qty;
       });
     });
@@ -5813,9 +5802,8 @@ function renderDispatchByTeam(orders) {
             ${Object.values(productSummary).map(p => `
               <div style="background:#ffffff;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 12px;text-align:center;">
                 <div style="font-size:12px;font-weight:600;">${p.product}</div>
-                <div style="font-size:11px;color:var(--text2);">${p.size}</div>
                 <div style="font-family:'DM Mono',monospace;font-weight:700;font-size:16px;color:var(--green);margin-top:2px;">${p.qty.toLocaleString()}</div>
-                <div style="font-size:10px;color:var(--text3);">packs</div>
+                <div style="font-size:10px;color:var(--text3);">qty</div>
               </div>`).join('')}
           </div>
         </div>` : ''}
@@ -5837,8 +5825,7 @@ function renderDispatchByTeam(orders) {
             const itemsHtml = isUnassigned
               ? `<span style="color:var(--amber);">Not dispatched</span>`
               : (d.items||[]).filter(i=>i.qty>0).map(i=>{
-                  const sz = PK_PACK_SIZES.find(s=>String(s.val)===String(i.packSize))?.label||i.packSize;
-                  return `<span style="display:inline-block;margin-right:8px;"><strong>${i.product}</strong> ${sz} × <strong>${i.qty}</strong></span>`;
+                  return `<span style="display:inline-block;margin-right:8px;"><strong>${i.product}</strong> × <strong>${i.qty}</strong></span>`;
                 }).join('') || '—';
             return `<tr>
               <td style="padding:6px 10px;font-family:'DM Mono',monospace;font-weight:600;">${o.orderNo}${o.priority==='Urgent'?'<span class="badge badge-red" style="font-size:9px;margin-left:4px;">URGENT</span>':''}</td>
@@ -5896,8 +5883,7 @@ function renderDispatchBoard() {
           <div style="font-size:12px;margin-bottom:4px;">
             <strong>${c.customer}:</strong>
             ${(c.lines||[]).map(l=>{
-              const sz = l.packSize==='custom'?((l.customSize||0)*1000)+'g':PK_PACK_SIZES.find(s=>String(s.val)===String(l.packSize))?.label||l.packSize;
-              return `<span style="margin-left:6px;color:var(--text2);">${l.product} ${sz} × <strong>${l.qty}</strong></span>`;
+              return `<span style="margin-left:6px;color:var(--text2);">${l.product} × <strong>${l.qty}</strong></span>`;
             }).join('')}
           </div>`).join('')}
         ${o.dispatch&&o.dispatch.length?`
@@ -5906,8 +5892,7 @@ function renderDispatchBoard() {
           <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;font-size:12px;">
             <div style="font-weight:600;margin-bottom:4px;">Team ${d.team}</div>
             ${(d.items||[]).filter(i=>i.qty>0).map(i=>{
-              const sz = PK_PACK_SIZES.find(s=>String(s.val)===String(i.packSize))?.label||i.packSize;
-              return `<div style="color:var(--text2);">${i.product} ${sz}: <strong>${i.qty}</strong></div>`;
+              return `<div style="color:var(--text2);">${i.product}: <strong>${i.qty}</strong></div>`;
             }).join('')}
             ${d.notes?`<div style="color:var(--text3);font-size:11px;margin-top:3px;">${d.notes}</div>`:''}
           </div>`).join('')}
