@@ -2513,6 +2513,48 @@ tr:hover td { background:var(--bg); }
         <div class="form-group"><label>Employment Type</label>
           <select id="staff-type"><option>Full-time</option><option>Part-time</option><option>Contract</option></select>
         </div>
+
+        <!-- Address -->
+        <div class="form-group" style="grid-column:1/-1;"><label>Address</label><input type="text" id="staff-address" placeholder="Home address"></div>
+
+        <!-- Emergency Contact -->
+        <div class="form-group" style="grid-column:1/-1;">
+          <label style="margin-bottom:4px;display:block;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;">Emergency Contact</label>
+        </div>
+        <div class="form-group"><label>Contact Name</label><input type="text" id="staff-emergency-name" placeholder="Next of kin / spouse"></div>
+        <div class="form-group"><label>Contact Phone</label><input type="text" id="staff-emergency-phone" placeholder="+60 ..."></div>
+        <div class="form-group" style="grid-column:1/-1;"><label>Relationship</label><input type="text" id="staff-emergency-rel" placeholder="e.g. Spouse, Parent, Sibling"></div>
+
+        <!-- Bank Details -->
+        <div class="form-group" style="grid-column:1/-1;">
+          <label style="margin-bottom:4px;display:block;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;">Bank Details (for salary transfer)</label>
+        </div>
+        <div class="form-group"><label>Bank Name</label>
+          <select id="staff-bank">
+            <option value="">— Select Bank —</option>
+            <option>Maybank</option>
+            <option>CIMB Bank</option>
+            <option>Public Bank</option>
+            <option>RHB Bank</option>
+            <option>Hong Leong Bank</option>
+            <option>AmBank</option>
+            <option>Bank Islam</option>
+            <option>Bank Rakyat</option>
+            <option>BSN</option>
+            <option>Affin Bank</option>
+            <option>Alliance Bank</option>
+            <option>OCBC Bank</option>
+            <option>HSBC</option>
+            <option>Standard Chartered</option>
+            <option>UOB</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Account Number</label><input type="text" id="staff-bank-acc" placeholder="Bank account number"></div>
+
+        <!-- Notes -->
+        <div class="form-group" style="grid-column:1/-1;"><label>Notes <span style="font-weight:400;color:var(--text3);">(optional)</span></label><input type="text" id="staff-notes" placeholder="Any additional notes..."></div>
+
         <div class="form-group" style="grid-column:1/-1;">
           <label style="margin-bottom:8px;display:block;">Statutory Contributions</label>
           <div style="display:flex;gap:16px;flex-wrap:wrap;">
@@ -9584,6 +9626,13 @@ function openStaffModal(id) {
     document.getElementById('staff-epf').checked   = s.epf !== false;
     document.getElementById('staff-socso').checked = s.socso !== false;
     document.getElementById('staff-eis').checked   = s.eis !== false;
+    document.getElementById('staff-address').value         = s.address||'';
+    document.getElementById('staff-emergency-name').value  = s.emergencyName||'';
+    document.getElementById('staff-emergency-phone').value = s.emergencyPhone||'';
+    document.getElementById('staff-emergency-rel').value   = s.emergencyRel||'';
+    document.getElementById('staff-bank').value            = s.bank||'';
+    document.getElementById('staff-bank-acc').value        = s.bankAcc||'';
+    document.getElementById('staff-notes').value           = s.notes||'';
     togglePayRateLabel();
   } else {
     document.getElementById('staff-name').value     = '';
@@ -9598,6 +9647,13 @@ function openStaffModal(id) {
     document.getElementById('staff-epf').checked   = true;
     document.getElementById('staff-socso').checked = true;
     document.getElementById('staff-eis').checked   = true;
+    document.getElementById('staff-address').value         = '';
+    document.getElementById('staff-emergency-name').value  = '';
+    document.getElementById('staff-emergency-phone').value = '';
+    document.getElementById('staff-emergency-rel').value   = '';
+    document.getElementById('staff-bank').value            = '';
+    document.getElementById('staff-bank-acc').value        = '';
+    document.getElementById('staff-notes').value           = '';
     togglePayRateLabel();
   }
   openModal('modal-staff');
@@ -9620,6 +9676,13 @@ function saveStaff() {
     epf:     document.getElementById('staff-epf').checked,
     socso:   document.getElementById('staff-socso').checked,
     eis:     document.getElementById('staff-eis').checked,
+    address:        document.getElementById('staff-address').value.trim(),
+    emergencyName:  document.getElementById('staff-emergency-name').value.trim(),
+    emergencyPhone: document.getElementById('staff-emergency-phone').value.trim(),
+    emergencyRel:   document.getElementById('staff-emergency-rel').value.trim(),
+    bank:           document.getElementById('staff-bank').value,
+    bankAcc:        document.getElementById('staff-bank-acc').value.trim(),
+    notes:          document.getElementById('staff-notes').value.trim(),
   };
   if (editingStaffId) {
     const idx = DB.staff.findIndex(s => s.id === editingStaffId);
