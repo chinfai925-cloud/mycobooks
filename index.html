@@ -9389,6 +9389,63 @@ const PAYTYPE_OPTIONS = [
 ];
 const EMPTYPE_OPTIONS = ['Full-time','Part-time','Contract'];
 
+// Sort state for the spreadsheet — defaults to Name A→Z
+let staffSheetSort = { field: 'name', dir: 'asc' };
+
+function sortStaffSheet(field) {
+  if (staffSheetSort.field === field) {
+    // Same column clicked — toggle direction
+    staffSheetSort.dir = staffSheetSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    // New column — reset to ascending
+    staffSheetSort = { field, dir: 'asc' };
+  }
+  renderStaffSpreadsheet();
+}
+
+function sortedStaffForSheet() {
+  const { field, dir } = staffSheetSort;
+  const mult = dir === 'asc' ? 1 : -1;
+  // Numeric fields sort numerically; everything else sorts as strings (case-insensitive)
+  const numericFields = new Set(['salary']);
+  const dateFields    = new Set(['join']);
+
+  return [...DB.staff].sort((a, b) => {
+    let av = a[field];
+    let bv = b[field];
+
+    if (numericFields.has(field)) {
+      av = parseFloat(av) || 0;
+      bv = parseFloat(bv) || 0;
+      return (av - bv) * mult;
+    }
+    if (dateFields.has(field)) {
+      // Empty dates sort to the bottom regardless of direction
+      if (!av && !bv) return 0;
+      if (!av) return 1;
+      if (!bv) return -1;
+      return av.localeCompare(bv) * mult;
+    }
+    // String comparison — case-insensitive, empty values go last
+    av = (av == null ? '' : String(av)).toLowerCase();
+    bv = (bv == null ? '' : String(bv)).toLowerCase();
+    if (!av && !bv) return 0;
+    if (!av) return 1;
+    if (!bv) return -1;
+    return av.localeCompare(bv) * mult;
+  });
+}
+
+function sortHeader(label, field, align = 'left', minWidth = null, title = null) {
+  const active = staffSheetSort.field === field;
+  const arrow  = active ? (staffSheetSort.dir === 'asc' ? ' ↑' : ' ↓') : '';
+  const color  = active ? 'var(--green)' : 'var(--text2)';
+  const widthStyle = minWidth ? `min-width:${minWidth};` : '';
+  const titleAttr  = title ? `title="${title}"` : '';
+  return `<th style="padding:8px;text-align:${align};font-weight:500;color:${color};${widthStyle}cursor:pointer;user-select:none;"
+    onclick="sortStaffSheet('${field}')" ${titleAttr}>${label}${arrow}</th>`;
+}
+
 function renderStaffSpreadsheet() {
   const body = document.getElementById('staff-sheet-body');
   if (!body) return;
@@ -9402,20 +9459,27 @@ function renderStaffSpreadsheet() {
 
   const cellStyle = 'padding:6px 8px;border:none;background:transparent;font-size:12px;font-family:inherit;width:100%;outline:none;';
   const focusStyle = 'onfocus="this.style.background=\'var(--green-light)\'" onblur="this.style.background=\'transparent\'"';
+  const sortedStaff = sortedStaffForSheet();
+
+  // Sticky Name header needs special treatment (background + z-index + custom click handler inline)
+  const nameActive = staffSheetSort.field === 'name';
+  const nameArrow  = nameActive ? (staffSheetSort.dir === 'asc' ? ' ↑' : ' ↓') : '';
+  const nameColor  = nameActive ? 'var(--green)' : 'var(--text2)';
 
   body.innerHTML = `
     <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:1200px;">
       <thead>
         <tr style="background:var(--bg);border-bottom:2px solid var(--border);">
-          <th style="padding:8px;text-align:left;font-weight:500;color:var(--text2);position:sticky;left:0;background:var(--bg);z-index:1;min-width:160px;">Name</th>
-          <th style="padding:8px;text-align:left;font-weight:500;color:var(--text2);min-width:140px;">Role</th>
-          <th style="padding:8px;text-align:left;font-weight:500;color:var(--text2);min-width:130px;">Department</th>
-          <th style="padding:8px;text-align:left;font-weight:500;color:var(--text2);min-width:130px;">Pay Type</th>
-          <th style="padding:8px;text-align:right;font-weight:500;color:var(--text2);min-width:100px;">Rate (RM)</th>
-          <th style="padding:8px;text-align:left;font-weight:500;color:var(--text2);min-width:130px;">IC / Passport</th>
-          <th style="padding:8px;text-align:left;font-weight:500;color:var(--text2);min-width:120px;">Phone</th>
-          <th style="padding:8px;text-align:left;font-weight:500;color:var(--text2);min-width:100px;">Join Date</th>
-          <th style="padding:8px;text-align:left;font-weight:500;color:var(--text2);min-width:110px;">Employment</th>
+          <th style="padding:8px;text-align:left;font-weight:500;color:${nameColor};position:sticky;left:0;background:var(--bg);z-index:1;min-width:160px;cursor:pointer;user-select:none;"
+            onclick="sortStaffSheet('name')">Name${nameArrow}</th>
+          ${sortHeader('Role', 'role', 'left', '140px')}
+          ${sortHeader('Department', 'dept', 'left', '130px')}
+          ${sortHeader('Pay Type', 'payType', 'left', '130px')}
+          ${sortHeader('Rate (RM)', 'salary', 'right', '100px')}
+          ${sortHeader('IC / Passport', 'ic', 'left', '130px')}
+          ${sortHeader('Phone', 'phone', 'left', '120px')}
+          ${sortHeader('Join Date', 'join', 'left', '100px')}
+          ${sortHeader('Employment', 'type', 'left', '110px')}
           <th style="padding:8px;text-align:center;font-weight:500;color:var(--text2);" title="EPF">EPF</th>
           <th style="padding:8px;text-align:center;font-weight:500;color:var(--text2);" title="SOCSO">SOCSO</th>
           <th style="padding:8px;text-align:center;font-weight:500;color:var(--text2);" title="EIS">EIS</th>
@@ -9424,7 +9488,7 @@ function renderStaffSpreadsheet() {
         </tr>
       </thead>
       <tbody>
-        ${DB.staff.map(s => {
+        ${sortedStaff.map(s => {
           const allowTotal = (s.allowances || []).reduce((sum,a) => sum + (parseFloat(a.amount)||0), 0);
           const allowCount = (s.allowances || []).length;
           return `<tr style="border-bottom:1px solid var(--border);" data-staff-id="${s.id}">
