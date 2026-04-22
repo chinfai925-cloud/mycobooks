@@ -1711,14 +1711,14 @@ tr:hover td { background:var(--bg); }
     </div>
     <div class="modal-body">
       <div class="form-grid" style="grid-template-columns:1fr 1fr;">
-        <div class="form-group"><label>Date</label>
+        <div class="form-group" style="grid-column:1/-1;"><label>Date</label>
           <input type="date" id="sch-date">
         </div>
-        <div class="form-group"><label>Time Slot</label>
-          <select id="sch-slot" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
-            <option value="AM">Morning (AM)</option>
-            <option value="PM">Afternoon (PM)</option>
-          </select>
+        <div class="form-group"><label>Start Time</label>
+          <input type="time" id="sch-start" value="08:00">
+        </div>
+        <div class="form-group"><label>End Time</label>
+          <input type="time" id="sch-end" value="12:00">
         </div>
         <div class="form-group"><label>Lorry</label>
           <select id="sch-lorry" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
@@ -3456,6 +3456,17 @@ async function sbLoad() {
     });
   } catch(e) { console.warn('Sales Order packSize migration skipped:', e.message); }
 
+  // ---- MIGRATION: wipe legacy AM/PM scheduledTrips (schema changed to startTime/endTime) ----
+  try {
+    const legacy = (DB.scheduledTrips || []).filter(s => s && s.slot && !s.startTime);
+    if (legacy.length > 0) {
+      DB.scheduledTrips = (DB.scheduledTrips || []).filter(s => !(s && s.slot && !s.startTime));
+      // Delete from Supabase too
+      legacy.forEach(s => { try { sbDelete('scheduledTrips', s.id); } catch(e){} });
+      console.log(`Wiped ${legacy.length} legacy AM/PM scheduled trip(s)`);
+    }
+  } catch(e) { console.warn('Scheduled trips migration skipped:', e.message); }
+
   // ---- SEED default packing teams A–E if none exist ----
   try {
     const existingTeams = new Set((DB.packingTeams || []).map(t => t.team));
@@ -4043,10 +4054,10 @@ function renderDashboard() {
     if (upcoming.length === 0) {
       schEl.innerHTML = '<div class="empty-state"><p>No trips scheduled for today or tomorrow</p></div>';
     } else {
-      // Sort: today first, then tomorrow; AM before PM
+      // Sort: today first, then tomorrow; by start time within each day
       upcoming.sort((a,b) => {
         if (a.date !== b.date) return a.date.localeCompare(b.date);
-        return (a.slot==='AM'?0:1) - (b.slot==='AM'?0:1);
+        return (a.startTime||'').localeCompare(b.startTime||'');
       });
       const groups = { [todayIso]: [], [tomorrowIso]: [] };
       upcoming.forEach(s => { groups[s.date].push(s); });
@@ -4054,10 +4065,10 @@ function renderDashboard() {
       const renderRow = (s) => {
         const lorry = DB.lorries.find(x => x.id === s.lorryId);
         const plate = lorry ? lorry.plate : '—';
-        const slotColor = s.slot === 'AM' ? 'var(--green)' : 'var(--amber)';
+        const timeLabel = (s.startTime && s.endTime) ? `${s.startTime}–${s.endTime}` : '—';
         return `
           <div style="display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border);gap:10px;cursor:pointer;" onclick="navigate('fleet',document.querySelector('[data-page=fleet]'));setTimeout(()=>{switchFleetTab(5);openScheduleModal(${s.id})},50)">
-            <span style="background:${slotColor};color:white;font-size:9px;font-weight:600;padding:3px 6px;border-radius:3px;min-width:26px;text-align:center;">${s.slot||'—'}</span>
+            <span style="background:var(--bg);color:var(--green);font-size:10px;font-weight:600;padding:4px 7px;border-radius:3px;font-family:'DM Mono',monospace;border:1px solid var(--green);white-space:nowrap;">${timeLabel}</span>
             <div style="flex:1;min-width:0;">
               <div style="font-size:12px;font-weight:500;">${s.route || 'Custom'} · <span style="color:var(--text2);font-weight:400;">${s.driver || 'No driver'}</span></div>
               <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;">${plate}${s.notes?' · '+s.notes:''}</div>
@@ -5443,10 +5454,13 @@ function shiftScheduleWeek(delta) {
   renderSchedule();
 }
 
-function scheduleConflict(date, slot, lorryId, ignoreId) {
+function scheduleConflict(date, startTime, endTime, lorryId, ignoreId) {
+  // Time overlap: two ranges [a1,a2) and [b1,b2) overlap iff a1 < b2 && b1 < a2
   return DB.scheduledTrips.find(s =>
-    s.date === date && s.slot === slot && s.lorryId === lorryId &&
-    (ignoreId == null || s.id !== ignoreId)
+    s.date === date && s.lorryId === lorryId &&
+    (ignoreId == null || s.id !== ignoreId) &&
+    s.startTime && s.endTime &&
+    startTime < s.endTime && s.startTime < endTime
   );
 }
 
@@ -5498,34 +5512,30 @@ function renderSchedule() {
 
     days.forEach((d, dayIdx) => {
       const dIso = iso(d);
-      const amTrips = DB.scheduledTrips.filter(s => s.date===dIso && s.slot==='AM' && s.lorryId===l.id);
-      const pmTrips = DB.scheduledTrips.filter(s => s.date===dIso && s.slot==='PM' && s.lorryId===l.id);
+      const dayTrips = DB.scheduledTrips
+        .filter(s => s.date===dIso && s.lorryId===l.id)
+        .sort((a,b) => (a.startTime||'').localeCompare(b.startTime||''));
 
       const renderChip = (s) => {
-        const conflict = scheduleConflict(s.date, s.slot, s.lorryId, s.id);
+        const conflict = scheduleConflict(s.date, s.startTime, s.endTime, s.lorryId, s.id);
         const bg = conflict ? '#fee' : '#eef7f0';
         const bd = conflict ? 'var(--red)' : 'var(--green)';
         const warn = conflict ? ' ⚠' : '';
+        const timeLabel = (s.startTime && s.endTime) ? `${s.startTime}–${s.endTime}` : '';
         return `<div onclick="openScheduleModal(${s.id})" style="background:${bg};border:1px solid ${bd};border-radius:4px;padding:4px 6px;font-size:10px;cursor:pointer;margin-bottom:3px;line-height:1.3;" title="Click to edit${conflict?' · CONFLICT':''}">
-          <div style="font-weight:600;color:var(--text);">${s.route||'Custom'}${warn}</div>
+          <div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;color:${conflict?'var(--red)':'var(--green)'};">${timeLabel}${warn}</div>
+          <div style="font-weight:600;color:var(--text);">${s.route||'Custom'}</div>
           <div style="color:var(--text3);font-size:9px;">${s.driver||'—'}</div>
           <button onclick="event.stopPropagation();convertScheduleToTrip(${s.id})" style="margin-top:3px;background:var(--green);color:white;border:none;border-radius:3px;padding:2px 6px;font-size:9px;cursor:pointer;font-weight:600;">✓ Mark Done</button>
         </div>`;
       };
 
-      const slotCell = (label, trips, slot) => {
-        const slotTrips = trips.map(renderChip).join('');
-        const addBtn = `<button onclick="openScheduleModal(null,'${dIso}','${slot}',${l.id})" style="background:none;border:1px dashed var(--border);color:var(--text3);font-size:10px;padding:2px 6px;border-radius:3px;cursor:pointer;width:100%;">+ ${label}</button>`;
-        return `<div style="margin-bottom:4px;">
-          <div style="font-size:9px;color:var(--text3);font-weight:600;margin-bottom:2px;">${label}</div>
-          ${slotTrips}
-          ${addBtn}
-        </div>`;
-      };
+      const chipsHtml = dayTrips.map(renderChip).join('');
+      const addBtn = `<button onclick="openScheduleModal(null,'${dIso}',null,${l.id})" style="background:none;border:1px dashed var(--border);color:var(--text3);font-size:10px;padding:3px 6px;border-radius:3px;cursor:pointer;width:100%;">+ Trip</button>`;
 
-      html += `<td style="padding:6px 4px;border-bottom:${isLast?'none':'1px solid var(--border)'};border-right:${dayIdx<6?'1px solid var(--border)':'none'};vertical-align:top;min-width:110px;">
-        ${slotCell('AM', amTrips, 'AM')}
-        ${slotCell('PM', pmTrips, 'PM')}
+      html += `<td style="padding:6px 4px;border-bottom:${isLast?'none':'1px solid var(--border)'};border-right:${dayIdx<6?'1px solid var(--border)':'none'};vertical-align:top;min-width:120px;">
+        ${chipsHtml}
+        ${addBtn}
       </td>`;
     });
     html += `</tr>`;
@@ -5541,10 +5551,12 @@ function renderSchedule() {
   gridEl.innerHTML = html;
 }
 
-function openScheduleModal(id, prefillDate, prefillSlot, prefillLorryId) {
+function openScheduleModal(id, prefillDate, prefillStart, prefillLorryId) {
   editingSchId = id || null;
   document.getElementById('schedule-modal-title').textContent = id ? 'Edit Scheduled Trip' : 'Schedule Trip';
-  document.getElementById('sch-conflict-warning').style.display = 'none';
+  const warnEl = document.getElementById('sch-conflict-warning');
+  warnEl.style.display = 'none';
+  warnEl.dataset.confirmed = '';
   document.getElementById('sch-delete-btn').style.display = id ? '' : 'none';
 
   // Populate dropdowns
@@ -5571,14 +5583,16 @@ function openScheduleModal(id, prefillDate, prefillSlot, prefillLorryId) {
     const s = DB.scheduledTrips.find(x => x.id === id);
     if (!s) return;
     document.getElementById('sch-date').value   = s.date;
-    document.getElementById('sch-slot').value   = s.slot || 'AM';
+    document.getElementById('sch-start').value  = s.startTime || '08:00';
+    document.getElementById('sch-end').value    = s.endTime   || '12:00';
     document.getElementById('sch-lorry').value  = s.lorryId;
     document.getElementById('sch-driver').value = s.driver || '';
     document.getElementById('sch-route').value  = s.routeId || (s.route ? 'custom' : '');
     document.getElementById('sch-notes').value  = s.notes || '';
   } else {
     document.getElementById('sch-date').value   = prefillDate || new Date().toISOString().split('T')[0];
-    document.getElementById('sch-slot').value   = prefillSlot || 'AM';
+    document.getElementById('sch-start').value  = prefillStart || '08:00';
+    document.getElementById('sch-end').value    = '12:00';
     document.getElementById('sch-lorry').value  = prefillLorryId || '';
     document.getElementById('sch-driver').value = '';
     document.getElementById('sch-route').value  = '';
@@ -5589,25 +5603,33 @@ function openScheduleModal(id, prefillDate, prefillSlot, prefillLorryId) {
 }
 
 function saveScheduledTrip() {
-  const date    = document.getElementById('sch-date').value;
-  const slot    = document.getElementById('sch-slot').value;
-  const lorryId = parseInt(document.getElementById('sch-lorry').value);
-  const driver  = document.getElementById('sch-driver').value;
-  const routeVal = document.getElementById('sch-route').value;
-  const notes   = document.getElementById('sch-notes').value;
+  const date      = document.getElementById('sch-date').value;
+  const startTime = document.getElementById('sch-start').value;
+  const endTime   = document.getElementById('sch-end').value;
+  const lorryId   = parseInt(document.getElementById('sch-lorry').value);
+  const driver    = document.getElementById('sch-driver').value;
+  const routeVal  = document.getElementById('sch-route').value;
+  const notes     = document.getElementById('sch-notes').value;
 
   if (!date || !lorryId) {
     showToast('Please fill in date and lorry', 'error');
     return;
   }
+  if (!startTime || !endTime) {
+    showToast('Please fill in start and end times', 'error');
+    return;
+  }
+  if (startTime >= endTime) {
+    showToast('End time must be after start time', 'error');
+    return;
+  }
 
   // Conflict check (warn, don't block)
-  const conflict = scheduleConflict(date, slot, lorryId, editingSchId);
+  const conflict = scheduleConflict(date, startTime, endTime, lorryId, editingSchId);
   if (conflict) {
     const warnEl = document.getElementById('sch-conflict-warning');
-    warnEl.innerHTML = `⚠ This lorry is already scheduled for ${slot} on ${fmtDate(date)} (${conflict.route||'Custom'} · ${conflict.driver||'no driver'}). Save anyway?`;
+    warnEl.innerHTML = `⚠ This lorry is already scheduled ${conflict.startTime}–${conflict.endTime} on ${fmtDate(date)} (${conflict.route||'Custom'} · ${conflict.driver||'no driver'}). Save anyway?`;
     warnEl.style.display = '';
-    // Require a second click to proceed
     if (!warnEl.dataset.confirmed) {
       warnEl.dataset.confirmed = '1';
       return;
@@ -5620,7 +5642,7 @@ function saveScheduledTrip() {
 
   const rec = {
     id: editingSchId || DB.nextIds.scheduledTrips++,
-    date, slot, lorryId, driver,
+    date, startTime, endTime, lorryId, driver,
     routeId, route, notes,
     status: 'planned'
   };
