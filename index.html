@@ -441,6 +441,10 @@ tr:hover td { background:var(--bg); }
             <div class="card-head"><span class="card-title">Recent Transactions</span><button class="btn btn-outline btn-sm" onclick="navigate('expenses',document.querySelector('[data-page=expenses]'))">View All</button></div>
             <div class="card-body" style="padding:0;" id="dash-recent-tx"></div>
           </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">🚛 Fleet Schedule <span style="font-size:11px;color:var(--text3);font-weight:400;">today + tomorrow</span></span><button class="btn btn-outline btn-sm" onclick="navigate('fleet',document.querySelector('[data-page=fleet]'));setTimeout(()=>switchFleetTab(5),50)">View All</button></div>
+            <div class="card-body" style="padding:0;" id="dash-schedule"></div>
+          </div>
         </div>
         <div>
           <div class="card">
@@ -4026,6 +4030,49 @@ function renderDashboard() {
       </div>
       <div style="font-size:13px;font-weight:500;font-family:'DM Mono',monospace;">${fmt(i.total)}</div>
     </div>`).join('') || '<div class="empty-state"><p>No pending invoices</p></div>';
+
+  // Fleet schedule widget — today + tomorrow
+  const schEl = document.getElementById('dash-schedule');
+  if (schEl) {
+    const today = new Date();
+    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1);
+    const todayIso = today.toISOString().split('T')[0];
+    const tomorrowIso = tomorrow.toISOString().split('T')[0];
+    const upcoming = (DB.scheduledTrips||[]).filter(s => s.date===todayIso || s.date===tomorrowIso);
+
+    if (upcoming.length === 0) {
+      schEl.innerHTML = '<div class="empty-state"><p>No trips scheduled for today or tomorrow</p></div>';
+    } else {
+      // Sort: today first, then tomorrow; AM before PM
+      upcoming.sort((a,b) => {
+        if (a.date !== b.date) return a.date.localeCompare(b.date);
+        return (a.slot==='AM'?0:1) - (b.slot==='AM'?0:1);
+      });
+      const groups = { [todayIso]: [], [tomorrowIso]: [] };
+      upcoming.forEach(s => { groups[s.date].push(s); });
+
+      const renderRow = (s) => {
+        const lorry = DB.lorries.find(x => x.id === s.lorryId);
+        const plate = lorry ? lorry.plate : '—';
+        const slotColor = s.slot === 'AM' ? 'var(--green)' : 'var(--amber)';
+        return `
+          <div style="display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border);gap:10px;cursor:pointer;" onclick="navigate('fleet',document.querySelector('[data-page=fleet]'));setTimeout(()=>{switchFleetTab(5);openScheduleModal(${s.id})},50)">
+            <span style="background:${slotColor};color:white;font-size:9px;font-weight:600;padding:3px 6px;border-radius:3px;min-width:26px;text-align:center;">${s.slot||'—'}</span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;font-weight:500;">${s.route || 'Custom'} · <span style="color:var(--text2);font-weight:400;">${s.driver || 'No driver'}</span></div>
+              <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;">${plate}${s.notes?' · '+s.notes:''}</div>
+            </div>
+            <button onclick="event.stopPropagation();convertScheduleToTrip(${s.id})" style="background:var(--green);color:white;border:none;border-radius:3px;padding:4px 8px;font-size:10px;cursor:pointer;font-weight:600;">✓ Done</button>
+          </div>`;
+      };
+
+      const section = (label, items) => items.length ? `
+        <div style="padding:8px 16px;background:var(--bg);font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--border);">${label} <span style="color:var(--text3);font-weight:400;">· ${items.length} trip${items.length!==1?'s':''}</span></div>
+        ${items.map(renderRow).join('')}` : '';
+
+      schEl.innerHTML = section('Today', groups[todayIso]) + section('Tomorrow', groups[tomorrowIso]);
+    }
+  }
 
   // Cashflow widget — next 30 days
   const cfEl = document.getElementById('dash-cashflow');
