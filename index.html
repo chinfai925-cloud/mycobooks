@@ -5454,14 +5454,30 @@ function shiftScheduleWeek(delta) {
   renderSchedule();
 }
 
-function scheduleConflict(date, startTime, endTime, lorryId, ignoreId) {
+function scheduleConflict(date, startTime, endTime, lorryId, driver, ignoreId) {
   // Time overlap: two ranges [a1,a2) and [b1,b2) overlap iff a1 < b2 && b1 < a2
-  return DB.scheduledTrips.find(s =>
-    s.date === date && s.lorryId === lorryId &&
+  const overlaps = (s) =>
+    s.date === date &&
     (ignoreId == null || s.id !== ignoreId) &&
     s.startTime && s.endTime &&
-    startTime < s.endTime && s.startTime < endTime
-  );
+    startTime < s.endTime && s.startTime < endTime;
+
+  // Lorry conflict: same lorry, overlapping window
+  const lorryHit = DB.scheduledTrips.find(s => overlaps(s) && s.lorryId === lorryId);
+  if (lorryHit) return { type: 'lorry', trip: lorryHit };
+
+  // Driver conflict: same driver on a different lorry, overlapping window
+  // (only when both sides have a non-empty driver name)
+  if (driver && driver.trim()) {
+    const driverHit = DB.scheduledTrips.find(s =>
+      overlaps(s) &&
+      s.driver && s.driver.trim() &&
+      s.driver.trim().toLowerCase() === driver.trim().toLowerCase()
+    );
+    if (driverHit) return { type: 'driver', trip: driverHit };
+  }
+
+  return null;
 }
 
 function renderSchedule() {
@@ -5517,12 +5533,17 @@ function renderSchedule() {
         .sort((a,b) => (a.startTime||'').localeCompare(b.startTime||''));
 
       const renderChip = (s) => {
-        const conflict = scheduleConflict(s.date, s.startTime, s.endTime, s.lorryId, s.id);
+        const conflict = scheduleConflict(s.date, s.startTime, s.endTime, s.lorryId, s.driver, s.id);
         const bg = conflict ? '#fee' : '#eef7f0';
         const bd = conflict ? 'var(--red)' : 'var(--green)';
         const warn = conflict ? ' ⚠' : '';
+        const conflictLabel = conflict
+          ? (conflict.type === 'driver'
+              ? `DRIVER CONFLICT — also on ${DB.lorries.find(x=>x.id===conflict.trip.lorryId)?.plate||'?'} ${conflict.trip.startTime}–${conflict.trip.endTime}`
+              : `LORRY CONFLICT — overlaps ${conflict.trip.startTime}–${conflict.trip.endTime}`)
+          : '';
         const timeLabel = (s.startTime && s.endTime) ? `${s.startTime}–${s.endTime}` : '';
-        return `<div onclick="openScheduleModal(${s.id})" style="background:${bg};border:1px solid ${bd};border-radius:4px;padding:4px 6px;font-size:10px;cursor:pointer;margin-bottom:3px;line-height:1.3;" title="Click to edit${conflict?' · CONFLICT':''}">
+        return `<div onclick="openScheduleModal(${s.id})" style="background:${bg};border:1px solid ${bd};border-radius:4px;padding:4px 6px;font-size:10px;cursor:pointer;margin-bottom:3px;line-height:1.3;" title="${conflict ? conflictLabel : 'Click to edit'}">
           <div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;color:${conflict?'var(--red)':'var(--green)'};">${timeLabel}${warn}</div>
           <div style="font-weight:600;color:var(--text);">${s.route||'Custom'}</div>
           <div style="color:var(--text3);font-size:9px;">${s.driver||'—'}</div>
@@ -5625,10 +5646,17 @@ function saveScheduledTrip() {
   }
 
   // Conflict check (warn, don't block)
-  const conflict = scheduleConflict(date, startTime, endTime, lorryId, editingSchId);
+  const conflict = scheduleConflict(date, startTime, endTime, lorryId, driver, editingSchId);
   if (conflict) {
     const warnEl = document.getElementById('sch-conflict-warning');
-    warnEl.innerHTML = `⚠ This lorry is already scheduled ${conflict.startTime}–${conflict.endTime} on ${fmtDate(date)} (${conflict.route||'Custom'} · ${conflict.driver||'no driver'}). Save anyway?`;
+    const t = conflict.trip;
+    if (conflict.type === 'driver') {
+      const otherLorry = DB.lorries.find(l => l.id === t.lorryId);
+      const otherPlate = otherLorry ? otherLorry.plate : '(unknown lorry)';
+      warnEl.innerHTML = `⚠ <strong>${driver}</strong> is already scheduled ${t.startTime}–${t.endTime} on ${fmtDate(date)} (${otherPlate} · ${t.route||'Custom'}). Save anyway?`;
+    } else {
+      warnEl.innerHTML = `⚠ This lorry is already scheduled ${t.startTime}–${t.endTime} on ${fmtDate(date)} (${t.route||'Custom'} · ${t.driver||'no driver'}). Save anyway?`;
+    }
     warnEl.style.display = '';
     if (!warnEl.dataset.confirmed) {
       warnEl.dataset.confirmed = '1';
