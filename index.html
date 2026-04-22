@@ -915,6 +915,7 @@ tr:hover td { background:var(--bg); }
         <button id="hv-tab-3" onclick="switchHvTab(3)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">📦 Packing</button>
         <button id="hv-tab-4" onclick="switchHvTab(4)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">📊 Packing Summary</button>
         <button id="hv-tab-5" onclick="switchHvTab(5)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">💰 Packing Wages</button>
+        <button id="hv-tab-6" onclick="switchHvTab(6)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">👥 Manage Teams</button>
       </div>
 
       <!-- Tab 1: Daily Log -->
@@ -1014,6 +1015,22 @@ tr:hover td { background:var(--bg); }
           </div>
         </div>
         <div id="pw-content"></div>
+      </div>
+
+      <!-- Tab 6: Manage Teams -->
+      <div id="hv-panel-6" style="display:none;">
+        <div class="card" style="margin-bottom:14px;">
+          <div class="card-body" style="padding:14px 18px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <div style="font-size:24px;">👥</div>
+              <div style="flex:1;">
+                <div style="font-size:14px;font-weight:600;">Packing Team Rosters</div>
+                <div style="font-size:12px;color:var(--text2);margin-top:2px;">Assign staff to teams A–E. When you record a packing session, selecting a team auto-fills its roster.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="pt-teams-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;"></div>
       </div>
     </div>
 
@@ -1819,6 +1836,36 @@ tr:hover td { background:var(--bg); }
   </div>
 </div>
 
+<!-- Packing Team Roster Modal -->
+<div class="modal-backdrop" id="modal-packing-team">
+  <div class="modal" style="width:480px;">
+    <div class="modal-head">
+      <span class="modal-title" id="pt-modal-title">Edit Team Roster</span>
+      <button class="modal-close" onclick="closeModal('modal-packing-team')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Team</label>
+          <div id="pt-team-label" style="font-size:15px;font-weight:600;color:var(--green);padding:8px 10px;background:var(--green-light);border-radius:var(--radius-sm);">—</div>
+        </div>
+        <div class="form-group">
+          <label>Members <span style="font-weight:400;color:var(--text3);" id="pt-member-count">(0 selected)</span></label>
+          <div id="pt-staff-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px;"></div>
+        </div>
+        <div class="form-group">
+          <label>Notes <span style="font-weight:400;color:var(--text3);">(optional)</span></label>
+          <input type="text" id="pt-notes" placeholder="e.g. Morning shift, supervisor: Ali">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-outline" onclick="closeModal('modal-packing-team')">Cancel</button>
+        <button class="btn btn-primary" onclick="savePackingTeam()">Save Roster</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Packing Modal -->
 <div class="modal-backdrop" id="modal-packing">
   <div class="modal" style="width:740px;">
@@ -1856,7 +1903,7 @@ tr:hover td { background:var(--bg); }
         </div>
         <div class="form-group"><label style="display:flex;justify-content:space-between;align-items:center;">
           Team Members
-          <button type="button" onclick="saveTeamDefault()" class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 8px;">💾 Set as Default</button>
+          <button type="button" onclick="saveTeamDefault()" class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 8px;" title="Save current selection as this team's permanent roster (can also be managed in Harvest → Manage Teams)">💾 Save Roster</button>
         </label>
           <div style="position:relative;">
             <div id="pk-members-wrap" style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);min-height:38px;background:#ffffff;cursor:pointer;user-select:none;" onclick="toggleMembersDropdown()">
@@ -3247,7 +3294,7 @@ const SB_TABLES = [
   'users','expenses','sales','invoices','inventory','staff','customers',
   'products','accounts','suppliers','payrollRuns','wageAdvances','transfers',
   'cashflowItems','loans','claims','recurringExpenses','batches','harvests',
-  'packings','packingRates','salesOrders','lorries','refuels','maintenance',
+  'packings','packingRates','packingTeams','salesOrders','lorries','refuels','maintenance',
   'trips','routeRates','payments','creditNotes','debitNotes'
 ];
 
@@ -3344,6 +3391,18 @@ async function sbLoad() {
       (o.dispatch  || []).forEach(d => (d.items || []).forEach(i => { if (i) delete i.packSize; }));
     });
   } catch(e) { console.warn('Sales Order packSize migration skipped:', e.message); }
+
+  // ---- SEED default packing teams A–E if none exist ----
+  try {
+    const existingTeams = new Set((DB.packingTeams || []).map(t => t.team));
+    ['A','B','C','D','E'].forEach(t => {
+      if (!existingTeams.has(t)) {
+        const id = DB.nextIds.packingTeams++;
+        DB.packingTeams.push({ id, team:t, members:[], notes:'' });
+      }
+    });
+  } catch(e) { console.warn('Packing team seeding skipped:', e.message); }
+
   showLoading(false);
 }
 
@@ -3411,6 +3470,7 @@ const COLS = {
   harvests:     ['id','date','batchId','kg','flush','grade','harvester','notes','saleId'],
   packings:     ['id','date','team','members','notes','orders','packs','totalKg','soId','soOrderNo','dispatchTeamId'],
   packingRates: ['id','product','ratePerPack','notes'],
+  packingTeams: ['id','team','members','notes'],
   salesOrders:  ['id','orderNo','customers','lines','customer','deliveryDate','salesperson','priority','notes','total','status','createdOn','dispatch'],
   lorries:      ['id','plate','name','model','odometer','serviceIntervalKm','lastServiceKm','roadTaxExpiry','insuranceExpiry','puspakomDate','puspakomNext'],
   refuels:      ['id','date','lorryId','odometer','km','litres','cost','ppl','efficiency','driver','account','notes'],
@@ -3552,6 +3612,7 @@ const DB = {
   harvests: [],
   packings: [],
   packingRates: [],  // [{ id, product, ratePerPack }]
+  packingTeams: [],  // [{ id, team:'A'|'B'|'C'|'D'|'E', members:[names], notes }]
   salesOrders: [],
   lorries: [],
   refuels: [],
@@ -3562,7 +3623,7 @@ const DB = {
   creditNotes: [],
   debitNotes: [],
   company: { name:'', regno:'', phone:'', email:'', address:'', bank:'', bankacc:'', footer:'Thank you for your business!' },
-  nextIds: { expenses:1, sales:1, invoices:1, inventory:1, staff:1, customers:1, products:1, accounts:1, users:1, suppliers:1, payrollRuns:1, wageAdvances:1, transfers:1, cashflowItems:1, loans:1, claims:1, recurringExpenses:1, batches:1, harvests:1, packings:1, packingRates:1, salesOrders:1, lorries:1, refuels:1, maintenance:1, trips:1, routeRates:1, payments:1, creditNotes:1, debitNotes:1 }
+  nextIds: { expenses:1, sales:1, invoices:1, inventory:1, staff:1, customers:1, products:1, accounts:1, users:1, suppliers:1, payrollRuns:1, wageAdvances:1, transfers:1, cashflowItems:1, loans:1, claims:1, recurringExpenses:1, batches:1, harvests:1, packings:1, packingRates:1, packingTeams:1, salesOrders:1, lorries:1, refuels:1, maintenance:1, trips:1, routeRates:1, payments:1, creditNotes:1, debitNotes:1 }
 };
 
 // ============================================================
@@ -5802,8 +5863,8 @@ function createPackingSessionsFromSO(orderId) {
       id:      DB.nextIds.packings++,
       date:    today,
       team:    d.team,
-      // Auto-load team defaults for members
-      members: [...(packingTeamDefaults[d.team] || [])],
+      // Auto-load team roster from Manage Teams
+      members: getTeamRoster(d.team),
       notes:   `Auto-created from ${o.orderNo}`,
       orders:  [{
         id: Date.now() + Math.random(),
@@ -6030,12 +6091,13 @@ let hvTab = 1;
 
 function switchHvTab(n) {
   hvTab = n;
-  [1,2,3,4,5].forEach(i => {
+  [1,2,3,4,5,6].forEach(i => {
     document.getElementById('hv-panel-'+i).style.display = i===n ? '' : 'none';
     const btn = document.getElementById('hv-tab-'+i);
     btn.style.borderBottomColor = i===n ? 'var(--green)' : 'transparent';
     btn.style.color = i===n ? 'var(--green)' : 'var(--text)';
   });
+  if (n === 6) { renderPackingTeams(); return; }
   renderHarvest();
 }
 
@@ -6371,8 +6433,12 @@ function payPackingWages() {
 let editingPackingId = null;
 let pkOrders = []; // [{ id, customer, lines:[{id,product,packSize,qty,totalKg}] }]
 let pkSelectedMembers = [];
-// Persisted default members per team { A: ['Ali','Siti'], B: [...], ... }
-let packingTeamDefaults = { A:[], B:[], C:[], D:[], E:[] };
+
+// Helper: get team roster from DB.packingTeams
+function getTeamRoster(team) {
+  const row = (DB.packingTeams || []).find(t => t.team === team);
+  return row ? [...(row.members || [])] : [];
+}
 
 const PK_PACK_SIZES = [
   {label:'150g', val:0.15},{label:'200g',val:0.2},{label:'250g',val:0.25},
@@ -6381,13 +6447,13 @@ const PK_PACK_SIZES = [
 ];
 
 function loadTeamDefaults(team) {
-  const defaults = packingTeamDefaults[team] || [];
-  if (defaults.length > 0) {
-    pkSelectedMembers = [...defaults];
+  const roster = getTeamRoster(team);
+  if (roster.length > 0) {
+    pkSelectedMembers = roster;
     updateMembersLabel();
-    showToast(`Team ${team} defaults loaded — ${defaults.join(', ')}`);
+    showToast(`Team ${team} roster loaded — ${roster.join(', ')}`);
   } else {
-    // No defaults set yet — clear selection so user picks fresh
+    // No roster set yet — clear selection so user picks fresh
     pkSelectedMembers = [];
     updateMembersLabel();
   }
@@ -6398,8 +6464,14 @@ function saveTeamDefault() {
   if (pkSelectedMembers.length === 0) {
     showToast('Select at least one team member first', 'error'); return;
   }
-  packingTeamDefaults[team] = [...pkSelectedMembers];
-  showToast(`Team ${team} default saved — ${pkSelectedMembers.join(', ')}`);
+  let row = (DB.packingTeams || []).find(t => t.team === team);
+  if (!row) {
+    row = { id: DB.nextIds.packingTeams++, team, members: [], notes:'' };
+    DB.packingTeams.push(row);
+  }
+  row.members = [...pkSelectedMembers];
+  if (typeof sbSave === 'function') sbSave('packingTeams', row);
+  showToast(`Team ${team} roster saved — ${pkSelectedMembers.join(', ')}`);
 }
 
 function toggleMembersDropdown() {
@@ -6646,9 +6718,9 @@ function openPackingModal(id) {
   document.getElementById('pk-team').value = 'A';
   document.getElementById('pk-notes').value = '';
 
-  // Auto-load defaults for Team A (or whichever is selected)
+  // Auto-load roster for Team A (or whichever is selected)
   if (!id) {
-    pkSelectedMembers = [...(packingTeamDefaults['A'] || [])];
+    pkSelectedMembers = getTeamRoster('A');
   }
   updateMembersLabel();
 
@@ -6818,6 +6890,112 @@ function deletePacking(id) {
   DB.packings = DB.packings.filter(x=>x.id!==id);
   showToast('Packing record deleted');
   renderPacking();
+}
+
+// ============================================================
+// PACKING TEAMS (Roster management)
+// ============================================================
+let editingPackingTeamId = null;
+
+function renderPackingTeams() {
+  const el = document.getElementById('pt-teams-grid');
+  if (!el) return;
+
+  // Ensure all 5 teams A-E exist (defensive; seeding also runs on load)
+  ['A','B','C','D','E'].forEach(t => {
+    if (!(DB.packingTeams || []).some(r => r.team === t)) {
+      DB.packingTeams.push({ id: DB.nextIds.packingTeams++, team:t, members:[], notes:'' });
+    }
+  });
+
+  // Count how many packing sessions each team has (usage)
+  const usage = {};
+  (DB.packings || []).forEach(p => { usage[p.team] = (usage[p.team] || 0) + 1; });
+
+  const teams = [...DB.packingTeams].sort((a,b) => a.team.localeCompare(b.team));
+
+  el.innerHTML = teams.map(t => {
+    const members = t.members || [];
+    const sessionCount = usage[t.team] || 0;
+    const memberChips = members.length === 0
+      ? `<div style="font-size:12px;color:var(--text3);font-style:italic;padding:6px 0;">No staff assigned yet</div>`
+      : `<div style="display:flex;flex-wrap:wrap;gap:4px;">
+          ${members.map(m => {
+            const s = DB.staff.find(x => x.name === m);
+            const role = s ? s.role : '';
+            return `<span style="display:inline-flex;align-items:center;gap:4px;background:var(--green-light);color:var(--green);border-radius:12px;padding:3px 10px;font-size:12px;font-weight:500;" title="${role}">${m}</span>`;
+          }).join('')}
+        </div>`;
+    return `<div class="card" style="margin-bottom:0;">
+      <div class="card-head" style="padding:12px 14px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:36px;height:36px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;">${t.team}</div>
+          <div>
+            <div style="font-size:14px;font-weight:600;">Team ${t.team}</div>
+            <div style="font-size:11px;color:var(--text2);">${members.length} member${members.length===1?'':'s'} · ${sessionCount} session${sessionCount===1?'':'s'}</div>
+          </div>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="openPackingTeamModal(${t.id})" style="font-size:11px;">Edit Roster</button>
+      </div>
+      <div class="card-body" style="padding:12px 14px;">
+        ${memberChips}
+        ${t.notes ? `<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;color:var(--text2);">📝 ${t.notes}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openPackingTeamModal(id) {
+  const row = (DB.packingTeams || []).find(r => r.id === id);
+  if (!row) { showToast('Team not found', 'error'); return; }
+  editingPackingTeamId = id;
+  document.getElementById('pt-modal-title').textContent = `Edit Team ${row.team} Roster`;
+  document.getElementById('pt-team-label').textContent = `Team ${row.team}`;
+  document.getElementById('pt-notes').value = row.notes || '';
+
+  // Build staff checklist
+  const listEl = document.getElementById('pt-staff-list');
+  const selected = new Set(row.members || []);
+  if (DB.staff.length === 0) {
+    listEl.innerHTML = '<div style="padding:14px;font-size:12px;color:var(--text3);text-align:center;">No staff added yet. Add staff from the Payroll page first.</div>';
+  } else {
+    listEl.innerHTML = DB.staff.map(s => {
+      const checked = selected.has(s.name);
+      return `<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-radius:4px;background:${checked?'var(--green-light)':'#ffffff'};margin-bottom:2px;"
+        onmouseover="if(!this.querySelector('input').checked)this.style.background='var(--bg)'"
+        onmouseout="if(!this.querySelector('input').checked)this.style.background='#ffffff'">
+        <input type="checkbox" value="${s.name}" ${checked?'checked':''} data-pt-staff
+          onchange="this.parentElement.style.background=this.checked?'var(--green-light)':'#ffffff';updatePtMemberCount();"
+          style="width:15px;height:15px;accent-color:var(--green);cursor:pointer;">
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:500;">${s.name}</div>
+          <div style="font-size:11px;color:var(--text3);">${s.role || '—'} · ${s.dept || '—'}</div>
+        </div>
+      </label>`;
+    }).join('');
+  }
+  updatePtMemberCount();
+  document.getElementById('modal-packing-team').classList.add('open');
+}
+
+function updatePtMemberCount() {
+  const n = document.querySelectorAll('#pt-staff-list input[data-pt-staff]:checked').length;
+  const el = document.getElementById('pt-member-count');
+  if (el) el.textContent = `(${n} selected)`;
+}
+
+function savePackingTeam() {
+  if (editingPackingTeamId == null) return;
+  const row = (DB.packingTeams || []).find(r => r.id === editingPackingTeamId);
+  if (!row) { showToast('Team not found', 'error'); return; }
+  const selected = [...document.querySelectorAll('#pt-staff-list input[data-pt-staff]:checked')].map(i => i.value);
+  row.members = selected;
+  row.notes = document.getElementById('pt-notes').value.trim();
+  if (typeof sbSave === 'function') sbSave('packingTeams', row);
+  showToast(`Team ${row.team} roster saved — ${selected.length} member${selected.length===1?'':'s'}`);
+  closeModal('modal-packing-team');
+  editingPackingTeamId = null;
+  renderPackingTeams();
 }
 
 function renderPackingSummary() {
@@ -12928,7 +13106,7 @@ async function switchCompany(newId) {
   const savedUser = DB.currentUser;
   const tableKeys = ['users','expenses','sales','invoices','inventory','staff','customers',
     'products','accounts','suppliers','payrollRuns','wageAdvances','transfers','cashflowItems',
-    'loans','claims','recurringExpenses','batches','harvests','packings','packingRates',
+    'loans','claims','recurringExpenses','batches','harvests','packings','packingRates','packingTeams',
     'salesOrders','lorries','refuels','maintenance','trips','routeRates','payments'];
   tableKeys.forEach(k => { DB[k] = []; });
   // Reset nextIds
@@ -13084,6 +13262,7 @@ function generateSetupSql(prefix) {
     harvests: `id int8 primary key, date text, "batchId" int8, kg numeric, flush int8, grade text, harvester text, notes text, "saleId" int8`,
     packings: `id int8 primary key, date text, team text, members text, notes text, orders text, packs int8, "totalKg" numeric`,
     packing_rates: `id int8 primary key, product text, "ratePerPack" numeric, notes text`,
+    packing_teams: `id int8 primary key, team text, members text, notes text`,
     sales_orders: `id int8 primary key, "orderNo" text, customers text, lines text, customer text, "deliveryDate" text, salesperson text, priority text, notes text, total numeric, status text, "createdOn" text, dispatch text`,
     lorries: `id int8 primary key, plate text, name text, model text, odometer numeric, "serviceIntervalKm" numeric, "lastServiceKm" numeric, "roadTaxExpiry" text, "insuranceExpiry" text, "puspakomDate" text, "puspakomNext" text`,
     refuels: `id int8 primary key, date text, "lorryId" int8, odometer numeric, km numeric, litres numeric, cost numeric, ppl numeric, efficiency numeric, driver text, account text, notes text`,
