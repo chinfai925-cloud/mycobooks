@@ -1736,6 +1736,7 @@ tr:hover td { background:var(--bg); }
       <div id="sch-conflict-warning" style="display:none;background:#fee;border:1px solid var(--red);color:var(--red);padding:8px 12px;border-radius:var(--radius-sm);font-size:12px;margin-bottom:12px;"></div>
       <div class="form-actions">
         <button id="sch-delete-btn" class="btn btn-outline" style="color:var(--red);border-color:var(--red);display:none;margin-right:auto;" onclick="deleteScheduledTrip()">Delete</button>
+        <button id="sch-copy-btn" class="btn btn-outline" style="display:none;" onclick="copyScheduledTripToDate()">📋 Copy to date…</button>
         <button class="btn btn-outline" onclick="closeModal('modal-schedule')">Cancel</button>
         <button class="btn btn-primary" onclick="saveScheduledTrip()">Save</button>
       </div>
@@ -5600,6 +5601,8 @@ function openScheduleModal(id, prefillDate, prefillStart, prefillLorryId) {
   warnEl.style.display = 'none';
   warnEl.dataset.confirmed = '';
   document.getElementById('sch-delete-btn').style.display = id ? '' : 'none';
+  const copyBtnEl = document.getElementById('sch-copy-btn');
+  if (copyBtnEl) copyBtnEl.style.display = id ? '' : 'none';
 
   // Populate dropdowns
   document.getElementById('sch-lorry').innerHTML =
@@ -5720,6 +5723,77 @@ function deleteScheduledTrip(idArg) {
   showToast('Scheduled trip deleted');
   closeModal('modal-schedule');
   renderSchedule();
+}
+
+function copyScheduledTripToDate() {
+  if (!editingSchId) return;
+  const src = DB.scheduledTrips.find(x => x.id === editingSchId);
+  if (!src) return;
+
+  // Use current form values (so any unsaved edits in the modal are captured into the copy)
+  const startTime = document.getElementById('sch-start').value;
+  const endTime   = document.getElementById('sch-end').value;
+  const lorryId   = parseInt(document.getElementById('sch-lorry').value);
+  const driver    = document.getElementById('sch-driver').value;
+  const routeVal  = document.getElementById('sch-route').value;
+  const notes     = document.getElementById('sch-notes').value;
+
+  if (!lorryId) { showToast('Please fill in lorry first', 'error'); return; }
+  if (!startTime || !endTime) { showToast('Please fill in start and end times first', 'error'); return; }
+  if (startTime >= endTime) { showToast('End time must be after start time', 'error'); return; }
+
+  // Suggest tomorrow of the source date as default
+  const srcDate = document.getElementById('sch-date').value || src.date;
+  const suggest = new Date(srcDate + 'T00:00:00');
+  suggest.setDate(suggest.getDate() + 1);
+  const suggestIso = `${suggest.getFullYear()}-${String(suggest.getMonth()+1).padStart(2,'0')}-${String(suggest.getDate()).padStart(2,'0')}`;
+
+  const newDate = prompt('Copy this trip to which date? (YYYY-MM-DD)', suggestIso);
+  if (!newDate) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+    showToast('Invalid date format — use YYYY-MM-DD', 'error');
+    return;
+  }
+  if (newDate === srcDate) {
+    showToast('New date is the same as the original', 'error');
+    return;
+  }
+
+  // Conflict check on the NEW date (ignore no id — this is a new record)
+  const conflict = scheduleConflict(newDate, startTime, endTime, lorryId, driver, null);
+  if (conflict) {
+    const t = conflict.trip;
+    let msg;
+    if (conflict.type === 'driver') {
+      const otherLorry = DB.lorries.find(l => l.id === t.lorryId);
+      const otherPlate = otherLorry ? otherLorry.plate : '(unknown lorry)';
+      msg = `⚠ ${driver} is already scheduled ${t.startTime}–${t.endTime} on ${fmtDate(newDate)} (${otherPlate} · ${t.route||'Custom'}).\n\nCopy anyway?`;
+    } else {
+      msg = `⚠ This lorry is already scheduled ${t.startTime}–${t.endTime} on ${fmtDate(newDate)} (${t.route||'Custom'} · ${t.driver||'no driver'}).\n\nCopy anyway?`;
+    }
+    if (!confirm(msg)) return;
+  }
+
+  const routeId = routeVal && routeVal !== 'custom' ? parseInt(routeVal) : null;
+  const route   = routeId ? (DB.routeRates.find(x => x.id === routeId)?.route || 'Custom') : (routeVal === 'custom' ? 'Custom' : '');
+
+  const copy = {
+    id: DB.nextIds.scheduledTrips++,
+    date: newDate,
+    startTime, endTime, lorryId, driver,
+    routeId, route, notes,
+    status: 'planned'
+  };
+  DB.scheduledTrips.push(copy);
+
+  editingSchId = null;
+  closeModal('modal-schedule');
+  showToast(`Copied to ${fmtDate(newDate)}`);
+  renderSchedule();
+  // Refresh dashboard widget too if it's on screen
+  if (typeof renderDashboard === 'function' && document.querySelector('#page-dashboard.page.active')) {
+    renderDashboard();
+  }
 }
 
 function convertScheduleToTrip(id) {
