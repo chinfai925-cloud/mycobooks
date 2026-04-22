@@ -6090,23 +6090,122 @@ function deletePackingRate(id) {
   renderPackingRates();
 }
 
+// Sort state for packing rates spreadsheet — defaults to Product A→Z
+let pkRateSort = { field: 'product', dir: 'asc' };
+
+function sortPkRates(field) {
+  if (pkRateSort.field === field) {
+    pkRateSort.dir = pkRateSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    pkRateSort = { field, dir: 'asc' };
+  }
+  renderPackingRates();
+}
+
+function sortedPkRates() {
+  const { field, dir } = pkRateSort;
+  const mult = dir === 'asc' ? 1 : -1;
+  return [...DB.packingRates].sort((a, b) => {
+    let av = a[field];
+    let bv = b[field];
+    if (field === 'ratePerPack') {
+      return ((parseFloat(av)||0) - (parseFloat(bv)||0)) * mult;
+    }
+    av = (av == null ? '' : String(av)).toLowerCase();
+    bv = (bv == null ? '' : String(bv)).toLowerCase();
+    if (!av && !bv) return 0;
+    if (!av) return 1;
+    if (!bv) return -1;
+    return av.localeCompare(bv) * mult;
+  });
+}
+
+function pkRateHeader(label, field, align = 'left', title = null) {
+  const active = pkRateSort.field === field;
+  const arrow  = active ? (pkRateSort.dir === 'asc' ? ' ↑' : ' ↓') : '';
+  const color  = active ? 'var(--green)' : 'var(--text2)';
+  const titleAttr = title ? `title="${title}"` : '';
+  return `<th style="padding:8px 12px;text-align:${align};font-weight:500;color:${color};cursor:pointer;user-select:none;"
+    onclick="sortPkRates('${field}')" ${titleAttr}>${label}${arrow}</th>`;
+}
+
 function renderPackingRates() {
   const el = document.getElementById('packing-rates-list');
   if (!el) return;
   if (DB.packingRates.length === 0) {
-    el.innerHTML = '<div class="empty-state"><p style="font-size:13px;">No rates set yet</p></div>';
+    el.innerHTML = '<div class="empty-state" style="padding:20px;"><p style="font-size:13px;">No rates set yet</p></div>';
     return;
   }
-  el.innerHTML = DB.packingRates.map(r=>`
-    <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);">
-      <div style="flex:1;">
-        <div style="font-weight:500;font-size:13px;">${r.product}</div>
-        ${r.notes?`<div style="font-size:11px;color:var(--text3);">${r.notes}</div>`:''}
-      </div>
-      <div style="font-family:'DM Mono',monospace;font-weight:600;color:var(--green);">RM ${r.ratePerPack.toFixed(2)} / pack</div>
-      <button class="btn btn-outline btn-sm" onclick="openPackingRateModal(${r.id})" style="font-size:11px;">Edit</button>
-      <button class="btn btn-danger btn-sm" onclick="deletePackingRate(${r.id})">Del</button>
-    </div>`).join('');
+
+  const cellStyle = 'padding:6px 10px;border:none;background:transparent;font-size:12px;font-family:inherit;width:100%;outline:none;';
+  const focusStyle = 'onfocus="this.style.background=\'var(--green-light)\'" onblur="this.style.background=\'transparent\'"';
+  const rates = sortedPkRates();
+
+  el.innerHTML = `
+    <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead>
+        <tr style="background:var(--bg);border-bottom:2px solid var(--border);">
+          ${pkRateHeader('Product', 'product', 'left')}
+          ${pkRateHeader('Rate / pack (RM)', 'ratePerPack', 'right')}
+          <th style="padding:8px 12px;text-align:left;font-weight:500;color:var(--text2);">Notes</th>
+          <th style="padding:8px 12px;text-align:center;font-weight:500;color:var(--text2);width:60px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rates.map(r => `
+          <tr style="border-bottom:1px solid var(--border);" data-rate-id="${r.id}">
+            <td style="padding:4px 12px;font-weight:500;" title="Product name is locked — used to match packing lines">${escAttr(r.product)}</td>
+            <td style="padding:0;">
+              <input type="number" min="0" step="0.01" value="${r.ratePerPack}" data-field="ratePerPack" data-rid="${r.id}"
+                style="${cellStyle}text-align:right;font-family:'DM Mono',monospace;font-weight:600;color:var(--green);" ${focusStyle}>
+            </td>
+            <td style="padding:0;">
+              <input type="text" value="${escAttr(r.notes||'')}" placeholder="Optional" data-field="notes" data-rid="${r.id}"
+                style="${cellStyle}" ${focusStyle}>
+            </td>
+            <td style="padding:4px 12px;text-align:center;">
+              <button class="btn btn-danger btn-sm" style="font-size:11px;padding:3px 8px;" onclick="deletePackingRate(${r.id})" title="Remove rate">×</button>
+            </td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+    <div style="padding:8px 12px;font-size:11px;color:var(--text3);background:var(--bg);border-top:1px solid var(--border);">
+      💡 Click a cell to edit. Changes save automatically. To rename a product, use <strong>+ Add Rate</strong> to create a new one and delete the old.
+    </div>
+    </div>`;
+
+  // Wire inline-edit handlers
+  el.querySelectorAll('input[data-field]').forEach(inp => {
+    const evtName = inp.type === 'number' ? 'blur' : 'blur';
+    inp.addEventListener(evtName, ev => {
+      const rid   = parseInt(ev.target.dataset.rid);
+      const field = ev.target.dataset.field;
+      const rate  = DB.packingRates.find(x => x.id === rid);
+      if (!rate) return;
+
+      let newVal;
+      if (ev.target.type === 'number') {
+        newVal = parseFloat(ev.target.value);
+        if (isNaN(newVal) || newVal < 0) {
+          showToast('Rate must be 0 or greater', 'error');
+          ev.target.value = rate.ratePerPack;
+          return;
+        }
+        newVal = parseFloat(newVal.toFixed(2));
+      } else {
+        newVal = (ev.target.value || '').trim();
+      }
+
+      if (rate[field] === newVal) return;
+      rate[field] = newVal;
+      showToast(`${rate.product} — ${field === 'ratePerPack' ? 'rate' : 'notes'} updated`);
+    });
+    // Enter submits
+    inp.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter') ev.target.blur();
+    });
+  });
 }
 
 // ---- PACKING WAGES ----
