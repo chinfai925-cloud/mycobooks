@@ -6305,7 +6305,6 @@ function renderPackingWages() {
         <table style="width:100%;border-collapse:collapse;font-size:12px;">
           <thead><tr style="background:var(--bg);">
             <th style="padding:6px 12px;border-bottom:1px solid var(--border);color:var(--text2);font-weight:500;">Product</th>
-            <th style="padding:6px 12px;border-bottom:1px solid var(--border);color:var(--text2);font-weight:500;">Pack Size</th>
             <th style="padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text2);font-weight:500;text-align:center;">Packs</th>
             <th style="padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text2);font-weight:500;text-align:right;">Rate/pack</th>
             <th style="padding:6px 12px;border-bottom:1px solid var(--border);color:var(--text2);font-weight:500;text-align:right;">Earned</th>
@@ -6313,13 +6312,12 @@ function renderPackingWages() {
           <tbody>
             ${lines.map(l=>`<tr>
               <td style="padding:5px 12px;font-weight:500;">${l.product||'—'}</td>
-              <td style="padding:5px 12px;">${l.size==='custom'?'Custom':PK_PACK_SIZES.find(s=>String(s.val)===String(l.size))?.label||l.size}</td>
               <td style="padding:5px 8px;text-align:center;font-family:'DM Mono',monospace;">${l.qty}</td>
               <td style="padding:5px 8px;text-align:right;font-family:'DM Mono',monospace;color:var(--text2);">${l.rate>0?currSym()+l.rate.toFixed(2):'—'}</td>
               <td style="padding:5px 12px;text-align:right;font-family:'DM Mono',monospace;color:${l.earn>0?'var(--green)':'var(--text3)'};">${l.earn>0?fmt(l.earn):'no rate'}</td>
             </tr>`).join('')}
             <tr style="background:var(--bg);border-top:1px solid var(--border);font-weight:600;">
-              <td colspan="4" style="padding:7px 12px;">Session Total</td>
+              <td colspan="3" style="padding:7px 12px;">Session Total</td>
               <td style="padding:7px 12px;text-align:right;font-family:'DM Mono',monospace;color:var(--green);">${fmt(totalWage)}</td>
             </tr>
           </tbody>
@@ -6860,13 +6858,10 @@ function renderPackingSummary() {
       o.lines.forEach(l => {
         const qty = parseInt(l.qty)||0;
         const kg  = l.totalKg||0;
-        const sizeLabel = l.packSize==='custom'
-          ? ((l.customSize||0)*1000).toFixed(0)+'g'
-          : PK_PACK_SIZES.find(s=>String(s.val)===String(l.packSize))?.label || l.packSize+'kg';
-        const key = (l.product||'Unknown') + '|' + sizeLabel;
+        const key = l.product||'Unknown';
 
         // Product map
-        if (!productMap[key]) productMap[key] = { product: l.product||'Unknown', size: sizeLabel, packs:0, totalKg:0 };
+        if (!productMap[key]) productMap[key] = { product: l.product||'Unknown', packs:0, totalKg:0 };
         productMap[key].packs   += qty;
         productMap[key].totalKg += kg;
 
@@ -6875,7 +6870,7 @@ function renderPackingSummary() {
         if (!customerMap[cust]) customerMap[cust] = { packs:0, totalKg:0, lines:{} };
         customerMap[cust].packs   += qty;
         customerMap[cust].totalKg += kg;
-        if (!customerMap[cust].lines[key]) customerMap[cust].lines[key] = { product: l.product||'Unknown', size: sizeLabel, packs:0, totalKg:0 };
+        if (!customerMap[cust].lines[key]) customerMap[cust].lines[key] = { product: l.product||'Unknown', packs:0, totalKg:0 };
         customerMap[cust].lines[key].packs   += qty;
         customerMap[cust].lines[key].totalKg += kg;
 
@@ -6935,7 +6930,6 @@ function renderPackingSummary() {
                 ${Object.values(c.lines).map(l=>`
                 <tr>
                   <td style="padding:3px 8px;color:var(--text2);">${l.product}</td>
-                  <td style="padding:3px 8px;"><span class="badge badge-blue" style="font-size:10px;">${l.size}</span></td>
                   <td style="padding:3px 8px;text-align:right;font-family:'DM Mono',monospace;">${l.packs.toLocaleString()} packs</td>
                   <td style="padding:3px 8px;text-align:right;font-family:'DM Mono',monospace;color:var(--green);font-weight:500;">${l.totalKg.toFixed(2)} kg</td>
                 </tr>`).join('')}
@@ -6949,7 +6943,6 @@ function renderPackingSummary() {
           <table style="width:100%;border-collapse:collapse;">
             <thead><tr style="background:var(--bg);">
               <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:left;border-bottom:1px solid var(--border);">Product</th>
-              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);border-bottom:1px solid var(--border);">Pack Size</th>
               <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;border-bottom:1px solid var(--border);">Packs</th>
               <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;border-bottom:1px solid var(--border);">Total Weight</th>
               <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;border-bottom:1px solid var(--border);">% of Total</th>
@@ -6959,7 +6952,6 @@ function renderPackingSummary() {
                 const pct = grandKg > 0 ? (p.totalKg/grandKg*100).toFixed(1) : 0;
                 return `<tr>
                   <td style="padding:7px 10px;font-weight:500;">${p.product}</td>
-                  <td style="padding:7px 10px;"><span class="badge badge-blue" style="font-size:10px;">${p.size}</span></td>
                   <td style="padding:7px 10px;text-align:right;font-family:'DM Mono',monospace;">${p.packs.toLocaleString()}</td>
                   <td style="padding:7px 10px;text-align:right;font-family:'DM Mono',monospace;font-weight:600;color:var(--green);">${p.totalKg.toFixed(2)} kg</td>
                   <td style="padding:7px 10px;text-align:right;">
@@ -6973,7 +6965,7 @@ function renderPackingSummary() {
                 </tr>`;
               }).join('')}
               <tr style="background:var(--bg);border-top:2px solid var(--border);font-weight:700;">
-                <td colspan="2" style="padding:9px 10px;">Grand Total</td>
+                <td style="padding:9px 10px;">Grand Total</td>
                 <td style="padding:9px 10px;text-align:right;font-family:'DM Mono',monospace;">${grandPacks.toLocaleString()}</td>
                 <td style="padding:9px 10px;text-align:right;font-family:'DM Mono',monospace;color:var(--green);font-size:15px;">${grandKg.toFixed(2)} kg</td>
                 <td style="padding:9px 10px;text-align:right;color:var(--text2);">100%</td>
@@ -7059,19 +7051,17 @@ function renderPacking() {
           <thead><tr style="background:var(--bg);">
             <th style="padding:6px 12px;border-bottom:1px solid var(--border);font-weight:500;color:var(--text2);">Customer</th>
             <th style="padding:6px 12px;border-bottom:1px solid var(--border);font-weight:500;color:var(--text2);">Product</th>
-            <th style="padding:6px 12px;border-bottom:1px solid var(--border);font-weight:500;color:var(--text2);">Pack Size</th>
             <th style="padding:6px 12px;border-bottom:1px solid var(--border);font-weight:500;color:var(--text2);text-align:center;">Qty</th>
             <th style="padding:6px 12px;border-bottom:1px solid var(--border);font-weight:500;color:var(--text2);text-align:right;">Total (kg)</th>
           </tr></thead>
           <tbody>${orders.map(o=>o.lines.map((l,li)=>`<tr>
             <td style="padding:5px 12px;color:var(--text2);">${li===0?o.customer:''}</td>
             <td style="padding:5px 12px;font-weight:500;">${l.product||'—'}</td>
-            <td style="padding:5px 12px;">${l.packSize==='custom'?(l.customSize||0)*1000+'g custom':PK_PACK_SIZES.find(s=>String(s.val)===String(l.packSize))?.label||l.packSize}</td>
             <td style="padding:5px 12px;text-align:center;font-family:'DM Mono',monospace;">${l.qty||0}</td>
             <td style="padding:5px 12px;text-align:right;font-family:'DM Mono',monospace;color:var(--green);font-weight:500;">${(l.totalKg||0).toFixed(2)}</td>
           </tr>`).join('')).join('')}
           <tr style="background:var(--bg);border-top:2px solid var(--border);font-weight:600;">
-            <td colspan="3" style="padding:7px 12px;">Total</td>
+            <td colspan="2" style="padding:7px 12px;">Total</td>
             <td style="padding:7px 12px;text-align:center;font-family:'DM Mono',monospace;">${p.packs.toLocaleString()}</td>
             <td style="padding:7px 12px;text-align:right;font-family:'DM Mono',monospace;color:var(--green);">${p.totalKg.toFixed(2)}</td>
           </tr></tbody>
