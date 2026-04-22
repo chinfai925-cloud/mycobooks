@@ -442,7 +442,7 @@ tr:hover td { background:var(--bg); }
             <div class="card-body" style="padding:0;" id="dash-recent-tx"></div>
           </div>
           <div class="card">
-            <div class="card-head"><span class="card-title">🚛 Fleet Schedule <span style="font-size:11px;color:var(--text3);font-weight:400;">today + tomorrow</span></span><button class="btn btn-outline btn-sm" onclick="navigate('fleet',document.querySelector('[data-page=fleet]'));setTimeout(()=>switchFleetTab(5),50)">View All</button></div>
+            <div class="card-head"><span class="card-title">🚛 Fleet Schedule <span style="font-size:11px;color:var(--text3);font-weight:400;">next 5 days</span></span><button class="btn btn-outline btn-sm" onclick="navigate('fleet',document.querySelector('[data-page=fleet]'));setTimeout(()=>switchFleetTab(5),50)">View All</button></div>
             <div class="card-body" style="padding:0;" id="dash-schedule"></div>
           </div>
         </div>
@@ -4042,7 +4042,7 @@ function renderDashboard() {
       <div style="font-size:13px;font-weight:500;font-family:'DM Mono',monospace;">${fmt(i.total)}</div>
     </div>`).join('') || '<div class="empty-state"><p>No pending invoices</p></div>';
 
-  // Fleet schedule widget — today + tomorrow
+  // Fleet schedule widget — next 5 days (today + 4 following days)
   const schEl = document.getElementById('dash-schedule');
   if (schEl) {
     const toLocalIso = d => {
@@ -4051,21 +4051,30 @@ function renderDashboard() {
       const day = String(d.getDate()).padStart(2, '0');
       return `${y}-${m}-${day}`;
     };
-    const today = new Date();
-    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1);
-    const todayIso = toLocalIso(today);
-    const tomorrowIso = toLocalIso(tomorrow);
-    const upcoming = (DB.scheduledTrips||[]).filter(s => s.date===todayIso || s.date===tomorrowIso);
+    const DAYS = 5;
+    const dayList = []; // [{iso, label}]
+    for (let i = 0; i < DAYS; i++) {
+      const d = new Date(); d.setDate(d.getDate()+i);
+      const isoDate = toLocalIso(d);
+      let label;
+      if (i === 0) label = 'Today';
+      else if (i === 1) label = 'Tomorrow';
+      else label = d.toLocaleDateString(undefined, { weekday:'short', day:'numeric', month:'short' });
+      dayList.push({ iso: isoDate, label });
+    }
+    const isoSet = new Set(dayList.map(d => d.iso));
+    const upcoming = (DB.scheduledTrips||[]).filter(s => isoSet.has(s.date));
 
     if (upcoming.length === 0) {
-      schEl.innerHTML = '<div class="empty-state"><p>No trips scheduled for today or tomorrow</p></div>';
+      schEl.innerHTML = '<div class="empty-state"><p>No trips scheduled for the next 5 days</p></div>';
     } else {
-      // Sort: today first, then tomorrow; by start time within each day
+      // Sort by date ascending, then by start time within each day
       upcoming.sort((a,b) => {
         if (a.date !== b.date) return a.date.localeCompare(b.date);
         return (a.startTime||'').localeCompare(b.startTime||'');
       });
-      const groups = { [todayIso]: [], [tomorrowIso]: [] };
+      const groups = {};
+      dayList.forEach(d => { groups[d.iso] = []; });
       upcoming.forEach(s => { groups[s.date].push(s); });
 
       const renderRow = (s) => {
@@ -4087,7 +4096,7 @@ function renderDashboard() {
         <div style="padding:8px 16px;background:var(--bg);font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--border);">${label} <span style="color:var(--text3);font-weight:400;">· ${items.length} trip${items.length!==1?'s':''}</span></div>
         ${items.map(renderRow).join('')}` : '';
 
-      schEl.innerHTML = section('Today', groups[todayIso]) + section('Tomorrow', groups[tomorrowIso]);
+      schEl.innerHTML = dayList.map(d => section(d.label, groups[d.iso])).join('');
     }
   }
 
