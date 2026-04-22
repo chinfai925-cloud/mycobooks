@@ -5975,14 +5975,18 @@ function createPackingSessionsFromSO(orderId) {
     const customers = o.customers || [{ customer: o.customer || '—', lines: [] }];
     const custName  = customers.map(c => c.customer).join(', ');
 
-    const lines = items.map(i => ({
-      id:      Date.now() + Math.random(),
-      product: i.product,
-      qty:     parseInt(i.qty) || 0,
-      // Packing sessions still use packSize for rate lookup — default to 1 since SO no longer tracks it
-      packSize: 1,
-      totalKg:  parseInt(i.qty) || 0,
-    }));
+    const lines = items.map(i => {
+      const prod = DB.products.find(p => p.name === i.product);
+      const w = (prod && prod.weight > 0) ? parseFloat(prod.weight) : 1;
+      const qty = parseInt(i.qty) || 0;
+      return {
+        id:      Date.now() + Math.random(),
+        product: i.product,
+        qty,
+        packSize: w,
+        totalKg:  parseFloat((w * qty).toFixed(3)),
+      };
+    });
 
     const session = {
       id:      DB.nextIds.packings++,
@@ -6944,13 +6948,18 @@ function linkPackingToSO() {
   pkOrders = [{
     id: Date.now() + Math.random(),
     customer: custName,
-    lines: (d.items || []).filter(i => i.qty > 0).map(i => ({
-      id:       Date.now() + Math.random(),
-      product:  i.product,
-      qty:      parseInt(i.qty) || 0,
-      packSize: 1,
-      totalKg:  parseInt(i.qty) || 0,
-    })),
+    lines: (d.items || []).filter(i => i.qty > 0).map(i => {
+      const prod = DB.products.find(p => p.name === i.product);
+      const w = (prod && prod.weight > 0) ? parseFloat(prod.weight) : 1;
+      const qty = parseInt(i.qty) || 0;
+      return {
+        id:       Date.now() + Math.random(),
+        product:  i.product,
+        qty,
+        packSize: w,
+        totalKg:  parseFloat((w * qty).toFixed(3)),
+      };
+    }),
   }];
   showPackingSoLinkBanner(o.orderNo, d.team);
   renderPkOrders();
