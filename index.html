@@ -2517,6 +2517,7 @@ tr:hover td { background:var(--bg); }
           <select id="staff-pay-type" onchange="togglePayRateLabel()">
             <option value="salary">Fixed Salary (monthly)</option>
             <option value="daily">Daily Rate (per day)</option>
+            <option value="hourly">Hourly Rate (per hour)</option>
             <option value="trip">Per Trip (fare × trips)</option>
             <option value="commission">Commission (% of sales)</option>
           </select>
@@ -9182,14 +9183,20 @@ function calcStatutory(staff, grossPay) {
 }
 
 function payTypeLabel(staff) {
-  const map = { salary:'Fixed Salary', daily:'Daily Rate', trip:'Per Trip', commission:'Commission' };
+  const map = { salary:'Fixed Salary', daily:'Daily Rate', hourly:'Hourly Rate', trip:'Per Trip', commission:'Commission' };
   return map[staff.payType||'salary'] || 'Fixed Salary';
+}
+
+function payTypeSuffix(staff) {
+  const map = { salary:'/mo', daily:'/day', hourly:'/hr', trip:'/trip', commission:'%' };
+  return map[staff.payType||'salary'] || '/mo';
 }
 
 function payRateLabel(staff) {
   const pt = staff.payType || 'salary';
   if (pt === 'salary')     return `${fmt(staff.salary)}/mo`;
   if (pt === 'daily')      return `${fmt(staff.salary)}/day`;
+  if (pt === 'hourly')     return `${fmt(staff.salary)}/hr`;
   if (pt === 'trip')       return `${fmt(staff.salary)}/trip`;
   if (pt === 'commission') return `${staff.salary}% of sales`;
   return fmt(staff.salary);
@@ -9197,7 +9204,7 @@ function payRateLabel(staff) {
 
 function togglePayRateLabel() {
   const pt = document.getElementById('staff-pay-type').value;
-  const labels = { salary:'Monthly Salary (RM)', daily:'Daily Rate (RM/day)', trip:'Trip Fare (RM/trip)', commission:'Commission Rate (%)' };
+  const labels = { salary:'Monthly Salary (RM)', daily:'Daily Rate (RM/day)', hourly:'Hourly Rate (RM/hour)', trip:'Trip Fare (RM/trip)', commission:'Commission Rate (%)' };
   document.getElementById('staff-rate-label').textContent = labels[pt] || 'Rate';
 }
 
@@ -9232,13 +9239,25 @@ function calcNetPay(staff, att, month) {
     basePay = dailyRate * (att.days ?? wd);
   } else if (pt === 'daily') {
     basePay = staff.salary * (att.days ?? 0);
+  } else if (pt === 'hourly') {
+    basePay = staff.salary * (att.hours ?? 0);
   } else if (pt === 'trip') {
     basePay = staff.salary * (att.trips ?? 0);
   } else if (pt === 'commission') {
     basePay = (staff.salary / 100) * (att.salesAmt ?? 0);
   }
 
-  const otPay       = pt === 'trip' ? 0 : (staff.salary / ((wd || 1) * 8)) * (att.overtime || 0) * 1.5;
+  // Overtime at 1.5× the effective hourly rate.
+  // - Hourly staff: OT rate = hourly × 1.5 (straightforward)
+  // - Salary/Daily: OT rate = (monthly ÷ (wd × 8)) × 1.5 (legacy formula)
+  // - Trip & Commission: no OT (those pay models don't have an hourly base)
+  let otPay = 0;
+  if (pt === 'hourly') {
+    otPay = staff.salary * (att.overtime || 0) * 1.5;
+  } else if (pt !== 'trip' && pt !== 'commission') {
+    otPay = (staff.salary / ((wd || 1) * 8)) * (att.overtime || 0) * 1.5;
+  }
+
   const packingWage = calcPackingWages(staff.name, month);
   const tripWage    = calcTripWages(staff.name, month);
 
@@ -9330,7 +9349,7 @@ function renderStaffCards(totalWages, depts) {
       </div>
       <div style="text-align:right;">
         <div style="font-size:11px;margin-bottom:3px;"><span class="badge badge-blue" style="font-size:10px;">${payTypeLabel(s)}</span></div>
-        <div class="payroll-amount">${amountDisplay(s.salary)}<span style="font-size:11px;color:var(--text2);font-family:'DM Sans',sans-serif;">${(s.payType||'salary')==='salary'?'/mo':(s.payType==='daily'?'/day':(s.payType==='trip'?'/trip':'%'))}</span></div>
+        <div class="payroll-amount">${amountDisplay(s.salary)}<span style="font-size:11px;color:var(--text2);font-family:'DM Sans',sans-serif;">${payTypeSuffix(s)}</span></div>
         <div style="display:flex;gap:4px;margin-top:4px;justify-content:flex-end;">
           <button class="btn btn-outline btn-sm" onclick="openStaffModal(${s.id})" style="font-size:11px;">Edit</button>
           <button class="btn btn-danger btn-sm" onclick="deleteStaff(${s.id})">Remove</button>
@@ -9364,6 +9383,7 @@ const DEPT_OPTIONS = ['Production','Harvesting','Packaging','Administration','De
 const PAYTYPE_OPTIONS = [
   {value:'salary',      label:'Fixed Salary'},
   {value:'daily',       label:'Daily Rate'},
+  {value:'hourly',      label:'Hourly Rate'},
   {value:'trip',        label:'Per Trip'},
   {value:'commission',  label:'Commission'},
 ];
@@ -9517,7 +9537,7 @@ function renderAttendance(month) {
       <thead><tr>
         <th>Staff</th>
         <th>Pay Type</th>
-        <th style="text-align:center;">Days / Trips / Sales</th>
+        <th style="text-align:center;">Days / Hours / Trips / Sales</th>
         <th style="text-align:center;">OT Hours</th>
         <th style="text-align:center;">Allowances</th>
         <th style="text-align:center;">Deduction (RM)</th>
@@ -9528,6 +9548,7 @@ function renderAttendance(month) {
         const pt    = s.payType || 'salary';
         const isSalary = pt === 'salary';
         const isDaily  = pt === 'daily';
+        const isHourly = pt === 'hourly';
         const isTrip   = pt === 'trip';
         const isComm   = pt === 'commission';
 
@@ -9537,6 +9558,11 @@ function renderAttendance(month) {
             style="width:65px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:center;"
             onchange="setAtt(${s.id},'${month}','days',this.value)">
             <div style="font-size:10px;color:var(--text3);margin-top:2px;">days / ${wd}</div>`;
+        } else if (isHourly) {
+          mainInput = `<input type="number" min="0" step="0.5" value="${att.hours ?? 0}"
+            style="width:75px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:center;"
+            onchange="setAtt(${s.id},'${month}','hours',this.value)">
+            <div style="font-size:10px;color:var(--text3);margin-top:2px;">hours × ${fmt(s.salary)}/hr</div>`;
         } else if (isTrip) {
           mainInput = `<input type="number" min="0" value="${att.trips ?? 0}"
             style="width:65px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:center;"
@@ -9933,6 +9959,7 @@ function viewPayslip(runId, staffId) {
   let payRow = '';
   if (pt === 'salary')     payRow = `<tr><td style="padding:6px 0;color:var(--text2);">Days Present</td><td class="text-right">${entry.days ?? wd} / ${wd} days</td></tr>`;
   else if (pt === 'daily') payRow = `<tr><td style="padding:6px 0;color:var(--text2);">Days Worked</td><td class="text-right">${entry.days ?? 0} days × ${fmt(s.salary)}/day</td></tr>`;
+  else if (pt === 'hourly') payRow = `<tr><td style="padding:6px 0;color:var(--text2);">Hours Worked</td><td class="text-right">${entry.hours ?? 0} hrs × ${fmt(s.salary)}/hr</td></tr>`;
   else if (pt === 'trip')  payRow = `<tr><td style="padding:6px 0;color:var(--text2);">Trips Completed</td><td class="text-right">${entry.trips ?? 0} trips × ${fmt(s.salary)}/trip</td></tr>`;
   else if (pt === 'commission') payRow = `<tr><td style="padding:6px 0;color:var(--text2);">Sales Amount</td><td class="text-right">${fmt(entry.salesAmt ?? 0)} × ${s.salary}%</td></tr>`;
   document.getElementById('payslip-content').innerHTML = `
