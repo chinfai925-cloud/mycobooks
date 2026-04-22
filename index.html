@@ -1827,6 +1827,24 @@ tr:hover td { background:var(--bg); }
       <button class="modal-close" onclick="closeModal('modal-packing')">×</button>
     </div>
     <div class="modal-body">
+      <!-- Link to Sales Order (optional prefill source) -->
+      <div id="pk-so-link-banner" style="display:none;background:var(--green-light);border:1px solid var(--green-mid);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;font-size:13px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <span>🔗 Linked to Sales Order <strong id="pk-so-link-label"></strong></span>
+          <button type="button" class="btn btn-outline btn-sm" onclick="unlinkPackingFromSO()" style="font-size:11px;color:var(--red);border-color:var(--red);">Unlink</button>
+        </div>
+      </div>
+      <div id="pk-so-picker" style="background:var(--bg);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;">
+        <label style="font-size:11px;color:var(--text2);font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;display:block;">Fulfilling a Sales Order?</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <select id="pk-so-select" style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:inherit;">
+            <option value="">— None (ad-hoc packing) —</option>
+          </select>
+          <button type="button" class="btn btn-outline btn-sm" onclick="linkPackingToSO()" style="font-size:11px;white-space:nowrap;">Link & Prefill</button>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Only dispatched orders with undispatched-team sessions shown. Picking one prefills lines from the dispatch.</div>
+      </div>
+
       <!-- Header row -->
       <div class="form-grid form-grid-2" style="margin-bottom:14px;">
         <div class="form-group"><label>Date</label><input type="date" id="pk-date"></div>
@@ -3391,7 +3409,7 @@ const COLS = {
   recurringExpenses:['id','desc','amount','cat','supplier','day','account','start','end','notes','active','generated'],
   batches:      ['id','no','type','bags','substrate','bagDate','inocDate','maturityDate','status','harvestDate','harvestKg','notes','createdOn'],
   harvests:     ['id','date','batchId','kg','flush','grade','harvester','notes','saleId'],
-  packings:     ['id','date','team','members','notes','orders','packs','totalKg'],
+  packings:     ['id','date','team','members','notes','orders','packs','totalKg','soId','soOrderNo','dispatchTeamId'],
   packingRates: ['id','product','ratePerPack','notes'],
   salesOrders:  ['id','orderNo','customers','lines','customer','deliveryDate','salesperson','priority','notes','total','status','createdOn','dispatch'],
   lorries:      ['id','plate','name','model','odometer','serviceIntervalKm','lastServiceKm','roadTaxExpiry','insuranceExpiry','puspakomDate','puspakomNext'],
@@ -5587,6 +5605,7 @@ function renderOrders() {
         </div>`:''}
         <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
           ${['New','Confirmed'].includes(o.status)&&!can('onlyOrders')?`<button class="btn btn-primary btn-sm" onclick="openDispatchModal(${o.id})" style="font-size:11px;">📋 Dispatch to Teams</button>`:''}
+          ${o.dispatch&&o.dispatch.length&&!can('onlyOrders')?`<button class="btn btn-outline btn-sm" onclick="createPackingSessionsFromSO(${o.id})" style="font-size:11px;color:var(--green);border-color:var(--green);">📦 Create Packing Sessions</button>`:''}
           ${!can('onlyOrders')?(nextActions[o.status]||[]).map(a=>`<button class="btn btn-outline btn-sm" onclick="updateOrderStatus(${o.id},'${a.status}')" style="font-size:11px;${a.status==='Cancelled'?'color:var(--red);border-color:var(--red);':''}">${a.label}</button>`).join(''):''}
           ${can('canEdit')&&!can('onlyOrders')?`<button class="btn btn-outline btn-sm" onclick="openOrderModal(${o.id})" style="font-size:11px;">Edit</button>`:''}
           ${can('canDelete')?`<button class="btn btn-danger btn-sm" onclick="deleteOrder(${o.id})" style="font-size:11px;">Del</button>`:''}
@@ -5729,6 +5748,89 @@ function saveDispatch() {
   closeModal('modal-dispatch');
   renderOrders();
   if (soTab===2) renderDispatchBoard();
+}
+
+// ============================================================
+// PACKING × SALES ORDER INTEGRATION
+// ============================================================
+// Creates one packing session per dispatch team from the SO's dispatch
+// Each session is linked back to the SO via soId + dispatchTeamId
+function createPackingSessionsFromSO(orderId) {
+  const o = DB.salesOrders.find(x => x.id === orderId);
+  if (!o) { showToast('Order not found', 'error'); return; }
+  if (!o.dispatch || o.dispatch.length === 0) {
+    showToast('Order has not been dispatched yet', 'error'); return;
+  }
+
+  // Check for existing sessions already linked to this SO
+  const existing = (DB.packings || []).filter(p => p.soId === orderId);
+  if (existing.length > 0) {
+    const existingTeams = existing.map(p => p.team).join(', ');
+    const confirmMsg = `Packing sessions for ${o.orderNo} already exist (Teams: ${existingTeams}).\n\n` +
+      `Click OK to skip teams that already have sessions, or Cancel to abort.`;
+    if (!confirm(confirmMsg)) return;
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+  let createdCount = 0;
+  const createdTeams = [];
+
+  o.dispatch.forEach(d => {
+    // Skip teams with no items
+    const items = (d.items || []).filter(i => (parseInt(i.qty) || 0) > 0);
+    if (items.length === 0) return;
+
+    // Skip if a session already exists for this SO + team
+    const alreadyExists = existing.some(p => p.team === d.team);
+    if (alreadyExists) return;
+
+    // Build packing session lines — one line per dispatch item
+    // Customer is the SO's primary customer (for display purposes)
+    const customers = o.customers || [{ customer: o.customer || '—', lines: [] }];
+    const custName  = customers.map(c => c.customer).join(', ');
+
+    const lines = items.map(i => ({
+      id:      Date.now() + Math.random(),
+      product: i.product,
+      qty:     parseInt(i.qty) || 0,
+      // Packing sessions still use packSize for rate lookup — default to 1 since SO no longer tracks it
+      packSize: 1,
+      totalKg:  parseInt(i.qty) || 0,
+    }));
+
+    const session = {
+      id:      DB.nextIds.packings++,
+      date:    today,
+      team:    d.team,
+      // Auto-load team defaults for members
+      members: [...(packingTeamDefaults[d.team] || [])],
+      notes:   `Auto-created from ${o.orderNo}`,
+      orders:  [{
+        id: Date.now() + Math.random(),
+        customer: custName,
+        lines,
+      }],
+      packs:   lines.reduce((s,l) => s + l.qty, 0),
+      totalKg: lines.reduce((s,l) => s + (l.totalKg || 0), 0),
+      // NEW: links back to sales order
+      soId:           orderId,
+      soOrderNo:      o.orderNo,
+      dispatchTeamId: d.id,
+    };
+
+    DB.packings.unshift(session);
+    createdCount++;
+    createdTeams.push(d.team);
+  });
+
+  if (createdCount === 0) {
+    showToast('No new sessions created (all teams already have sessions)', 'error');
+    return;
+  }
+
+  showToast(`Created ${createdCount} packing session${createdCount>1?'s':''} for Teams ${createdTeams.join(', ')}. Edit each to assign members and verify quantities.`);
+  // Refresh packing page if visible
+  if (typeof renderPacking === 'function') renderPacking();
 }
 
 let soDispatchView = 'orders'; // 'orders' | 'teams'
@@ -6440,6 +6542,8 @@ function openPackingModal(id) {
   editingPackingId = id || null;
   pkOrders = [];
   pkSelectedMembers = [];
+  pkLinkedSoId = null;
+  pkLinkedDispatchTeamId = null;
   document.getElementById('pk-modal-title').textContent = id ? 'Edit Packing Record' : 'Record Packing';
   document.getElementById('pk-date').value = new Date().toISOString().split('T')[0];
   document.getElementById('pk-team').value = 'A';
@@ -6451,6 +6555,9 @@ function openPackingModal(id) {
   }
   updateMembersLabel();
 
+  // Populate SO picker dropdown — only SOs that have been dispatched and have at least one team without a session
+  populatePackingSOPicker();
+
   if (id) {
     const p = DB.packings.find(x=>x.id===id);
     if (!p) return;
@@ -6460,11 +6567,110 @@ function openPackingModal(id) {
     pkSelectedMembers = p.members ? [...p.members] : [];
     updateMembersLabel();
     pkOrders = p.orders ? JSON.parse(JSON.stringify(p.orders)) : [];
+    // Restore SO link
+    if (p.soId) {
+      pkLinkedSoId = p.soId;
+      pkLinkedDispatchTeamId = p.dispatchTeamId || null;
+      showPackingSoLinkBanner(p.soOrderNo || `SO #${p.soId}`, p.team);
+    } else {
+      hidePackingSoLinkBanner();
+    }
   } else {
+    hidePackingSoLinkBanner();
     addPkOrder();
   }
   renderPkOrders();
   openModal('modal-packing');
+}
+
+// ---- PACKING ← SALES ORDER LINK helpers ----
+let pkLinkedSoId = null;
+let pkLinkedDispatchTeamId = null;
+
+function populatePackingSOPicker() {
+  const sel = document.getElementById('pk-so-select');
+  if (!sel) return;
+  // Build list of dispatched SOs that have at least one team without a session yet
+  // (or allow re-linking if editing — but for simplicity, we just show all dispatched SOs)
+  const opts = ['<option value="">— None (ad-hoc packing) —</option>'];
+  (DB.salesOrders || [])
+    .filter(o => o.dispatch && o.dispatch.length > 0 && o.status !== 'Delivered' && o.status !== 'Cancelled')
+    .sort((a,b) => (b.deliveryDate||'').localeCompare(a.deliveryDate||''))
+    .forEach(o => {
+      const customers = (o.customers || []).map(c => c.customer).join(', ') || o.customer || '—';
+      const deliveryStr = o.deliveryDate ? ` · ${o.deliveryDate}` : '';
+      o.dispatch.forEach(d => {
+        const itemCount = (d.items || []).filter(i => i.qty > 0).length;
+        if (itemCount === 0) return;
+        // Check if session for this SO + team already exists
+        const exists = (DB.packings || []).some(p =>
+          p.soId === o.id && p.team === d.team && p.id !== editingPackingId
+        );
+        const label = `${o.orderNo} · ${customers} · Team ${d.team} (${itemCount} item${itemCount>1?'s':''})${exists?' — session exists':''}${deliveryStr}`;
+        opts.push(`<option value="${o.id}|${d.id}"${exists?' disabled':''}>${label}</option>`);
+      });
+    });
+  sel.innerHTML = opts.join('');
+}
+
+function linkPackingToSO() {
+  const sel = document.getElementById('pk-so-select');
+  if (!sel || !sel.value) { showToast('Select a Sales Order first', 'error'); return; }
+  const [soIdStr, dispatchIdStr] = sel.value.split('|');
+  const soId = parseInt(soIdStr);
+  const dispatchId = parseFloat(dispatchIdStr);
+  const o = DB.salesOrders.find(x => x.id === soId);
+  if (!o) { showToast('Sales Order not found', 'error'); return; }
+  const d = (o.dispatch || []).find(x => x.id === dispatchId);
+  if (!d) { showToast('Dispatch team not found', 'error'); return; }
+
+  // Prefill packing modal
+  pkLinkedSoId = soId;
+  pkLinkedDispatchTeamId = dispatchId;
+  document.getElementById('pk-team').value = d.team;
+  loadTeamDefaults(d.team);
+
+  // Replace pkOrders with one order built from the dispatch items
+  const customers = o.customers || [{ customer: o.customer || '—', lines: [] }];
+  const custName = customers.map(c => c.customer).join(', ');
+  pkOrders = [{
+    id: Date.now() + Math.random(),
+    customer: custName,
+    lines: (d.items || []).filter(i => i.qty > 0).map(i => ({
+      id:       Date.now() + Math.random(),
+      product:  i.product,
+      qty:      parseInt(i.qty) || 0,
+      packSize: 1,
+      totalKg:  parseInt(i.qty) || 0,
+    })),
+  }];
+  showPackingSoLinkBanner(o.orderNo, d.team);
+  renderPkOrders();
+  showToast(`Linked to ${o.orderNo} · Team ${d.team} — ${pkOrders[0].lines.length} items prefilled`);
+}
+
+function unlinkPackingFromSO() {
+  pkLinkedSoId = null;
+  pkLinkedDispatchTeamId = null;
+  hidePackingSoLinkBanner();
+  showToast('Unlinked from Sales Order');
+}
+
+function showPackingSoLinkBanner(orderNo, team) {
+  const banner = document.getElementById('pk-so-link-banner');
+  const picker = document.getElementById('pk-so-picker');
+  if (!banner || !picker) return;
+  document.getElementById('pk-so-link-label').textContent = `${orderNo}${team ? ' · Team ' + team : ''}`;
+  banner.style.display = '';
+  picker.style.display = 'none';
+}
+
+function hidePackingSoLinkBanner() {
+  const banner = document.getElementById('pk-so-link-banner');
+  const picker = document.getElementById('pk-so-picker');
+  if (!banner || !picker) return;
+  banner.style.display = 'none';
+  picker.style.display = '';
 }
 
 function calcPkTotal() { calcPkGrandTotal(); }
@@ -6491,6 +6697,10 @@ function savePacking() {
     orders:   JSON.parse(JSON.stringify(pkOrders)),
     packs:    totalPacks,
     totalKg:  parseFloat(totalKg.toFixed(3)),
+    // SO link (may be null for ad-hoc sessions, but we chose strict mode — UI will typically have these set)
+    soId:           pkLinkedSoId,
+    soOrderNo:      pkLinkedSoId ? (DB.salesOrders.find(o=>o.id===pkLinkedSoId)?.orderNo || null) : null,
+    dispatchTeamId: pkLinkedDispatchTeamId,
   };
 
   if (editingPackingId) {
@@ -6733,9 +6943,10 @@ function renderPacking() {
     const orders = p.orders||[];
     return `<div class="card" style="margin-bottom:12px;">
       <div class="card-head">
-        <div style="display:flex;align-items:center;gap:10px;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
           <span style="font-size:13px;font-weight:600;">${fmtDate(p.date)}</span>
           <span class="badge badge-blue" style="font-size:11px;">Team ${p.team||'—'}</span>
+          ${p.soOrderNo ? `<span class="badge badge-green" style="font-size:11px;" title="Linked to Sales Order">🔗 ${p.soOrderNo}</span>` : ''}
           ${p.members&&p.members.length?`<span style="font-size:11px;color:var(--text2);">👥 ${p.members.join(', ')}</span>`:''}
         </div>
         <div style="display:flex;align-items:center;gap:12px;">
