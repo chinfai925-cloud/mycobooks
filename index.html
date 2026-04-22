@@ -3169,6 +3169,7 @@ tr:hover td { background:var(--bg); }
         </div>
         <div class="form-group"><label>Price (RM)</label><input type="number" id="prod-price" placeholder="0.00" min="0" step="0.01"></div>
         <div class="form-group"><label>Price (SGD) <span style="font-weight:400;color:var(--text3);">optional</span></label><input type="number" id="prod-price-sgd" placeholder="0.00" min="0" step="0.01"></div>
+        <div class="form-group"><label>Default Pack Weight (kg) <span style="font-weight:400;color:var(--text3);">— used to auto-fill packing size</span></label><input type="number" id="prod-weight" placeholder="e.g. 0.5 for 500g" min="0" step="0.001"></div>
         <div class="form-group" style="grid-column:1/-1"><label>Description / Notes</label><input type="text" id="prod-desc" placeholder="e.g. Grade A, vacuum packed, 500g per pack"></div>
         <div class="form-group"><label>Status</label>
           <select id="prod-status"><option>Active</option><option>Inactive</option></select>
@@ -3456,7 +3457,7 @@ const COLS = {
   inventory:    ['id','name','cat','unit','stock','reorder','cost','supplier'],
   staff:        ['id','name','role','dept','payType','salary','ic','phone','joinDate','empType','epf','socso','eis','bank','bankAcc','notes','address','emergencyName','emergencyPhone','emergencyRel','allowances'],
   customers:    ['id','name','contact','phone','email','address','terms','currency','priceList','notes'],
-  products:     ['id','name','cat','unit','price','priceSgd','desc','status','sort'],
+  products:     ['id','name','cat','unit','price','priceSgd','weight','desc','status','sort'],
   accounts:     ['id','name','type','description','balance'],
   suppliers:    ['id','name','cat','contact','phone','email','address','terms','notes'],
   payrollRuns:  ['id','month','processedOn','entries','totalNet'],
@@ -6706,6 +6707,20 @@ function setPkField(orderId, lineId, field, val) {
   const line = order.lines.find(l=>l.id===lineId);
   if (!line) return;
   line[field] = val;
+  // Auto-fill pack size from product.weight when product changes
+  if (field === 'product' && val) {
+    const prod = DB.products.find(p => p.name === val);
+    if (prod && prod.weight > 0) {
+      const presetVals = PK_PACK_SIZES.filter(s => s.val !== 'custom').map(s => parseFloat(s.val));
+      if (presetVals.includes(parseFloat(prod.weight))) {
+        line.packSize = parseFloat(prod.weight);
+        line.customSize = undefined;
+      } else {
+        line.packSize = 'custom';
+        line.customSize = prod.weight;
+      }
+    }
+  }
   // Recalc total kg for this line
   const size = line.packSize === 'custom' ? parseFloat(line.customSize)||0 : parseFloat(line.packSize)||0;
   const q    = parseInt(line.qty)||0;
@@ -11193,7 +11208,7 @@ function renderProducts() {
   document.getElementById('prod-table').innerHTML = data.length === 0
     ? '<div class="empty-state"><div class="icon">🍄</div><p>No products found</p></div>'
     : `<table>
-      <thead><tr><th style="width:60px;"></th><th>Product Name</th><th>Category</th><th>Unit</th><th>Price (RM)</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th style="width:60px;"></th><th>Product Name</th><th>Category</th><th>Unit</th><th>Weight</th><th>Price (RM)</th><th>Status</th><th></th></tr></thead>
       <tbody id="prod-tbody">${data.map((p,idx) => `<tr data-id="${p.id}">
         <td>
           <div style="display:flex;flex-direction:column;gap:2px;align-items:center;">
@@ -11204,6 +11219,7 @@ function renderProducts() {
         <td><div style="font-weight:500">${p.name}</div>${p.desc?`<div style="font-size:11px;color:var(--text3);margin-top:2px;">${p.desc}</div>`:''}</td>
         <td><span class="badge ${catColorMap[p.cat]||'badge-gray'}">${p.cat}</span></td>
         <td style="color:var(--text2)">${p.unit}</td>
+        <td class="mono" style="color:var(--text2);font-size:12px;">${p.weight ? (p.weight >= 1 ? p.weight+' kg' : (p.weight*1000)+' g') : '—'}</td>
         <td class="mono">${fmt(p.price||p.priceWholesale||0)}</td>
         <td><span class="badge ${p.status==='Active'?'badge-green':'badge-gray'}">${p.status}</span></td>
         <td style="display:flex;gap:4px;padding-top:10px;">
@@ -11217,7 +11233,7 @@ function renderProducts() {
 function openProductModal() {
   editingProdId = null;
   document.getElementById('prod-modal-title').textContent = 'Add Product';
-  ['prod-name','prod-price','prod-price-sgd','prod-desc'].forEach(id => document.getElementById(id).value = '');
+  ['prod-name','prod-price','prod-price-sgd','prod-weight','prod-desc'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('prod-status').value = 'Active';
   openModal('modal-product');
 }
@@ -11232,6 +11248,7 @@ function editProduct(id) {
   document.getElementById('prod-unit').value = p.unit;
   document.getElementById('prod-price').value = p.price || p.priceWholesale || '';
   document.getElementById('prod-price-sgd').value = p.priceSgd || '';
+  document.getElementById('prod-weight').value = p.weight || '';
   document.getElementById('prod-desc').value = p.desc || '';
   document.getElementById('prod-status').value = p.status;
   openModal('modal-product');
@@ -11245,6 +11262,7 @@ function saveProduct() {
     unit: document.getElementById('prod-unit').value,
     price:    parseFloat(document.getElementById('prod-price').value) || 0,
     priceSgd: parseFloat(document.getElementById('prod-price-sgd').value) || 0,
+    weight:   parseFloat(document.getElementById('prod-weight').value) || 0,
     desc: document.getElementById('prod-desc').value,
     status: document.getElementById('prod-status').value
   };
@@ -13373,7 +13391,7 @@ function generateSetupSql(prefix) {
     inventory: `id int8 primary key, name text, cat text, unit text, stock numeric, reorder numeric, cost numeric, supplier text`,
     staff: `id int8 primary key, name text, role text, dept text, "payType" text, salary numeric, ic text, phone text, "joinDate" text, "empType" text, epf bool, socso bool, eis bool, bank text, "bankAcc" text, notes text`,
     customers: `id int8 primary key, name text, contact text, phone text, email text, address text, terms text, currency text, "priceList" text, notes text`,
-    products: `id int8 primary key, name text, cat text, unit text, price numeric, "priceSgd" numeric, "desc" text, status text, sort int8`,
+    products: `id int8 primary key, name text, cat text, unit text, price numeric, "priceSgd" numeric, weight numeric, "desc" text, status text, sort int8`,
     accounts: `id int8 primary key, name text, type text, description text, balance numeric`,
     suppliers: `id int8 primary key, name text, cat text, contact text, phone text, email text, address text, terms text, notes text`,
     payroll_runs: `id int8 primary key, month text, "processedOn" text, entries text, "totalNet" numeric`,
