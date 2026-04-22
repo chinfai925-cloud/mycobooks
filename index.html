@@ -445,6 +445,10 @@ tr:hover td { background:var(--bg); }
             <div class="card-head"><span class="card-title">🚛 Fleet Schedule <span style="font-size:11px;color:var(--text3);font-weight:400;">next 5 days</span></span><button class="btn btn-outline btn-sm" onclick="navigate('fleet',document.querySelector('[data-page=fleet]'));setTimeout(()=>switchFleetTab(5),50)">View All</button></div>
             <div class="card-body" style="padding:0;" id="dash-schedule"></div>
           </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">🔔 Fleet Reminders <span style="font-size:11px;color:var(--text3);font-weight:400;">next 30 days</span></span><button class="btn btn-outline btn-sm" onclick="openLorryModal()">Manage Lorries</button></div>
+            <div class="card-body" style="padding:0;" id="dash-fleet-reminders"></div>
+          </div>
         </div>
         <div>
           <div class="card">
@@ -4098,6 +4102,104 @@ function renderDashboard() {
         ${items.map(renderRow).join('')}` : '';
 
       schEl.innerHTML = dayList.map(d => section(d.label, groups[d.iso])).join('');
+    }
+  }
+
+  // Fleet Reminders widget — road tax, insurance, puspakom, service (within 30 days or overdue)
+  const remEl = document.getElementById('dash-fleet-reminders');
+  if (remEl) {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const todayIso = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    const warnDays = 30;
+    const SERVICE_KM_WARN = 500;
+
+    const daysBetween = (isoDate) => {
+      if (!isoDate) return null;
+      const d = new Date(isoDate + 'T00:00:00');
+      return Math.round((d - today) / 86400000);
+    };
+
+    const items = [];
+    (DB.lorries || []).forEach(l => {
+      // Road tax
+      if (l.roadTaxExpiry) {
+        const days = daysBetween(l.roadTaxExpiry);
+        if (days !== null && days <= warnDays) {
+          items.push({ lorryId:l.id, plate:l.plate, label:'Road Tax', icon:'📄', date:l.roadTaxExpiry, days, type:'expiry' });
+        }
+      }
+      // Insurance
+      if (l.insuranceExpiry) {
+        const days = daysBetween(l.insuranceExpiry);
+        if (days !== null && days <= warnDays) {
+          items.push({ lorryId:l.id, plate:l.plate, label:'Insurance', icon:'🛡', date:l.insuranceExpiry, days, type:'expiry' });
+        }
+      }
+      // Puspakom next
+      if (l.puspakomNext) {
+        const days = daysBetween(l.puspakomNext);
+        if (days !== null && days <= warnDays) {
+          items.push({ lorryId:l.id, plate:l.plate, label:'Puspakom', icon:'🔍', date:l.puspakomNext, days, type:'expiry' });
+        }
+      }
+      // Service (km-based)
+      if (l.serviceIntervalKm && l.lastServiceKm != null) {
+        const nextKm = l.lastServiceKm + l.serviceIntervalKm;
+        const kmLeft = nextKm - (l.odometer || 0);
+        if (kmLeft <= SERVICE_KM_WARN) {
+          items.push({ lorryId:l.id, plate:l.plate, label:'Service', icon:'🔧', date:null, days:null, type:'service', kmLeft, nextKm });
+        }
+      }
+    });
+
+    if (items.length === 0) {
+      remEl.innerHTML = '<div class="empty-state"><p style="font-size:12px;">No fleet reminders</p><p style="font-size:11px;color:var(--text3);margin-top:4px;">Road tax, insurance, Puspakom & service due within 30 days appear here</p></div>';
+    } else {
+      // Sort: overdue first, then by days (or by km for service)
+      items.sort((a,b) => {
+        const aKey = a.type === 'service' ? a.kmLeft : a.days;
+        const bKey = b.type === 'service' ? b.kmLeft : b.days;
+        return aKey - bKey;
+      });
+
+      remEl.innerHTML = items.map(it => {
+        let statusBadge, statusColor;
+        if (it.type === 'service') {
+          if (it.kmLeft <= 0) {
+            statusBadge = `${Math.abs(it.kmLeft)} km overdue`;
+            statusColor = 'var(--red)';
+          } else {
+            statusBadge = `in ${it.kmLeft} km`;
+            statusColor = it.kmLeft <= 100 ? 'var(--red)' : 'var(--amber)';
+          }
+        } else {
+          if (it.days < 0) {
+            statusBadge = `${Math.abs(it.days)}d overdue`;
+            statusColor = 'var(--red)';
+          } else if (it.days === 0) {
+            statusBadge = 'today';
+            statusColor = 'var(--red)';
+          } else if (it.days <= 7) {
+            statusBadge = `in ${it.days}d`;
+            statusColor = 'var(--red)';
+          } else {
+            statusBadge = `in ${it.days}d`;
+            statusColor = 'var(--amber)';
+          }
+        }
+        const dateLine = it.date
+          ? `<span style="font-family:'DM Mono',monospace;">${fmtDate(it.date)}</span>`
+          : `<span style="font-family:'DM Mono',monospace;">Next: ${it.nextKm.toLocaleString()} km</span>`;
+        return `
+          <div style="display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border);gap:10px;cursor:pointer;" onclick="navigate('fleet',document.querySelector('[data-page=fleet]'));setTimeout(()=>editLorry(${it.lorryId}),50)">
+            <span style="font-size:16px;">${it.icon}</span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;font-weight:500;">${it.label} · <span style="font-family:'DM Mono',monospace;font-weight:600;">${it.plate}</span></div>
+              <div style="font-size:11px;color:var(--text3);">${dateLine}</div>
+            </div>
+            <span style="background:${statusColor};color:white;font-size:10px;font-weight:600;padding:4px 8px;border-radius:3px;white-space:nowrap;">${statusBadge}</span>
+          </div>`;
+      }).join('');
     }
   }
 
