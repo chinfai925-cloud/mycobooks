@@ -3344,7 +3344,7 @@ async function sbLoad() {
   DB[key] = rows.map(r => {
             const obj = { ...r };
             ['lines','customers','orders','expLines','items','dispatch',
-             'members','generated','statutory','payments','entries','priceList','discount'].forEach(col => {
+             'members','generated','statutory','payments','entries','priceList','discount','invoiceIds'].forEach(col => {
               if (typeof obj[col] === 'string' && obj[col]) {
                 try { obj[col] = JSON.parse(obj[col]); } catch(e) {}
               }
@@ -3411,7 +3411,7 @@ async function sbSave(tableKey, record) {
   const tbl = sbTable(tableKey);
   // Serialize JSON columns
   const row = { ...record };
-  ['lines','customers','orders','expLines','items','dispatch','members','generated','statutory','discount'].forEach(col => {
+  ['lines','customers','orders','expLines','items','dispatch','members','generated','statutory','discount','invoiceIds'].forEach(col => {
     if (row[col] && typeof row[col] === 'object') {
       row[col] = JSON.stringify(row[col]);
     }
@@ -3452,7 +3452,7 @@ const COLS = {
   users:        ['id','username','password','name','role','initials','active'],
   expenses:     ['id','date','desc','cat','amount','supplier','status','paid','account','notes','dueDate','recurring','recurringId'],
   sales:        ['id','date','customer','product','qty','price','total','type','account','notes','harvestId'],
-  invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','currency','notes','product','qty','unit','discount'],
+  invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','currency','notes','product','qty','unit','discount','soId','soOrderNo'],
   inventory:    ['id','name','cat','unit','stock','reorder','cost','supplier'],
   staff:        ['id','name','role','dept','payType','salary','ic','phone','joinDate','empType','epf','socso','eis','bank','bankAcc','notes','address','emergencyName','emergencyPhone','emergencyRel','allowances'],
   customers:    ['id','name','contact','phone','email','address','terms','currency','priceList','notes'],
@@ -3471,7 +3471,7 @@ const COLS = {
   packings:     ['id','date','team','members','notes','orders','packs','totalKg','soId','soOrderNo','dispatchTeamId'],
   packingRates: ['id','product','ratePerPack','notes'],
   packingTeams: ['id','team','members','notes'],
-  salesOrders:  ['id','orderNo','customers','lines','customer','deliveryDate','salesperson','priority','notes','total','status','createdOn','dispatch'],
+  salesOrders:  ['id','orderNo','customers','lines','customer','deliveryDate','salesperson','priority','notes','total','status','createdOn','dispatch','invoiceIds'],
   lorries:      ['id','plate','name','model','odometer','serviceIntervalKm','lastServiceKm','roadTaxExpiry','insuranceExpiry','puspakomDate','puspakomNext'],
   refuels:      ['id','date','lorryId','odometer','km','litres','cost','ppl','efficiency','driver','account','notes'],
   maintenance:  ['id','date','lorryId','desc','type','status','odometer','nextKm','vendor','cost','account','nextDate','notes'],
@@ -3513,7 +3513,7 @@ async function sbSaveAll() {
       const rows = records.map(r => {
         const src = { ...r };
         ['lines','customers','orders','expLines','items','dispatch',
-         'members','generated','statutory','payments','entries','priceList','discount'].forEach(c => {
+         'members','generated','statutory','payments','entries','priceList','discount','invoiceIds'].forEach(c => {
           if (src[c] && typeof src[c] === 'object') src[c] = JSON.stringify(src[c]);
         });
         if (!cols) return src;
@@ -5411,6 +5411,22 @@ function removeSoCustomer(cid) {
   updateSoOrderTotal();
 }
 
+// Look up the best-fit price for a given customer + product
+// Fallback chain: customer's priceList → SGD price (if SGD customer) → product.price → 0
+function getCustomerPriceFor(customerName, productName) {
+  if (!productName) return 0;
+  const cust = DB.customers.find(x => x.name === customerName);
+  const prod = DB.products.find(p => p.name === productName);
+  if (cust && cust.priceList && cust.priceList[productName] !== undefined && cust.priceList[productName] > 0) {
+    return parseFloat(cust.priceList[productName]) || 0;
+  }
+  if (cust && cust.currency === 'SGD' && prod && prod.priceSgd > 0) {
+    return parseFloat(prod.priceSgd) || 0;
+  }
+  if (prod) return parseFloat(prod.price || prod.priceWholesale || 0) || 0;
+  return 0;
+}
+
 function addSoLine(cid) {
   const cust = soCustomers.find(c=>c.id===cid);
   if (!cust) return;
@@ -5429,7 +5445,18 @@ function removeSoLine(cid, lid) {
 
 function setSoCustField(cid, val) {
   const c = soCustomers.find(x=>x.id===cid);
-  if (c) c.customer = val;
+  if (!c) return;
+  const customerChanged = c.customer !== val;
+  c.customer = val;
+  // When customer changes, re-price all existing lines based on the new customer's price list
+  if (customerChanged && val) {
+    c.lines.forEach(l => {
+      if (l.product) {
+        l.price = getCustomerPriceFor(val, l.product);
+        l.total = parseFloat(((parseInt(l.qty)||0) * (parseFloat(l.price)||0)).toFixed(2));
+      }
+    });
+  }
 }
 
 function setSoLineField(cid, lid, field, val) {
@@ -5438,6 +5465,11 @@ function setSoLineField(cid, lid, field, val) {
   const l = cust.lines.find(x=>x.id===lid);
   if (!l) return;
   l[field] = val;
+  // Auto-fill price from customer price list when product changes
+  if (field === 'product' && val && cust.customer) {
+    const autoPrice = getCustomerPriceFor(cust.customer, val);
+    if (autoPrice > 0) l.price = autoPrice;
+  }
   l.total = parseFloat(((parseInt(l.qty)||0) * (parseFloat(l.price)||0)).toFixed(2));
   const totCell = document.getElementById(`so-line-total-${lid}`);
   if (totCell) totCell.textContent = currSym()+l.total.toFixed(2);
@@ -5462,7 +5494,7 @@ function renderSoCustomers() {
     const custInList = DB.customers.some(x=>x.name===c.customer);
     const custControl = (custInList || !c.customer)
       ? `<select style="flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;font-family:inherit;"
-           onchange="setSoCustField(${c.id},this.value==='__new__'?'':this.value)">
+           onchange="setSoCustField(${c.id},this.value==='__new__'?'':this.value);renderSoCustomers()">
            <option value="">— Select customer —</option>
            ${DB.customers.map(x=>`<option value="${x.name}"${x.name===c.customer?' selected':''}>${x.name}</option>`).join('')}
            <option value="__new__">+ Type new customer...</option>
@@ -5583,6 +5615,87 @@ function deleteOrder(id) {
   renderOrders();
 }
 
+// Convert a Sales Order into one invoice per customer block.
+// Each invoice is linked back to the SO via invoice.soId / invoice.soOrderNo.
+// The SO tracks created invoice ids in order.invoiceIds to prevent duplicates.
+function convertSoToInvoice(soId) {
+  const o = DB.salesOrders.find(x => x.id === soId);
+  if (!o) { showToast('Sales order not found', 'error'); return; }
+  if (o.status === 'New') {
+    showToast('Confirm the order before converting to invoice', 'error');
+    return;
+  }
+  if (o.status === 'Cancelled') {
+    showToast('Cannot convert a cancelled order', 'error');
+    return;
+  }
+  if (o.invoiceIds && o.invoiceIds.length > 0) {
+    const existingNos = (o.invoiceIds || [])
+      .map(iid => DB.invoices.find(i => i.id === iid))
+      .filter(Boolean)
+      .map(i => i.no)
+      .join(', ');
+    if (!confirm(`This order already has invoice(s): ${existingNos || '(missing)'}\n\nCreate additional invoice(s) anyway?`)) return;
+  }
+
+  const customers = o.customers || [{ customer: o.customer || '', lines: o.lines || [] }];
+  const today = new Date().toISOString().split('T')[0];
+  const createdInvoices = [];
+
+  customers.forEach(cb => {
+    const validLines = (cb.lines || []).filter(l => l.product && (parseFloat(l.qty) || 0) > 0);
+    if (validLines.length === 0) return;
+
+    const custRec = DB.customers.find(x => x.name === cb.customer);
+    const currency = (custRec && custRec.currency) || 'MYR';
+    const terms = (custRec && custRec.terms) || 0;
+    const due = new Date(today);
+    due.setDate(due.getDate() + terms);
+
+    const lines = validLines.map(l => ({
+      product: l.product,
+      qty: parseFloat(l.qty) || 0,
+      unitPrice: parseFloat(l.price) || 0,
+      subtotal: (parseFloat(l.qty) || 0) * (parseFloat(l.price) || 0)
+    }));
+    const total = lines.reduce((s, l) => s + l.subtotal, 0);
+
+    const newInv = {
+      id: DB.nextIds.invoices++,
+      no: 'INV-2026-0' + (DB.nextIds.invoices - 1),
+      date: today,
+      due: due.toISOString().split('T')[0],
+      customer: cb.customer,
+      address: (custRec && custRec.address) || '',
+      lines,
+      total,
+      taxPct: 0,
+      discount: null,
+      currency,
+      account: '',
+      status: 'Pending',
+      notes: `From Sales Order ${o.orderNo}`,
+      soId: o.id,
+      soOrderNo: o.orderNo
+    };
+    DB.invoices.unshift(newInv);
+    createdInvoices.push(newInv);
+  });
+
+  if (createdInvoices.length === 0) {
+    showToast('No valid lines to convert', 'error');
+    return;
+  }
+
+  // Link invoices back to the SO
+  o.invoiceIds = [...(o.invoiceIds || []), ...createdInvoices.map(i => i.id)];
+
+  const nos = createdInvoices.map(i => i.no).join(', ');
+  showToast(`Created ${createdInvoices.length} invoice(s): ${nos}`);
+  renderOrders();
+  if (typeof renderInvoices === 'function') renderInvoices();
+}
+
 function renderOrders() {
   const search  = (document.getElementById('so-search')||{}).value?.toLowerCase()||'';
   const statusF = (document.getElementById('so-status-filter')||{}).value||'';
@@ -5664,9 +5777,21 @@ function renderOrders() {
           <span style="font-weight:500;color:var(--text2);">Dispatched: </span>
           ${o.dispatch.map(d=>`<span class="badge badge-blue" style="font-size:11px;margin-right:4px;">Team ${d.team}</span>`).join('')}
         </div>`:''}
+        ${(() => {
+          const linked = (o.invoiceIds || [])
+            .map(iid => DB.invoices.find(i => i.id === iid))
+            .filter(Boolean);
+          if (!linked.length) return '';
+          return `<div style="background:var(--bg);border-radius:var(--radius-sm);padding:6px 10px;margin-top:8px;font-size:12px;">
+            <span style="font-weight:500;color:var(--text2);">Invoiced: </span>
+            ${linked.map(inv => `<span class="badge badge-green" style="font-size:11px;margin-right:4px;cursor:pointer;" onclick="navigate('invoices')" title="Go to Invoices">📄 ${inv.no}</span>`).join('')}
+            ${linked.length === 1 ? `<button class="btn btn-outline btn-sm" onclick="printDO(${linked[0].id})" style="font-size:10px;margin-left:4px;padding:2px 8px;">🚚 Print DO</button>` : ''}
+          </div>`;
+        })()}
         <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
           ${['New','Confirmed'].includes(o.status)&&!can('onlyOrders')?`<button class="btn btn-primary btn-sm" onclick="openDispatchModal(${o.id})" style="font-size:11px;">📋 Dispatch to Teams</button>`:''}
           ${o.dispatch&&o.dispatch.length&&!can('onlyOrders')?`<button class="btn btn-outline btn-sm" onclick="createPackingSessionsFromSO(${o.id})" style="font-size:11px;color:var(--green);border-color:var(--green);">📦 Create Packing Sessions</button>`:''}
+          ${!['New','Cancelled'].includes(o.status)&&!can('onlyOrders')?`<button class="btn btn-outline btn-sm" onclick="convertSoToInvoice(${o.id})" style="font-size:11px;color:var(--blue);border-color:var(--blue);">📄 Convert to Invoice</button>`:''}
           ${!can('onlyOrders')?(nextActions[o.status]||[]).map(a=>`<button class="btn btn-outline btn-sm" onclick="updateOrderStatus(${o.id},'${a.status}')" style="font-size:11px;${a.status==='Cancelled'?'color:var(--red);border-color:var(--red);':''}">${a.label}</button>`).join(''):''}
           ${can('canEdit')&&!can('onlyOrders')?`<button class="btn btn-outline btn-sm" onclick="openOrderModal(${o.id})" style="font-size:11px;">Edit</button>`:''}
           ${can('canDelete')?`<button class="btn btn-danger btn-sm" onclick="deleteOrder(${o.id})" style="font-size:11px;">Del</button>`:''}
@@ -13244,7 +13369,7 @@ function generateSetupSql(prefix) {
     users: `id int8 primary key, username text, password text, name text, role text, initials text, active bool`,
     expenses: `id int8 primary key, date text, "desc" text, cat text, amount numeric, supplier text, status text, paid text, account text, notes text, "dueDate" text, recurring bool, "recurringId" int8`,
     sales: `id int8 primary key, date text, customer text, product text, qty numeric, price numeric, total numeric, type text, account text, notes text, "harvestId" int8`,
-    invoices: `id int8 primary key, no text, date text, due text, customer text, address text, lines text, total numeric, tax numeric, sst numeric, status text, account text, currency text, notes text, product text, qty numeric, unit text, discount text`,
+    invoices: `id int8 primary key, no text, date text, due text, customer text, address text, lines text, total numeric, tax numeric, sst numeric, status text, account text, currency text, notes text, product text, qty numeric, unit text, discount text, "soId" int8, "soOrderNo" text`,
     inventory: `id int8 primary key, name text, cat text, unit text, stock numeric, reorder numeric, cost numeric, supplier text`,
     staff: `id int8 primary key, name text, role text, dept text, "payType" text, salary numeric, ic text, phone text, "joinDate" text, "empType" text, epf bool, socso bool, eis bool, bank text, "bankAcc" text, notes text`,
     customers: `id int8 primary key, name text, contact text, phone text, email text, address text, terms text, currency text, "priceList" text, notes text`,
@@ -13263,7 +13388,7 @@ function generateSetupSql(prefix) {
     packings: `id int8 primary key, date text, team text, members text, notes text, orders text, packs int8, "totalKg" numeric`,
     packing_rates: `id int8 primary key, product text, "ratePerPack" numeric, notes text`,
     packing_teams: `id int8 primary key, team text, members text, notes text`,
-    sales_orders: `id int8 primary key, "orderNo" text, customers text, lines text, customer text, "deliveryDate" text, salesperson text, priority text, notes text, total numeric, status text, "createdOn" text, dispatch text`,
+    sales_orders: `id int8 primary key, "orderNo" text, customers text, lines text, customer text, "deliveryDate" text, salesperson text, priority text, notes text, total numeric, status text, "createdOn" text, dispatch text, "invoiceIds" text`,
     lorries: `id int8 primary key, plate text, name text, model text, odometer numeric, "serviceIntervalKm" numeric, "lastServiceKm" numeric, "roadTaxExpiry" text, "insuranceExpiry" text, "puspakomDate" text, "puspakomNext" text`,
     refuels: `id int8 primary key, date text, "lorryId" int8, odometer numeric, km numeric, litres numeric, cost numeric, ppl numeric, efficiency numeric, driver text, account text, notes text`,
     maintenance: `id int8 primary key, date text, "lorryId" int8, "desc" text, type text, status text, odometer numeric, "nextKm" numeric, vendor text, cost numeric, account text, "nextDate" text, notes text`,
