@@ -1536,10 +1536,9 @@ tr:hover td { background:var(--bg); }
           <input type="text" id="so-notes" placeholder="e.g. Deliver before 8am, cold chain required...">
         </div>
       </div>
-      <!-- Customer blocks -->
+      <!-- Customer block (single customer per SO) -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <label style="font-size:12px;font-weight:500;color:var(--text2);">Customer Orders</label>
-        <button class="btn btn-outline btn-sm" onclick="addSoCustomer()">+ Add Customer</button>
+        <label style="font-size:12px;font-weight:500;color:var(--text2);">Customer</label>
       </div>
       <div id="so-customers-body"></div>
       <!-- Grand total -->
@@ -5487,7 +5486,7 @@ function renderSoCustomers() {
   const el = document.getElementById('so-customers-body');
   if (!el) return;
   if (soCustomers.length === 0) {
-    el.innerHTML = `<div style="padding:16px;text-align:center;font-size:12px;color:var(--text3);border:1px dashed var(--border);border-radius:var(--radius-sm);">No customers yet — click "+ Add Customer"</div>`;
+    el.innerHTML = `<div style="padding:16px;text-align:center;font-size:12px;color:var(--text3);border:1px dashed var(--border);border-radius:var(--radius-sm);">No customer — close and re-open to reset</div>`;
     updateSoOrderTotal(); return;
   }
 
@@ -5516,7 +5515,7 @@ function renderSoCustomers() {
         ${custControl}
         <span style="font-size:11px;color:var(--text2);white-space:nowrap;">${custPacks} packs · RM ${custTotal.toFixed(2)}</span>
         <button onclick="addSoLine(${c.id});renderSoCustomers();" class="btn btn-outline btn-sm" style="font-size:11px;white-space:nowrap;">+ Item</button>
-        <button onclick="removeSoCustomer(${c.id})" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:18px;line-height:1;">×</button>
+        ${soCustomers.length > 1 ? `<button onclick="removeSoCustomer(${c.id})" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:18px;line-height:1;">×</button>` : ''}
       </div>
       <!-- Product lines -->
       <table style="width:100%;border-collapse:collapse;">
