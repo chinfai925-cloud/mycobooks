@@ -4045,10 +4045,16 @@ function renderDashboard() {
   // Fleet schedule widget — today + tomorrow
   const schEl = document.getElementById('dash-schedule');
   if (schEl) {
+    const toLocalIso = d => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
     const today = new Date();
     const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1);
-    const todayIso = today.toISOString().split('T')[0];
-    const tomorrowIso = tomorrow.toISOString().split('T')[0];
+    const todayIso = toLocalIso(today);
+    const tomorrowIso = toLocalIso(tomorrow);
     const upcoming = (DB.scheduledTrips||[]).filter(s => s.date===todayIso || s.date===tomorrowIso);
 
     if (upcoming.length === 0) {
@@ -5488,7 +5494,13 @@ function renderSchedule() {
     d.setDate(d.getDate() + i);
     days.push(d);
   }
-  const iso = d => d.toISOString().split('T')[0];
+  const iso = d => {
+    // Build YYYY-MM-DD in LOCAL time (toISOString() shifts to UTC and loses a day in +8)
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
   const rangeEl = document.getElementById('fl-sch-range');
   if (rangeEl) {
     rangeEl.textContent = fmtDate(iso(days[0])) + ' — ' + fmtDate(iso(days[6]));
@@ -5503,7 +5515,7 @@ function renderSchedule() {
   }
 
   const dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  const todayIso = new Date().toISOString().split('T')[0];
+  const todayIso = iso(new Date());
 
   // Header row: day columns
   let html = `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:separate;border-spacing:0;min-width:900px;font-size:12px;background:var(--surface);border-radius:var(--radius-sm);border:1px solid var(--border);">`;
@@ -5611,7 +5623,9 @@ function openScheduleModal(id, prefillDate, prefillStart, prefillLorryId) {
     document.getElementById('sch-route').value  = s.routeId || (s.route ? 'custom' : '');
     document.getElementById('sch-notes').value  = s.notes || '';
   } else {
-    document.getElementById('sch-date').value   = prefillDate || new Date().toISOString().split('T')[0];
+    const today = new Date();
+    const defaultIso = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    document.getElementById('sch-date').value   = prefillDate || defaultIso;
     document.getElementById('sch-start').value  = prefillStart || '08:00';
     document.getElementById('sch-end').value    = '12:00';
     document.getElementById('sch-lorry').value  = prefillLorryId || '';
