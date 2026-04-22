@@ -1055,6 +1055,7 @@ tr:hover td { background:var(--bg); }
         <button id="fl-tab-2" onclick="switchFleetTab(2)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">📊 Trip Summary</button>
         <button id="fl-tab-3" onclick="switchFleetTab(3)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">🚚 Per Lorry</button>
         <button id="fl-tab-4" onclick="switchFleetTab(4)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">🔧 Maintenance</button>
+        <button id="fl-tab-5" onclick="switchFleetTab(5)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">📅 Schedule</button>
       </div>
 
       <!-- Tab 1: Trips -->
@@ -1137,6 +1138,24 @@ tr:hover td { background:var(--bg); }
           </div>
         </div>
         <div id="fl-maint-table"></div>
+      </div>
+
+      <!-- Tab 5: Schedule -->
+      <div id="fl-panel-5" style="display:none;">
+        <div class="card" style="margin-bottom:12px;">
+          <div class="card-body" style="padding:10px 16px;">
+            <div class="flex-row">
+              <button class="btn btn-outline btn-sm" onclick="shiftScheduleWeek(-1)">← Prev</button>
+              <button class="btn btn-outline btn-sm" onclick="shiftScheduleWeek(0)">This Week</button>
+              <button class="btn btn-outline btn-sm" onclick="shiftScheduleWeek(1)">Next →</button>
+              <span id="fl-sch-range" style="font-size:13px;color:var(--text2);font-weight:600;margin-left:8px;"></span>
+              <div style="margin-left:auto;display:flex;gap:8px;">
+                <button class="btn btn-primary btn-sm" onclick="openScheduleModal()">+ Schedule Trip</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="fl-schedule-grid"></div>
       </div>
     </div>
 
@@ -1674,6 +1693,47 @@ tr:hover td { background:var(--bg); }
       <div class="form-actions">
         <button class="btn btn-outline" onclick="closeModal('modal-trip')">Cancel</button>
         <button class="btn btn-primary" onclick="saveTrip()">Save Trip</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Schedule Trip Modal -->
+<div class="modal-backdrop" id="modal-schedule">
+  <div class="modal" style="max-width:540px;">
+    <div class="modal-header">
+      <div class="modal-title" id="schedule-modal-title">Schedule Trip</div>
+      <button class="modal-close" onclick="closeModal('modal-schedule')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid" style="grid-template-columns:1fr 1fr;">
+        <div class="form-group"><label>Date</label>
+          <input type="date" id="sch-date">
+        </div>
+        <div class="form-group"><label>Time Slot</label>
+          <select id="sch-slot" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
+            <option value="AM">Morning (AM)</option>
+            <option value="PM">Afternoon (PM)</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Lorry</label>
+          <select id="sch-lorry" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
+        </div>
+        <div class="form-group"><label>Driver</label>
+          <select id="sch-driver" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
+        </div>
+        <div class="form-group" style="grid-column:1/-1;"><label>Route</label>
+          <select id="sch-route" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
+        </div>
+        <div class="form-group" style="grid-column:1/-1;"><label>Notes <span style="font-weight:400;color:var(--text3);">(optional)</span></label>
+          <input type="text" id="sch-notes" placeholder="e.g. Pickup 8am, 2 pallets to Klang">
+        </div>
+      </div>
+      <div id="sch-conflict-warning" style="display:none;background:#fee;border:1px solid var(--red);color:var(--red);padding:8px 12px;border-radius:var(--radius-sm);font-size:12px;margin-bottom:12px;"></div>
+      <div class="form-actions">
+        <button id="sch-delete-btn" class="btn btn-outline" style="color:var(--red);border-color:var(--red);display:none;margin-right:auto;" onclick="deleteScheduledTrip()">Delete</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-schedule')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveScheduledTrip()">Save</button>
       </div>
     </div>
   </div>
@@ -3295,7 +3355,7 @@ const SB_TABLES = [
   'products','accounts','suppliers','payrollRuns','wageAdvances','transfers',
   'cashflowItems','loans','claims','recurringExpenses','batches','harvests',
   'packings','packingRates','packingTeams','salesOrders','lorries','refuels','maintenance',
-  'trips','routeRates','payments','creditNotes','debitNotes'
+  'trips','routeRates','payments','creditNotes','debitNotes','scheduledTrips'
 ];
 
 function sbTable(key) {
@@ -3618,12 +3678,13 @@ const DB = {
   refuels: [],
   maintenance: [],
   trips: [],
+  scheduledTrips: [],
   routeRates: [],
   payments: [],
   creditNotes: [],
   debitNotes: [],
   company: { name:'', regno:'', phone:'', email:'', address:'', bank:'', bankacc:'', footer:'Thank you for your business!' },
-  nextIds: { expenses:1, sales:1, invoices:1, inventory:1, staff:1, customers:1, products:1, accounts:1, users:1, suppliers:1, payrollRuns:1, wageAdvances:1, transfers:1, cashflowItems:1, loans:1, claims:1, recurringExpenses:1, batches:1, harvests:1, packings:1, packingRates:1, packingTeams:1, salesOrders:1, lorries:1, refuels:1, maintenance:1, trips:1, routeRates:1, payments:1, creditNotes:1, debitNotes:1 }
+  nextIds: { expenses:1, sales:1, invoices:1, inventory:1, staff:1, customers:1, products:1, accounts:1, users:1, suppliers:1, payrollRuns:1, wageAdvances:1, transfers:1, cashflowItems:1, loans:1, claims:1, recurringExpenses:1, batches:1, harvests:1, packings:1, packingRates:1, packingTeams:1, salesOrders:1, lorries:1, refuels:1, maintenance:1, trips:1, routeRates:1, payments:1, creditNotes:1, debitNotes:1, scheduledTrips:1 }
 };
 
 // ============================================================
@@ -4013,7 +4074,7 @@ let editingLorryId  = null;
 
 function switchFleetTab(n) {
   fleetTab = n;
-  [1,2,3,4].forEach(i => {
+  [1,2,3,4,5].forEach(i => {
     document.getElementById('fl-panel-'+i).style.display = i===n ? '' : 'none';
     const btn = document.getElementById('fl-tab-'+i);
     btn.style.borderBottomColor = i===n ? 'var(--green)' : 'transparent';
@@ -5032,6 +5093,7 @@ function renderFleet() {
   if (fleetTab===2) renderTripSummary();
   if (fleetTab===3) renderPerLorry();
   if (fleetTab===4) renderMaintenance();
+  if (fleetTab===5) renderSchedule();
 }
 
 function lorryLabel(id) {
@@ -5310,6 +5372,259 @@ function renderPerLorry() {
     </div>`;
   }).join('');
 }
+
+// ============================================================
+// FLEET SCHEDULE (planned trips)
+// ============================================================
+let scheduleWeekOffset = 0;  // 0 = this week, +1 = next week, -1 = prev
+let editingSchId       = null;
+
+function startOfWeek(offset) {
+  const d = new Date();
+  d.setDate(d.getDate() + offset*7);
+  // Monday as week start
+  const day = d.getDay(); // 0=Sun..6=Sat
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function shiftScheduleWeek(delta) {
+  if (delta === 0) scheduleWeekOffset = 0;
+  else scheduleWeekOffset += delta;
+  renderSchedule();
+}
+
+function scheduleConflict(date, slot, lorryId, ignoreId) {
+  return DB.scheduledTrips.find(s =>
+    s.date === date && s.slot === slot && s.lorryId === lorryId &&
+    (ignoreId == null || s.id !== ignoreId)
+  );
+}
+
+function renderSchedule() {
+  const weekStart = startOfWeek(scheduleWeekOffset);
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + i);
+    days.push(d);
+  }
+  const iso = d => d.toISOString().split('T')[0];
+  const rangeEl = document.getElementById('fl-sch-range');
+  if (rangeEl) {
+    rangeEl.textContent = fmtDate(iso(days[0])) + ' — ' + fmtDate(iso(days[6]));
+  }
+
+  const gridEl = document.getElementById('fl-schedule-grid');
+  if (!gridEl) return;
+
+  if (DB.lorries.length === 0) {
+    gridEl.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;color:var(--text3);padding:40px 20px;">Add a lorry first (Manage Lorries) to start scheduling trips.</div></div>';
+    return;
+  }
+
+  const dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const todayIso = new Date().toISOString().split('T')[0];
+
+  // Header row: day columns
+  let html = `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:separate;border-spacing:0;min-width:900px;font-size:12px;background:var(--surface);border-radius:var(--radius-sm);border:1px solid var(--border);">`;
+  html += `<thead><tr>
+    <th style="position:sticky;left:0;background:var(--bg);padding:10px 12px;text-align:left;border-bottom:1px solid var(--border);border-right:1px solid var(--border);font-weight:600;color:var(--text2);font-size:11px;z-index:2;min-width:140px;">Lorry</th>`;
+  days.forEach((d, i) => {
+    const isToday = iso(d) === todayIso;
+    html += `<th style="padding:8px 6px;text-align:center;border-bottom:1px solid var(--border);border-right:${i<6?'1px solid var(--border)':'none'};font-weight:600;font-size:11px;${isToday?'background:#eef7f0;color:var(--green);':'color:var(--text2);'}">
+      <div>${dayNames[i]}</div>
+      <div style="font-size:10px;color:var(--text3);font-weight:500;margin-top:2px;">${d.getDate()}/${d.getMonth()+1}</div>
+    </th>`;
+  });
+  html += `</tr></thead><tbody>`;
+
+  DB.lorries.forEach((l, rowIdx) => {
+    const isLast = rowIdx === DB.lorries.length - 1;
+    html += `<tr>`;
+    html += `<td style="position:sticky;left:0;background:var(--surface);padding:10px 12px;border-bottom:${isLast?'none':'1px solid var(--border)'};border-right:1px solid var(--border);font-weight:600;z-index:1;vertical-align:top;">
+      <div style="font-family:'DM Mono',monospace;font-size:12px;">${l.plate}</div>
+      ${l.name ? `<div style="font-size:10px;color:var(--text3);font-weight:400;margin-top:2px;">${l.name}</div>` : ''}
+    </td>`;
+
+    days.forEach((d, dayIdx) => {
+      const dIso = iso(d);
+      const amTrips = DB.scheduledTrips.filter(s => s.date===dIso && s.slot==='AM' && s.lorryId===l.id);
+      const pmTrips = DB.scheduledTrips.filter(s => s.date===dIso && s.slot==='PM' && s.lorryId===l.id);
+
+      const renderChip = (s) => {
+        const conflict = scheduleConflict(s.date, s.slot, s.lorryId, s.id);
+        const bg = conflict ? '#fee' : '#eef7f0';
+        const bd = conflict ? 'var(--red)' : 'var(--green)';
+        const warn = conflict ? ' ⚠' : '';
+        return `<div onclick="openScheduleModal(${s.id})" style="background:${bg};border:1px solid ${bd};border-radius:4px;padding:4px 6px;font-size:10px;cursor:pointer;margin-bottom:3px;line-height:1.3;" title="Click to edit${conflict?' · CONFLICT':''}">
+          <div style="font-weight:600;color:var(--text);">${s.route||'Custom'}${warn}</div>
+          <div style="color:var(--text3);font-size:9px;">${s.driver||'—'}</div>
+          <button onclick="event.stopPropagation();convertScheduleToTrip(${s.id})" style="margin-top:3px;background:var(--green);color:white;border:none;border-radius:3px;padding:2px 6px;font-size:9px;cursor:pointer;font-weight:600;">✓ Mark Done</button>
+        </div>`;
+      };
+
+      const slotCell = (label, trips, slot) => {
+        const slotTrips = trips.map(renderChip).join('');
+        const addBtn = `<button onclick="openScheduleModal(null,'${dIso}','${slot}',${l.id})" style="background:none;border:1px dashed var(--border);color:var(--text3);font-size:10px;padding:2px 6px;border-radius:3px;cursor:pointer;width:100%;">+ ${label}</button>`;
+        return `<div style="margin-bottom:4px;">
+          <div style="font-size:9px;color:var(--text3);font-weight:600;margin-bottom:2px;">${label}</div>
+          ${slotTrips}
+          ${addBtn}
+        </div>`;
+      };
+
+      html += `<td style="padding:6px 4px;border-bottom:${isLast?'none':'1px solid var(--border)'};border-right:${dayIdx<6?'1px solid var(--border)':'none'};vertical-align:top;min-width:110px;">
+        ${slotCell('AM', amTrips, 'AM')}
+        ${slotCell('PM', pmTrips, 'PM')}
+      </td>`;
+    });
+    html += `</tr>`;
+  });
+  html += `</tbody></table></div>`;
+
+  // Summary under grid
+  const weekStartIso = iso(days[0]);
+  const weekEndIso   = iso(days[6]);
+  const weekTrips = DB.scheduledTrips.filter(s => s.date >= weekStartIso && s.date <= weekEndIso);
+  html += `<div style="margin-top:12px;font-size:12px;color:var(--text3);">${weekTrips.length} trip${weekTrips.length!==1?'s':''} scheduled this week · Click a trip to edit · Click <strong style="color:var(--green);">✓ Mark Done</strong> to log it as a real trip</div>`;
+
+  gridEl.innerHTML = html;
+}
+
+function openScheduleModal(id, prefillDate, prefillSlot, prefillLorryId) {
+  editingSchId = id || null;
+  document.getElementById('schedule-modal-title').textContent = id ? 'Edit Scheduled Trip' : 'Schedule Trip';
+  document.getElementById('sch-conflict-warning').style.display = 'none';
+  document.getElementById('sch-delete-btn').style.display = id ? '' : 'none';
+
+  // Populate dropdowns
+  document.getElementById('sch-lorry').innerHTML =
+    '<option value="">— Select lorry —</option>' +
+    DB.lorries.map(l => `<option value="${l.id}">${l.plate}${l.name?' ('+l.name+')':''}</option>`).join('');
+
+  const drivers = DB.staff.filter(s =>
+    s.payType === 'trip' ||
+    (s.role||'').toLowerCase().includes('driver') ||
+    (s.dept||'').toLowerCase().includes('delivery')
+  );
+  const driverList = drivers.length > 0 ? drivers : DB.staff;
+  document.getElementById('sch-driver').innerHTML =
+    '<option value="">— Select driver —</option>' +
+    driverList.map(s => `<option value="${s.name}">${s.name}${s.role?' · '+s.role:''}</option>`).join('');
+
+  document.getElementById('sch-route').innerHTML =
+    '<option value="">— Select route —</option>' +
+    DB.routeRates.map(r => `<option value="${r.id}">${r.route}${r.rate?' (RM '+r.rate.toFixed(2)+')':''}</option>`).join('') +
+    '<option value="custom">Custom / Other</option>';
+
+  if (id) {
+    const s = DB.scheduledTrips.find(x => x.id === id);
+    if (!s) return;
+    document.getElementById('sch-date').value   = s.date;
+    document.getElementById('sch-slot').value   = s.slot || 'AM';
+    document.getElementById('sch-lorry').value  = s.lorryId;
+    document.getElementById('sch-driver').value = s.driver || '';
+    document.getElementById('sch-route').value  = s.routeId || (s.route ? 'custom' : '');
+    document.getElementById('sch-notes').value  = s.notes || '';
+  } else {
+    document.getElementById('sch-date').value   = prefillDate || new Date().toISOString().split('T')[0];
+    document.getElementById('sch-slot').value   = prefillSlot || 'AM';
+    document.getElementById('sch-lorry').value  = prefillLorryId || '';
+    document.getElementById('sch-driver').value = '';
+    document.getElementById('sch-route').value  = '';
+    document.getElementById('sch-notes').value  = '';
+  }
+
+  openModal('modal-schedule');
+}
+
+function saveScheduledTrip() {
+  const date    = document.getElementById('sch-date').value;
+  const slot    = document.getElementById('sch-slot').value;
+  const lorryId = parseInt(document.getElementById('sch-lorry').value);
+  const driver  = document.getElementById('sch-driver').value;
+  const routeVal = document.getElementById('sch-route').value;
+  const notes   = document.getElementById('sch-notes').value;
+
+  if (!date || !lorryId) {
+    showToast('Please fill in date and lorry', 'error');
+    return;
+  }
+
+  // Conflict check (warn, don't block)
+  const conflict = scheduleConflict(date, slot, lorryId, editingSchId);
+  if (conflict) {
+    const warnEl = document.getElementById('sch-conflict-warning');
+    warnEl.innerHTML = `⚠ This lorry is already scheduled for ${slot} on ${fmtDate(date)} (${conflict.route||'Custom'} · ${conflict.driver||'no driver'}). Save anyway?`;
+    warnEl.style.display = '';
+    // Require a second click to proceed
+    if (!warnEl.dataset.confirmed) {
+      warnEl.dataset.confirmed = '1';
+      return;
+    }
+    warnEl.dataset.confirmed = '';
+  }
+
+  const routeId = routeVal && routeVal !== 'custom' ? parseInt(routeVal) : null;
+  const route   = routeId ? (DB.routeRates.find(x => x.id === routeId)?.route || 'Custom') : (routeVal === 'custom' ? 'Custom' : '');
+
+  const rec = {
+    id: editingSchId || DB.nextIds.scheduledTrips++,
+    date, slot, lorryId, driver,
+    routeId, route, notes,
+    status: 'planned'
+  };
+
+  if (editingSchId) {
+    const idx = DB.scheduledTrips.findIndex(x => x.id === editingSchId);
+    DB.scheduledTrips[idx] = rec;
+    showToast('Schedule updated');
+  } else {
+    DB.scheduledTrips.push(rec);
+    showToast('Trip scheduled');
+  }
+  editingSchId = null;
+  closeModal('modal-schedule');
+  renderSchedule();
+}
+
+function deleteScheduledTrip(idArg) {
+  const id = idArg || editingSchId;
+  if (!id) return;
+  if (!confirm('Delete this scheduled trip?')) return;
+  DB.scheduledTrips = DB.scheduledTrips.filter(x => x.id !== id);
+  editingSchId = null;
+  showToast('Scheduled trip deleted');
+  closeModal('modal-schedule');
+  renderSchedule();
+}
+
+function convertScheduleToTrip(id) {
+  const s = DB.scheduledTrips.find(x => x.id === id);
+  if (!s) return;
+  if (!confirm('Mark this trip as done? This will open the Trip form prefilled — fill in wage/expenses and save.')) return;
+
+  // Open Trip modal with fresh ID, then prefill from scheduled record
+  openTripModal();
+  // Delay prefill slightly to ensure dropdowns rendered
+  setTimeout(() => {
+    document.getElementById('trip-date').value   = s.date;
+    document.getElementById('trip-lorry').value  = s.lorryId || '';
+    document.getElementById('trip-driver').value = s.driver || '';
+    document.getElementById('trip-route').value  = s.routeId || (s.route === 'Custom' ? 'custom' : '');
+    document.getElementById('trip-notes').value  = s.notes || '';
+    // Auto-fill wage/mileage from route if matched
+    if (s.routeId) onTripRouteChange();
+    // Remove the scheduled entry now that it's being converted
+    DB.scheduledTrips = DB.scheduledTrips.filter(x => x.id !== id);
+    renderSchedule();
+    showToast('Prefilled from schedule — complete the trip details and Save');
+  }, 50);
+}
+
 
 // ============================================================
 // SALES ORDERS
@@ -13258,7 +13573,7 @@ async function switchCompany(newId) {
   const tableKeys = ['users','expenses','sales','invoices','inventory','staff','customers',
     'products','accounts','suppliers','payrollRuns','wageAdvances','transfers','cashflowItems',
     'loans','claims','recurringExpenses','batches','harvests','packings','packingRates','packingTeams',
-    'salesOrders','lorries','refuels','maintenance','trips','routeRates','payments'];
+    'salesOrders','lorries','refuels','maintenance','trips','routeRates','payments','scheduledTrips'];
   tableKeys.forEach(k => { DB[k] = []; });
   // Reset nextIds
   Object.keys(DB.nextIds).forEach(k => { DB.nextIds[k] = 1; });
