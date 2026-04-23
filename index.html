@@ -285,9 +285,6 @@ tr:hover td { background:var(--bg); }
     <div style="text-align:center;margin-top:12px;">
       <a href="#" onclick="doForgotPassword();return false;" style="font-size:12px;color:#7aab82;text-decoration:none;">Forgot password?</a>
     </div>
-    <div id="login-mode-banner" style="display:none;margin-top:14px;padding:8px 10px;background:#5a3a1a;border-radius:6px;font-size:11px;color:#f0c878;text-align:center;">
-      ⚠ Legacy mode active (?legacy=1) — using old username/password. Remove URL flag for normal login.
-    </div>
   </div>
 </div>
 
@@ -3435,8 +3432,11 @@ const SUPABASE_URL = 'https://cknxqcmlnftwijaqeglo.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrbnhxY21sbmZ0d2lqYXFlZ2xvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4OTY1NzcsImV4cCI6MjA5MTQ3MjU3N30.ffSHZjFOj6QDhLNJgb5IGiajC1dtfTgziGaSP34Vl7Q';
 
 // ---- AUTH CLIENT (Supabase Auth) ----
-// Legacy mode: ?legacy=1 in URL falls back to old username/password against DB.users
-const LEGACY_AUTH = new URLSearchParams(window.location.search).get('legacy') === '1';
+// EMERGENCY_BYPASS: glass-break switch. If Supabase Auth is broken or admin is locked out,
+// flip this to `true`, redeploy, log in with old username/password against DB.users.
+// MUST be reset to `false` immediately after the emergency. Plaintext passwords in DB.users
+// should otherwise be cleared (see SQL: UPDATE users SET password = NULL;).
+const EMERGENCY_BYPASS = false;
 let sbAuth = null;
 try {
   if (window.supabase && window.supabase.createClient) {
@@ -3646,7 +3646,7 @@ async function sbPersist(tableKey, record) {
 // ---- SAVE ALL DATA TO SUPABASE ----
 // Column whitelist — only send fields that exist in Supabase schema
 const COLS = {
-  users:        ['id','username','password','name','role','initials','active','email','auth_id'],
+  users:        ['id','username','name','role','initials','active','email','auth_id'],
   expenses:     ['id','date','desc','cat','amount','supplier','status','paid','account','notes','dueDate','recurring','recurringId'],
   sales:        ['id','date','customer','product','qty','price','total','type','account','notes','harvestId'],
   invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','currency','notes','product','qty','unit','discount','soId','soOrderNo'],
@@ -3832,15 +3832,21 @@ function quickLogin(u, name, p) {
   document.getElementById('login-pass').value = p;
 }
 
-// Show legacy banner + change label if in legacy mode
-function applyLegacyLoginUI() {
-  if (LEGACY_AUTH) {
-    const label  = document.getElementById('login-id-label');
-    const input  = document.getElementById('login-user');
-    const banner = document.getElementById('login-mode-banner');
-    if (label)  label.textContent = 'Username';
-    if (input)  { input.placeholder = 'Username'; input.type = 'text'; }
-    if (banner) banner.style.display = '';
+// If EMERGENCY_BYPASS is on, switch the login UI to username mode + show warning
+function applyEmergencyBypassUI() {
+  if (!EMERGENCY_BYPASS) return;
+  const label  = document.getElementById('login-id-label');
+  const input  = document.getElementById('login-user');
+  if (label) label.textContent = 'Username (Emergency Bypass)';
+  if (input) { input.placeholder = 'Username'; input.type = 'text'; }
+  // Inject a warning banner into the login box
+  const box = document.querySelector('.login-box');
+  if (box && !document.getElementById('login-emergency-banner')) {
+    const banner = document.createElement('div');
+    banner.id = 'login-emergency-banner';
+    banner.style.cssText = 'margin-top:14px;padding:8px 10px;background:#5a3a1a;border-radius:6px;font-size:11px;color:#f0c878;text-align:center;';
+    banner.innerHTML = '⚠ EMERGENCY BYPASS active — using legacy username/password. Set EMERGENCY_BYPASS = false in code and redeploy ASAP.';
+    box.appendChild(banner);
   }
 }
 
@@ -3888,16 +3894,17 @@ async function doLogin() {
     const p     = document.getElementById('login-pass').value;
     if (!idVal || !p) { showToast('Enter your credentials', 'error'); return; }
 
-    // ---- LEGACY MODE: old username/password against DB.users ----
-    if (LEGACY_AUTH) {
+    // ---- EMERGENCY BYPASS: legacy username/password against DB.users ----
+    if (EMERGENCY_BYPASS) {
       const user = DB.users.find(x => x.username === idVal && x.password === p && x.active !== false);
       if (!user) { showToast('Invalid username or password', 'error'); return; }
+      console.warn('⚠ Logged in via EMERGENCY_BYPASS — disable this immediately.');
       _completeLogin(user);
       return;
     }
 
-    // ---- NEW MODE: Supabase Auth ----
-    if (!sbAuth) { showToast('Auth client not loaded — try ?legacy=1', 'error'); return; }
+    // ---- NORMAL: Supabase Auth ----
+    if (!sbAuth) { showToast('Auth client failed to load — refresh the page', 'error'); return; }
     const { data, error } = await sbAuth.auth.signInWithPassword({ email: idVal, password: p });
     if (error) { showToast(error.message || 'Sign-in failed', 'error'); return; }
     const authUserId = data.user && data.user.id;
@@ -3919,7 +3926,7 @@ async function doLogin() {
 
 async function doLogout() {
   try {
-    if (sbAuth && !LEGACY_AUTH) await sbAuth.auth.signOut();
+    if (sbAuth && !EMERGENCY_BYPASS) await sbAuth.auth.signOut();
   } catch(e) { console.warn('signOut error:', e); }
   DB.currentUser = null;
   document.getElementById('login-screen').style.display = 'flex';
@@ -3930,7 +3937,7 @@ async function doLogout() {
 
 // Forgot password — sends reset email via Supabase Auth
 async function doForgotPassword() {
-  if (LEGACY_AUTH) { alert('Password reset is not available in legacy mode. Ask an admin to reset directly.'); return; }
+  if (EMERGENCY_BYPASS) { alert('Password reset is not available during emergency bypass.'); return; }
   if (!sbAuth) { alert('Auth not available'); return; }
   const email = (document.getElementById('login-user').value || '').trim();
   if (!email) { alert('Enter your email in the field above first, then click Forgot Password.'); return; }
@@ -3947,7 +3954,7 @@ async function doForgotPassword() {
 
 // Auto-logout when Supabase session expires/revokes mid-use
 function _watchAuthState() {
-  if (!sbAuth || LEGACY_AUTH) return;
+  if (!sbAuth || EMERGENCY_BYPASS) return;
   sbAuth.auth.onAuthStateChange((event, session) => {
     // Password reset flow — user clicked the email link, has a recovery session
     if (event === 'PASSWORD_RECOVERY') {
@@ -4003,8 +4010,8 @@ function openMyAccountModal() {
   document.getElementById('ma-name').textContent  = u.name || '—';
   document.getElementById('ma-role').textContent  = roleLabel[u.role] || u.role || '—';
   document.getElementById('ma-email').textContent = u.email || '(no email on file)';
-  if (LEGACY_AUTH) {
-    document.getElementById('ma-auth-status').innerHTML = '<span style="color:var(--amber);">⚠ Legacy mode (old username/password)</span>';
+  if (EMERGENCY_BYPASS) {
+    document.getElementById('ma-auth-status').innerHTML = '<span style="color:var(--amber);">⚠ Emergency bypass mode</span>';
   } else if (u.auth_id) {
     document.getElementById('ma-auth-status').innerHTML = '<span style="color:var(--green);">✓ Linked to Supabase Auth</span>';
   } else {
@@ -4016,7 +4023,7 @@ function openMyAccountModal() {
 }
 
 async function changeMyPassword() {
-  if (LEGACY_AUTH) { alert('Cannot change password in legacy mode. Sign in normally first.'); return; }
+  if (EMERGENCY_BYPASS) { alert('Cannot change password in emergency bypass mode.'); return; }
   if (!sbAuth) { alert('Auth not available'); return; }
   const p1 = document.getElementById('ma-new-pass').value;
   const p2 = document.getElementById('ma-new-pass2').value;
@@ -4034,7 +4041,7 @@ async function changeMyPassword() {
 }
 
 async function changeMyEmail() {
-  if (LEGACY_AUTH) { alert('Cannot change email in legacy mode. Sign in normally first.'); return; }
+  if (EMERGENCY_BYPASS) { alert('Cannot change email in emergency bypass mode.'); return; }
   if (!sbAuth) { alert('Auth not available'); return; }
   const newEmail = document.getElementById('ma-new-email').value.trim().toLowerCase();
   if (!newEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) { alert('Invalid email format'); return; }
@@ -12754,7 +12761,7 @@ function renderUsers() {
       statusTitle = 'Linked to Supabase Auth — can log in normally';
     } else if (hasLegacy) {
       statusBadge = '<span class="badge badge-amber" style="font-size:10px;">🟠 Legacy Only</span>';
-      statusTitle = 'No Auth link — can only log in via ?legacy=1';
+      statusTitle = 'No Auth link — cannot log in (legacy fallback removed)';
     } else {
       statusBadge = '<span class="badge badge-gray" style="font-size:10px;">🟡 Pending Link</span>';
       statusTitle = 'No password & no Auth link — needs setup';
@@ -15870,13 +15877,13 @@ function printBulkReceipt(data) {
   win.document.close();
 }
 
-// Run on page load — fetch users, apply legacy UI, check for existing auth session
+// Run on page load — fetch users, apply emergency-bypass UI if active, check for existing auth session
 async function _boot() {
-  applyLegacyLoginUI();
+  applyEmergencyBypassUI();
   await sbInit();   // load DB.users from Supabase
 
   // Auto-resume if a valid Supabase Auth session already exists
-  if (sbAuth && !LEGACY_AUTH) {
+  if (sbAuth && !EMERGENCY_BYPASS) {
     try {
       const { data } = await sbAuth.auth.getSession();
       const session  = data && data.session;
