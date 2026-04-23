@@ -416,6 +416,10 @@ tr:hover td { background:var(--bg); }
         <svg viewBox="0 0 15 15" fill="none"><path d="M3 4h9M5.5 4V2.5h4V4M4 4l.5 9h6l.5-9M6 6.5v4M9 6.5v4" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Trash
       </div>
+      <div class="nav-link admin-only" data-page="activity" onclick="navigate('activity',this)" style="display:none;">
+        <svg viewBox="0 0 15 15" fill="none"><path d="M2 7.5h3l1.5-4 2 8L10 7.5h3" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Activity
+      </div>
     </nav>
     <div class="sidebar-footer">
       <button class="logout-btn" onclick="doLogout()">Sign Out</button>
@@ -1470,6 +1474,61 @@ tr:hover td { background:var(--bg); }
       <!-- Tabs for each soft-delete table -->
       <div style="display:flex;gap:6px;border-bottom:1px solid var(--border);margin-bottom:16px;flex-wrap:wrap;" id="trash-tabs"></div>
       <div id="trash-content"></div>
+    </div>
+
+    <!-- ACTIVITY (audit log, admin-only) -->
+    <div class="page" id="page-activity">
+      <div class="page-header">
+        <div>
+          <div class="page-title">📋 Activity</div>
+          <div class="page-subtitle">Audit log of who changed what. Admin only.</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-outline btn-sm" onclick="renderActivity()">↻ Refresh</button>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:14px;">
+        <div class="card-body" style="padding:12px 16px;">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+            <div>
+              <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px;">Period</label>
+              <select id="act-period" onchange="renderActivity()" style="padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-family:inherit;font-size:12px;">
+                <option value="1">Last 24 hours</option>
+                <option value="7" selected>Last 7 days</option>
+                <option value="30">Last 30 days</option>
+                <option value="90">Last 90 days</option>
+                <option value="0">All time</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px;">Action</label>
+              <select id="act-action" onchange="renderActivity()" style="padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-family:inherit;font-size:12px;">
+                <option value="">All actions</option>
+                <option value="create">Created</option>
+                <option value="update">Updated</option>
+                <option value="delete">Deleted (to Trash)</option>
+                <option value="restore">Restored</option>
+                <option value="purge">Purged (permanent)</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px;">Table</label>
+              <select id="act-table" onchange="renderActivity()" style="padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-family:inherit;font-size:12px;"></select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px;">User</label>
+              <select id="act-user" onchange="renderActivity()" style="padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-family:inherit;font-size:12px;"></select>
+            </div>
+            <div style="flex:1;min-width:160px;">
+              <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px;">Search label</label>
+              <input type="text" id="act-search" oninput="renderActivity()" placeholder="invoice no., customer, etc." style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-family:inherit;font-size:12px;">
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="document.getElementById('act-search').value='';document.getElementById('act-period').value='7';document.getElementById('act-action').value='';document.getElementById('act-table').value='';document.getElementById('act-user').value='';renderActivity()">Clear</button>
+          </div>
+        </div>
+      </div>
+      <div id="activity-summary" style="font-size:12px;color:var(--text2);margin-bottom:8px;"></div>
+      <div id="activity-content"></div>
     </div>
 
     <!-- SETTINGS -->
@@ -3569,9 +3628,12 @@ async function sbLoad() {
           const maxId = Math.max(...rows.map(r => parseInt(r.id)||0));
           if (maxId > 0) DB.nextIds[key] = maxId + 1;
           sbBaselineIds[key] = new Set(rows.map(r => String(r.id)));
+          // Audit: snapshot all records at load time so future diffs work
+          if (typeof auditSnapshotAll === 'function') auditSnapshotAll(key, rows);
           results.push(`✓ ${tbl}: ${rows.length} rows`);
         } else {
           sbBaselineIds[key] = new Set();
+          if (typeof auditSnapshotAll === 'function') auditSnapshotAll(key, []);
           results.push(`○ ${tbl}: empty`);
         }
       } catch(e) {
@@ -3662,10 +3724,240 @@ async function sbDelete(tableKey, id) {
   }
 }
 
+// ============================================================
+// AUDIT LOG (Phase 3)
+// ============================================================
+// Kill switch — flip to false if anything breaks. Audit logging will be silently disabled
+// without affecting any other functionality.
+const AUDIT_LOG_ENABLED = true;
+
+// Tables that get audit-logged (a superset of soft-delete tables)
+const AUDIT_TABLES = new Set([
+  // Soft-delete tables (financial + operational)
+  'invoices','payments','expenses','payrollRuns','creditNotes','debitNotes','wageAdvances',
+  'salesOrders','trips','harvests','packings','batches',
+  // Additional financial tables
+  'accounts','transfers','claims','loans'
+]);
+
+// Per-record snapshots taken at load time + after each save.
+// Used to compute diffs without an extra Supabase round-trip.
+// Structure: auditSnapshots[tableKey][recordId] = { ...recordFields }
+const auditSnapshots = {};
+
+// Fields to skip in the diff (system/metadata fields that change on every save)
+const AUDIT_SKIP_FIELDS = new Set([
+  'id','deleted_at','deleted_by','deleted_reason'   // soft-delete metadata is logged separately
+]);
+
+// Nested/JSON fields that need special summarization in diffs
+const AUDIT_JSON_FIELDS = new Set([
+  'lines','customers','orders','expLines','items','dispatch','members','generated',
+  'statutory','payments','entries','priceList','discount','invoiceIds','allowances'
+]);
+
+// Take/refresh a snapshot of a record
+function auditSnapshot(tableKey, record) {
+  if (!record || record.id == null) return;
+  if (!auditSnapshots[tableKey]) auditSnapshots[tableKey] = {};
+  // Deep-copy to prevent mutation entanglement
+  try { auditSnapshots[tableKey][record.id] = JSON.parse(JSON.stringify(record)); } catch(e) {}
+}
+
+// Bulk-snapshot all records of a table (called by sbLoad)
+function auditSnapshotAll(tableKey, rows) {
+  if (!AUDIT_TABLES.has(tableKey)) return;
+  auditSnapshots[tableKey] = {};
+  (rows || []).forEach(r => auditSnapshot(tableKey, r));
+}
+
+// Friendly summary for nested JSON fields — used inside the diff.
+// Returns a short human-readable string describing the field's content.
+function auditSummarizeJson(field, value) {
+  try {
+    if (value == null) return 'empty';
+    let v = value;
+    if (typeof v === 'string') { try { v = JSON.parse(v); } catch(e) { return 'text ('+v.length+' chars)'; } }
+    if (Array.isArray(v)) {
+      // Special-case common shapes
+      if (field === 'lines' || field === 'expLines') {
+        const total = v.reduce((s, l) => s + (parseFloat(l.total) || parseFloat(l.subtotal) || parseFloat(l.amount) || 0), 0);
+        return `${v.length} line${v.length===1?'':'s'}${total ? ', total '+fmt(total) : ''}`;
+      }
+      if (field === 'members') return v.length + ' member' + (v.length===1?'':'s') + ': ' + v.slice(0,3).join(', ') + (v.length>3?'…':'');
+      if (field === 'invoiceIds') return v.length + ' invoice' + (v.length===1?'':'s');
+      if (field === 'allowances') {
+        const total = v.reduce((s,a) => s + (parseFloat(a.amount)||0), 0);
+        return `${v.length} allowance${v.length===1?'':'s'}, total ${fmt(total)}`;
+      }
+      if (field === 'entries') return v.length + ' staff entries';
+      if (field === 'customers') return v.length + ' customer block' + (v.length===1?'':'s');
+      if (field === 'dispatch') return v.length + ' dispatch row' + (v.length===1?'':'s');
+      if (field === 'payments') return v.length + ' payment' + (v.length===1?'':'s');
+      return v.length + ' item' + (v.length===1?'':'s');
+    }
+    if (typeof v === 'object') {
+      const keys = Object.keys(v);
+      if (field === 'priceList') return keys.length + ' product price' + (keys.length===1?'':'s');
+      return keys.length + ' field' + (keys.length===1?'':'s');
+    }
+    return String(v).slice(0, 40);
+  } catch(e) {
+    return '(unreadable)';
+  }
+}
+
+// Compute a diff between old and new versions of a record.
+// Returns: {field: {from: oldVal, to: newVal}, ...} or null if no meaningful changes.
+function auditDiff(oldRec, newRec) {
+  if (!oldRec || !newRec) return null;
+  const changes = {};
+  // Walk both keysets to catch added/removed fields
+  const allKeys = new Set([...Object.keys(oldRec), ...Object.keys(newRec)]);
+  for (const k of allKeys) {
+    if (AUDIT_SKIP_FIELDS.has(k)) continue;
+    if (k.startsWith('_')) continue; // internal/private fields
+    const a = oldRec[k];
+    const b = newRec[k];
+    if (AUDIT_JSON_FIELDS.has(k)) {
+      // Compare via JSON serialization, then summarize each side if different
+      let aStr = '', bStr = '';
+      try { aStr = (typeof a === 'string') ? a : JSON.stringify(a||null); } catch(e) {}
+      try { bStr = (typeof b === 'string') ? b : JSON.stringify(b||null); } catch(e) {}
+      if (aStr !== bStr) {
+        changes[k] = { from: auditSummarizeJson(k, a), to: auditSummarizeJson(k, b), nested: true };
+      }
+    } else {
+      // Primitive comparison; treat null/undefined/'' as equivalent for noise reduction
+      const aN = (a == null || a === '') ? null : a;
+      const bN = (b == null || b === '') ? null : b;
+      if (aN !== bN) {
+        changes[k] = { from: a == null ? null : a, to: b == null ? null : b };
+      }
+    }
+  }
+  return Object.keys(changes).length > 0 ? changes : null;
+}
+
+// Generate a human-readable label for a record (used for "what was edited?")
+function auditLabel(tableKey, rec) {
+  if (!rec) return '#?';
+  const id = rec.id;
+  switch (tableKey) {
+    case 'invoices':     return `${rec.no || '#'+id} — ${rec.customer||''}`;
+    case 'payments':     return `${rec.invoiceNo || '#'+id} — ${rec.customer||''} ${fmt(rec.amount||0)}`;
+    case 'expenses':     return `${rec.desc || '(no desc)'} — ${fmt(rec.amount||0)}`;
+    case 'payrollRuns':  return `Payroll ${rec.month||'#'+id}`;
+    case 'creditNotes':
+    case 'debitNotes':   return `${rec.no || '#'+id} — ${rec.customer || rec.partyName || ''}`;
+    case 'wageAdvances': return `Advance ${rec.name||'#'+rec.staffId} — ${fmt(rec.amount||0)}`;
+    case 'salesOrders':  return `${rec.orderNo || '#'+id} — ${rec.customer||''}`;
+    case 'trips':        return `Trip ${rec.route||'#'+id} — ${rec.driver||''}`;
+    case 'harvests':     return `Harvest batch ${rec.batchId||'?'} — ${rec.kg||0}kg`;
+    case 'packings':     return `Packing Team ${rec.team||'?'} — ${rec.packs||0} packs`;
+    case 'batches':      return `Batch ${rec.no || '#'+id}`;
+    case 'accounts':     return `Account ${rec.name||'#'+id}`;
+    case 'transfers':    return `Transfer ${fmt(rec.amount||0)} ${rec.fromAccount||''}→${rec.toAccount||''}`;
+    case 'claims':       return `Claim ${rec.claimant||''} — ${fmt(rec.amount||0)}`;
+    case 'loans':        return `Loan ${rec.name||'#'+id}`;
+    default:             return '#'+id;
+  }
+}
+
+// Buffer of pending audit log entries, flushed to Supabase periodically.
+// Buffering avoids one HTTP call per save; also avoids tying up the user's save UX.
+const auditBuffer = [];
+let auditFlushTimer = null;
+
+// Write an audit log entry. Fire-and-forget. NEVER throws.
+// `action`: 'create' | 'update' | 'delete' | 'restore' | 'purge'
+// `extra`:  { changes?, reason?, label? }
+function auditLog(tableKey, recordOrId, action, extra) {
+  if (!AUDIT_LOG_ENABLED) return;
+  if (!AUDIT_TABLES.has(tableKey)) return;
+  try {
+    const rec = (typeof recordOrId === 'object') ? recordOrId : (DB[tableKey]||[]).find(r => r.id === recordOrId);
+    const recordId = rec ? rec.id : recordOrId;
+    const label = (extra && extra.label) || auditLabel(tableKey, rec) || '#'+recordId;
+    const u = DB.currentUser || {};
+    const entry = {
+      ts:           new Date().toISOString(),
+      user_name:    u.name || 'unknown',
+      user_id:      u.auth_id || null,
+      table_name:   tableKey,
+      record_id:    recordId,
+      record_label: label,
+      action:       action,
+      changes:      (extra && extra.changes) || null,
+      reason:       (extra && extra.reason) || null
+    };
+    auditBuffer.push(entry);
+    // Schedule a flush in 2 seconds (debounced — multiple saves coalesce into one HTTP call)
+    if (auditFlushTimer) clearTimeout(auditFlushTimer);
+    auditFlushTimer = setTimeout(() => { auditFlush().catch(() => {}); }, 2000);
+  } catch(e) {
+    console.warn('auditLog failed (non-fatal):', e);
+  }
+}
+
+// Flush buffered entries to Supabase audit_log table.
+async function auditFlush() {
+  if (!AUDIT_LOG_ENABLED) return;
+  if (auditBuffer.length === 0) return;
+  const batch = auditBuffer.splice(0, auditBuffer.length);
+  try {
+    // The audit_log table is global (no company prefix) so it captures cross-company activity
+    const tbl = (typeof getActiveCompanyPrefix === 'function' && getActiveCompanyPrefix())
+      ? `${getActiveCompanyPrefix()}_audit_log`
+      : 'audit_log';
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tbl}`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(batch)
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      console.warn('auditFlush POST failed (non-fatal):', txt.slice(0,200));
+      // Re-buffer the entries so they aren't lost
+      auditBuffer.unshift(...batch);
+    }
+  } catch(e) {
+    console.warn('auditFlush exception (non-fatal):', e.message);
+    auditBuffer.unshift(...batch);
+  }
+}
+
 // ---- AUTO-SAVE WRAPPER ----
 // Call after any DB mutation to persist it
 async function sbPersist(tableKey, record) {
   if (!navigator.onLine) return; // skip if offline
+  // ---- AUDIT: detect create vs update vs soft-delete restore ----
+  try {
+    if (AUDIT_LOG_ENABLED && AUDIT_TABLES.has(tableKey) && record && record.id != null) {
+      const prev = (auditSnapshots[tableKey] || {})[record.id];
+      if (!prev) {
+        // No prior snapshot → CREATE
+        auditLog(tableKey, record, 'create');
+      } else if (prev.deleted_at && !record.deleted_at) {
+        // RESTORE (was trashed, now isn't)
+        auditLog(tableKey, record, 'restore');
+      } else if (!prev.deleted_at && record.deleted_at) {
+        // SOFT-DELETE (wasn't trashed, now is) — log with reason
+        auditLog(tableKey, record, 'delete', { reason: record.deleted_reason || '' });
+      } else {
+        // UPDATE — diff
+        const changes = auditDiff(prev, record);
+        if (changes) auditLog(tableKey, record, 'update', { changes });
+      }
+      // Always refresh the snapshot after handling
+      auditSnapshot(tableKey, record);
+    }
+  } catch(e) { console.warn('sbPersist audit hook failed (non-fatal):', e); }
   sbSave(tableKey, record);
 }
 
@@ -4302,13 +4594,14 @@ function navigate(page, el) {
   if (el) el.classList.add('active');
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
-  const renders = { dashboard:renderDashboard, expenses:renderExpenses, invoices:renderInvoices, orders:renderOrders, customers:renderCustomers, suppliers:renderSuppliers, products:renderProducts, inventory:renderInventory, production:renderProduction, harvest:renderHarvest, fleet:renderFleet, payroll:renderPayroll, reports:renderReport, statement:renderStatement, cashflow:renderCashflow, loans:renderLoans, claims:renderClaims, settings:renderSettings, users:renderUsers, creditnotes:renderCreditNotes, debitnotes:renderDebitNotes, trash:renderTrash };
+  const renders = { dashboard:renderDashboard, expenses:renderExpenses, invoices:renderInvoices, orders:renderOrders, customers:renderCustomers, suppliers:renderSuppliers, products:renderProducts, inventory:renderInventory, production:renderProduction, harvest:renderHarvest, fleet:renderFleet, payroll:renderPayroll, reports:renderReport, statement:renderStatement, cashflow:renderCashflow, loans:renderLoans, claims:renderClaims, settings:renderSettings, users:renderUsers, creditnotes:renderCreditNotes, debitnotes:renderDebitNotes, trash:renderTrash, activity:renderActivity };
   // Access guards
   if (page === 'payroll'   && !can('seePayroll'))  { showToast('Access denied — Payroll is Admin only', 'error'); return; }
   if (page === 'reports'   && !can('seeReports'))  { showToast('Access denied — Reports is Admin & Manager only', 'error'); return; }
   if (page === 'statement' && !can('seeReports'))  { showToast('Access denied — Statements is Admin & Manager only', 'error'); return; }
   if (page === 'users'     && !can('seeUsers'))    { showToast('Access denied — User Management is Admin only', 'error'); return; }
   if (page === 'trash'     && !can('seeUsers'))    { showToast('Access denied — Trash is Admin only', 'error'); return; }
+  if (page === 'activity'  && !can('seeUsers'))    { showToast('Access denied — Activity log is Admin only', 'error'); return; }
   if (renders[page]) renders[page]();
 }
 
@@ -13114,6 +13407,8 @@ function trashPurge(tableKey, id) {
   const label = rec.no || rec.desc || rec.invoiceNo || `#${id}`;
   if (!confirm(`PERMANENTLY DELETE "${label}" from ${tableKey}?\n\nThis cannot be undone. The record will be removed from Supabase forever.`)) return;
   if (!confirm(`Are you absolutely sure? Type-confirm by clicking OK one more time.`)) return;
+  // AUDIT: log the purge BEFORE removing the record (so we still have it for the label)
+  if (typeof auditLog === 'function') auditLog(tableKey, rec, 'purge', { reason: rec.deleted_reason || '' });
   // Remove from local array
   DB[tableKey] = (DB[tableKey]||[]).filter(r => r.id !== id);
   showToast('Permanently deleted');
@@ -13127,6 +13422,10 @@ function trashEmpty(tableKey) {
   if (!confirm(`PERMANENTLY DELETE all ${items.length} items in ${tableKey} trash?\n\nThis cannot be undone.`)) return;
   if (!confirm(`Truly sure? ${items.length} records will be erased from Supabase forever.`)) return;
   const ids = items.map(r => r.id);
+  // AUDIT: log each purge before removal
+  if (typeof auditLog === 'function') {
+    items.forEach(rec => auditLog(tableKey, rec, 'purge', { reason: rec.deleted_reason || '' }));
+  }
   DB[tableKey] = (DB[tableKey]||[]).filter(r => !ids.includes(r.id));
   showToast(`${ids.length} records permanently deleted`);
   renderTrash();
@@ -13134,6 +13433,154 @@ function trashEmpty(tableKey) {
   if (typeof sbDelete === 'function') {
     ids.forEach(id => { try { sbDelete(tableKey, id); } catch(e){} });
   }
+}
+
+// ============================================================
+// ACTIVITY LOG (audit log viewer, admin-only)
+// ============================================================
+let activityCache = { rows: [], fetchedAt: 0 };
+
+async function renderActivity() {
+  // Populate filter dropdowns from known data
+  const tableSel = document.getElementById('act-table');
+  const userSel  = document.getElementById('act-user');
+  if (tableSel && tableSel.options.length === 0) {
+    tableSel.innerHTML = '<option value="">All tables</option>' +
+      [...AUDIT_TABLES].sort().map(t => `<option value="${t}">${t}</option>`).join('');
+  }
+  if (userSel) {
+    const curUser = userSel.value;
+    userSel.innerHTML = '<option value="">All users</option>' +
+      (DB.users||[]).map(u => `<option value="${u.name.replace(/"/g,'&quot;')}"${u.name===curUser?' selected':''}>${u.name}</option>`).join('');
+  }
+
+  const period   = document.getElementById('act-period').value;
+  const action   = document.getElementById('act-action').value;
+  const tableF   = document.getElementById('act-table').value;
+  const userF    = document.getElementById('act-user').value;
+  const search   = (document.getElementById('act-search').value || '').toLowerCase();
+
+  document.getElementById('activity-content').innerHTML = '<div style="padding:24px;text-align:center;color:var(--text3);">Loading…</div>';
+
+  // Fetch from Supabase (use a small cache to avoid refetch on every filter change within 5 sec)
+  let rows = [];
+  try {
+    if (Date.now() - activityCache.fetchedAt < 5000 && activityCache.rows.length > 0) {
+      rows = activityCache.rows;
+    } else {
+      const tbl = (typeof getActiveCompanyPrefix === 'function' && getActiveCompanyPrefix())
+        ? `${getActiveCompanyPrefix()}_audit_log`
+        : 'audit_log';
+      // Pull most recent 1000 entries
+      const url = `${SUPABASE_URL}/rest/v1/${tbl}?select=*&order=ts.desc&limit=1000`;
+      const res = await fetch(url, {
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        document.getElementById('activity-content').innerHTML = `<div style="padding:24px;text-align:center;color:var(--red);">Could not load audit log: ${txt.slice(0,200)}<br><br>Make sure you've run the SQL to create the <code>audit_log</code> table.</div>`;
+        return;
+      }
+      rows = await res.json();
+      activityCache = { rows, fetchedAt: Date.now() };
+    }
+  } catch(e) {
+    document.getElementById('activity-content').innerHTML = `<div style="padding:24px;text-align:center;color:var(--red);">Error fetching audit log: ${e.message}</div>`;
+    return;
+  }
+
+  // Apply filters
+  const cutoff = parseInt(period) > 0 ? Date.now() - parseInt(period)*24*3600*1000 : 0;
+  const filtered = rows.filter(r => {
+    if (cutoff && new Date(r.ts).getTime() < cutoff) return false;
+    if (action && r.action !== action) return false;
+    if (tableF && r.table_name !== tableF) return false;
+    if (userF  && r.user_name !== userF)  return false;
+    if (search && !((r.record_label||'').toLowerCase().includes(search))) return false;
+    return true;
+  });
+
+  document.getElementById('activity-summary').textContent =
+    `Showing ${filtered.length} of ${rows.length} entries${cutoff ? ' (filtered by period)' : ''}.`;
+
+  if (filtered.length === 0) {
+    document.getElementById('activity-content').innerHTML = `
+      <div style="text-align:center;padding:40px;color:var(--text3);">
+        <div style="font-size:48px;margin-bottom:8px;">📋</div>
+        <div style="font-size:14px;">No activity matches these filters.</div>
+      </div>`;
+    return;
+  }
+
+  const actionLabels = { create:'➕ Created', update:'✏️ Updated', delete:'🗑 Deleted', restore:'↩ Restored', purge:'❌ Purged' };
+  const actionColors = { create:'var(--green)', update:'var(--blue,#3b82f6)', delete:'var(--amber)', restore:'var(--green)', purge:'var(--red)' };
+
+  // Render rows (limit display to 200 for perf; user can filter to narrow)
+  const display = filtered.slice(0, 200);
+  document.getElementById('activity-content').innerHTML = `
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>When</th>
+            <th>User</th>
+            <th>Action</th>
+            <th>Table</th>
+            <th>Record</th>
+            <th>Details</th>
+          </tr></thead>
+          <tbody>${display.map(r => {
+            const dt = new Date(r.ts);
+            const dateStr = dt.toLocaleString('en-MY', { dateStyle:'short', timeStyle:'short' });
+            const ago = activityRelTime(dt);
+            let details = '';
+            if (r.action === 'update' && r.changes) {
+              try {
+                const changes = typeof r.changes === 'string' ? JSON.parse(r.changes) : r.changes;
+                details = Object.entries(changes).map(([field, ch]) =>
+                  `<div style="font-size:11px;margin:2px 0;"><strong>${field}:</strong> ${activityFmtVal(ch.from)} → ${activityFmtVal(ch.to)}</div>`
+                ).join('');
+              } catch(e) { details = '<span style="color:var(--text3);">(diff parse error)</span>'; }
+            } else if (r.reason) {
+              details = `<div style="font-size:11px;color:var(--text2);">Reason: ${r.reason}</div>`;
+            }
+            return `
+              <tr>
+                <td style="white-space:nowrap;font-size:12px;">
+                  <div>${dateStr}</div>
+                  <div style="font-size:10px;color:var(--text3);">${ago}</div>
+                </td>
+                <td style="font-size:12px;">${r.user_name||'—'}</td>
+                <td style="white-space:nowrap;"><span style="font-size:11px;color:${actionColors[r.action]||'var(--text2)'};font-weight:500;">${actionLabels[r.action]||r.action}</span></td>
+                <td style="font-size:11px;color:var(--text2);">${r.table_name}</td>
+                <td style="font-size:12px;">${r.record_label||('#'+r.record_id)}</td>
+                <td style="max-width:380px;">${details||'<span style="color:var(--text3);font-size:11px;">—</span>'}</td>
+              </tr>`;
+          }).join('')}</tbody>
+        </table>
+      </div>
+    </div>
+    ${filtered.length > 200 ? `<div style="padding:14px;text-align:center;font-size:12px;color:var(--text3);">Showing the first 200 entries. Use filters above to narrow down further.</div>` : ''}`;
+}
+
+function activityRelTime(date) {
+  const sec = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (sec < 60)    return sec + 's ago';
+  if (sec < 3600)  return Math.floor(sec/60)   + 'm ago';
+  if (sec < 86400) return Math.floor(sec/3600) + 'h ago';
+  return Math.floor(sec/86400) + 'd ago';
+}
+
+function activityFmtVal(v) {
+  if (v == null) return '<span style="color:var(--text3);">∅</span>';
+  if (typeof v === 'object' && v && (v.from !== undefined || v.to !== undefined)) {
+    // Already a diff object — shouldn't happen but handle gracefully
+    return JSON.stringify(v);
+  }
+  if (typeof v === 'boolean') return v ? 'true' : 'false';
+  if (typeof v === 'number')  return String(v);
+  const s = String(v);
+  return s.length > 60 ? s.slice(0,60) + '…' : s;
 }
 
 function renderUsers() {
