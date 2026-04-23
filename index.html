@@ -8377,9 +8377,11 @@ function savePacking() {
     const idx = DB.packings.findIndex(x=>x.id===editingPackingId);
     DB.packings[idx] = rec;
     editingPackingId = null;
+    if (typeof sbPersist === 'function') sbPersist('packings', rec);
     showToast('Packing record updated');
   } else {
     DB.packings.unshift(rec);
+    if (typeof sbPersist === 'function') sbPersist('packings', rec);
     showToast(`Packing saved — ${totalPacks} packs · ${totalKg.toFixed(2)} kg`);
   }
   closeModal('modal-packing');
@@ -10779,11 +10781,13 @@ function saveInvoice() {
     const idx = DB.invoices.findIndex(i => i.id === editingInvoiceId);
     const wasNotPaid = DB.invoices[idx].status !== 'Paid';
     DB.invoices[idx] = { ...DB.invoices[idx], ...data };
+    if (typeof sbPersist === 'function') sbPersist('invoices', DB.invoices[idx]);
     showToast('Invoice updated');
     editingInvoiceId = null;
   } else {
     const newInv = { id: DB.nextIds.invoices++, ...data };
     DB.invoices.unshift(newInv);
+    if (typeof sbPersist === 'function') sbPersist('invoices', newInv);
     showToast('Invoice created');
   }
   closeModal('modal-invoice');
