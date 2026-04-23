@@ -3596,7 +3596,7 @@ async function sbLoad() {
   // ---- MIGRATION: strip legacy packSize / customSize from Sales Orders ----
   // (Sales Orders no longer use pack size — we keep Packing's pack sizes intact)
   try {
-    (DB.salesOrders || []).forEach(o => {
+    (live('salesOrders') || []).forEach(o => {
       const stripLine = l => { if (l && typeof l === 'object') { delete l.packSize; delete l.customSize; } };
       (o.customers || []).forEach(c => (c.lines || []).forEach(stripLine));
       (o.lines     || []).forEach(stripLine);
@@ -4391,11 +4391,11 @@ function filterByMonth(arr, dateField, val) {
 // ============================================================
 function renderDashboard() {
   const month = document.getElementById('dash-month').value;
-  const exps = filterByMonth(DB.expenses, 'date', month);
+  const exps = filterByMonth(live('expenses'), 'date', month);
   const totalExp = exps.reduce((s,x) => s + x.amount, 0);
   // Revenue = recorded payments + legacy paid invoices (no payment record)
-  const paymentRev = (DB.payments||[]).filter(p=>{ const d=p.date||''; return !month||d.startsWith(month); }).reduce((s,p)=>s+p.amount,0);
-  const legacyPaid = live('invoices').filter(i=>(i.status==='Paid'||i.status==='Partial') && !(DB.payments||[]).some(p=>p.invoiceId===i.id));
+  const paymentRev = (live('payments')||[]).filter(p=>{ const d=p.date||''; return !month||d.startsWith(month); }).reduce((s,p)=>s+p.amount,0);
+  const legacyPaid = live('invoices').filter(i=>(i.status==='Paid'||i.status==='Partial') && !(live('payments')||[]).some(p=>p.invoiceId===i.id));
   const legacyRev  = legacyPaid.filter(i=>{ const d=i.paidDate||i.date||''; return !month||d.startsWith(month); }).reduce((s,i)=>s+i.total,0);
   const totalSal = paymentRev + legacyRev;
   const profit = totalSal - totalExp;
@@ -4405,13 +4405,13 @@ function renderDashboard() {
     const credits = (typeof getTotalCreditsForInvoice === 'function') ? getTotalCreditsForInvoice(i.id) : 0;
     return s + Math.max((i.total||0) - credits, 0);
   }, 0);
-  const openSalesDn = (DB.debitNotes||[])
+  const openSalesDn = (live('debitNotes')||[])
     .filter(d => d.kind === 'sales' && (d.status === 'Issued' || d.status === 'Draft'))
     .reduce((s,d) => s + (d.total||0), 0);
   const pendingAmt = pendingInvAmt + openSalesDn;
 
-  const unpaidBills = DB.expenses.filter(e => (e.status||'paid') === 'unpaid');
-  const openPurchaseDn = (DB.debitNotes||[])
+  const unpaidBills = live('expenses').filter(e => (e.status||'paid') === 'unpaid');
+  const openPurchaseDn = (live('debitNotes')||[])
     .filter(d => d.kind === 'purchase' && (d.status === 'Issued' || d.status === 'Draft'))
     .reduce((s,d) => s + (d.total||0), 0);
   const unpaidAmt   = unpaidBills.reduce((s,e) => s+e.amount, 0) + openPurchaseDn;
@@ -4444,7 +4444,7 @@ function renderDashboard() {
 
   // Recent transactions (last 6)
   const allTx = [
-    ...DB.expenses.map(e => ({...e, txType:'expense', txAmt: -e.amount, txLabel: e.desc, txCat: e.cat})),
+    ...live('expenses').map(e => ({...e, txType:'expense', txAmt: -e.amount, txLabel: e.desc, txCat: e.cat})),
     ...live('invoices').map(i => ({...i, txType:'sale', txAmt: i.total, txLabel: i.customer + ' — ' + i.no, txCat: i.status}))
   ].sort((a,b) => b.date.localeCompare(a.date)).slice(0,6);
 
@@ -5358,7 +5358,7 @@ function openTripModal(id) {
     DB.accounts.map(a=>`<option value="${a.name}">${a.name}</option>`).join('');
 
   if (id) {
-    const t = DB.trips.find(x=>x.id===id);
+    const t = live('trips').find(x=>x.id===id);
     if (!t) return;
     document.getElementById('trip-date').value         = t.date;
     document.getElementById('trip-lorry').value        = t.lorryId;
@@ -5476,10 +5476,18 @@ function saveTrip() {
 }
 
 function deleteTrip(id) {
-  if (!confirm('Delete this trip record?')) return;
-  DB.trips = DB.trips.filter(x=>x.id!==id);
-  showToast('Trip deleted');
+  const t = DB.trips.find(x => x.id === id && !x.deleted_at);
+  if (!t) { showToast('Trip not found', 'error'); return; }
+  const reason = prompt(
+    `Move trip "${t.route||'#'+id}" (${t.date}, ${t.driver||''}) to Trash?\n\n` +
+    `Why? (optional, recommended for audit)`,
+    ''
+  );
+  if (reason === null) return;
+  softDelete('trips', id, reason.trim());
+  showToast('Trip moved to Trash. Restore from Settings → Trash.');
   renderTrips();
+  if (typeof sbPersist === 'function') sbPersist('trips', t);
 }
 
 function renderTrips() {
@@ -5487,7 +5495,7 @@ function renderTrips() {
   const driverFilter = document.getElementById('fl-trip-driver');
   if (driverFilter) {
     const cur = driverFilter.value;
-    const drivers = [...new Set(DB.trips.map(t=>t.driver))];
+    const drivers = [...new Set(live('trips').map(t=>t.driver))];
     driverFilter.innerHTML = '<option value="">All drivers</option>' +
       drivers.map(d=>`<option${d===cur?' selected':''}>${d}</option>`).join('');
   }
@@ -5497,7 +5505,7 @@ function renderTrips() {
   const driverF = (document.getElementById('fl-trip-driver')||{}).value||'';
   const monthF  = (document.getElementById('fl-trip-month')||{}).value||'';
 
-  let data = DB.trips.filter(t=>
+  let data = live('trips').filter(t=>
     (!lorryF  || String(t.lorryId)===lorryF) &&
     (!driverF || t.driver===driverF) &&
     (!monthF  || t.date.startsWith(monthF))
@@ -5569,7 +5577,7 @@ function renderTripSummary() {
   const monthF = (document.getElementById('fl-sum-month')||{}).value||'';
   const groupBy = (document.getElementById('fl-sum-group')||{}).value||'driver';
 
-  let data = DB.trips.filter(t => !monthF || t.date.startsWith(monthF));
+  let data = live('trips').filter(t => !monthF || t.date.startsWith(monthF));
 
   if (data.length === 0) {
     el.innerHTML = '<div class="empty-state card"><div class="icon">📊</div><p>No trip data for this period</p></div>';
@@ -5833,7 +5841,7 @@ function renderPerLorry() {
   el.innerHTML = DB.lorries.map(l => {
     const refuels  = DB.refuels.filter(r=>r.lorryId===l.id).sort((a,b)=>b.date.localeCompare(a.date));
     const maints   = DB.maintenance.filter(m=>m.lorryId===l.id).sort((a,b)=>b.date.localeCompare(a.date));
-    const trips    = DB.trips.filter(t=>t.lorryId===l.id).sort((a,b)=>b.date.localeCompare(a.date));
+    const trips    = live('trips').filter(t=>t.lorryId===l.id).sort((a,b)=>b.date.localeCompare(a.date));
     const totLitres  = refuels.reduce((s,r)=>s+r.litres,0) +
       trips.reduce((s,t)=>s+(t.expLines||[]).filter(e=>e.type==='Diesel').reduce((ls,e)=>ls+(parseFloat(e.litres)||0),0),0);
     const totMaint   = maints.reduce((s,m)=>s+m.cost,0);
@@ -6424,7 +6432,7 @@ function openOrderModal(id) {
   }
 
   if (id) {
-    const o = DB.salesOrders.find(x=>x.id===id);
+    const o = live('salesOrders').find(x=>x.id===id);
     if (!o) return;
     document.getElementById('so-delivery-date').value = o.deliveryDate||'';
     document.getElementById('so-salesperson').value   = o.salesperson||'';
@@ -6643,7 +6651,7 @@ function saveOrder() {
 }
 
 function updateOrderStatus(id, status) {
-  const o = DB.salesOrders.find(x=>x.id===id);
+  const o = live('salesOrders').find(x=>x.id===id);
   if (!o) return;
   o.status = status;
   if (status==='Delivered') o.deliveredOn = new Date().toISOString().split('T')[0];
@@ -6653,17 +6661,25 @@ function updateOrderStatus(id, status) {
 }
 
 function deleteOrder(id) {
-  if (!confirm('Delete this order?')) return;
-  DB.salesOrders = DB.salesOrders.filter(x=>x.id!==id);
-  showToast('Order deleted');
+  const o = DB.salesOrders.find(x => x.id === id && !x.deleted_at);
+  if (!o) { showToast('Order not found', 'error'); return; }
+  const reason = prompt(
+    `Move sales order ${o.orderNo || '#'+id} (${o.customer||''}, ${fmt(o.total||0)}) to Trash?\n\n` +
+    `Why? (optional, recommended for audit)`,
+    ''
+  );
+  if (reason === null) return;
+  softDelete('salesOrders', id, reason.trim());
+  showToast('Sales order moved to Trash. Restore from Settings → Trash.');
   renderOrders();
+  if (typeof sbPersist === 'function') sbPersist('salesOrders', o);
 }
 
 // Convert a Sales Order into one invoice per customer block.
 // Each invoice is linked back to the SO via invoice.soId / invoice.soOrderNo.
 // The SO tracks created invoice ids in order.invoiceIds to prevent duplicates.
 function convertSoToInvoice(soId) {
-  const o = DB.salesOrders.find(x => x.id === soId);
+  const o = live('salesOrders').find(x => x.id === soId);
   if (!o) { showToast('Sales order not found', 'error'); return; }
   if (o.status === 'New') {
     showToast('Confirm the order before converting to invoice', 'error');
@@ -6752,7 +6768,7 @@ function renderOrders() {
   if (newOrderBtn) newOrderBtn.style.display = can('onlyOrders') ? 'none' : '';
 
   const counts = {};
-  SO_STATUSES.forEach(s=>counts[s]=DB.salesOrders.filter(o=>o.status===s).length);
+  SO_STATUSES.forEach(s=>counts[s]=live('salesOrders').filter(o=>o.status===s).length);
   const metricsEl = document.getElementById('so-metrics');
   const cardStyle = 'flex:0 0 auto;min-width:90px;';
   if (metricsEl) metricsEl.innerHTML = `
@@ -6762,7 +6778,7 @@ function renderOrders() {
     <div class="metric-card" style="${cardStyle}"><div class="metric-label">Packed</div><div class="metric-value" style="color:var(--green);">${counts['Packed']}</div></div>
     <div class="metric-card" style="${cardStyle}"><div class="metric-label">Delivered</div><div class="metric-value" style="color:var(--green);">${counts['Delivered']}</div></div>`;
 
-  let data = DB.salesOrders.filter(o=>
+  let data = live('salesOrders').filter(o=>
     (!search  || o.orderNo.toLowerCase().includes(search) || o.customer.toLowerCase().includes(search) || (o.salesperson||'').toLowerCase().includes(search)) &&
     (!statusF || o.status===statusF) &&
     (!monthF  || (o.deliveryDate||o.createdOn||'').startsWith(monthF)) &&
@@ -6849,7 +6865,7 @@ function renderOrders() {
 function openDispatchModal(orderId) {
   dispatchOrderId = orderId;
   dispatchTeams = [];
-  const o = DB.salesOrders.find(x=>x.id===orderId);
+  const o = live('salesOrders').find(x=>x.id===orderId);
   if (!o) return;
   const customers = o.customers || [{ customer: o.customer||'', lines: o.lines||[] }];
   document.getElementById('so-dispatch-order-summary').innerHTML = `
@@ -6873,7 +6889,7 @@ function openDispatchModal(orderId) {
 
 function autoDispatch() {
   const n = parseInt(document.getElementById('auto-dispatch-count').value) || 2;
-  const o = DB.salesOrders.find(x => x.id === dispatchOrderId);
+  const o = live('salesOrders').find(x => x.id === dispatchOrderId);
   if (!o) return;
 
   const customers = o.customers || [{ customer: o.customer||'', lines: o.lines||[] }];
@@ -6918,7 +6934,7 @@ function removeDispatchTeam(tid) {
 function renderDispatchTeams() {
   const el = document.getElementById('so-dispatch-teams');
   if (!el) return;
-  const o = DB.salesOrders.find(x=>x.id===dispatchOrderId);
+  const o = live('salesOrders').find(x=>x.id===dispatchOrderId);
   const customers = o ? (o.customers || [{ customer: o.customer||'', lines: o.lines||[] }]) : [];
   const allLines  = customers.flatMap(c=>(c.lines||[]).map(l=>({...l, customer:c.customer})));
 
@@ -6969,7 +6985,7 @@ function setDispatchItem(tid, lineId, product, val) {
 }
 
 function saveDispatch() {
-  const o = DB.salesOrders.find(x=>x.id===dispatchOrderId);
+  const o = live('salesOrders').find(x=>x.id===dispatchOrderId);
   if (!o) return;
   if (dispatchTeams.length===0) { showToast('Add at least one team', 'error'); return; }
   o.dispatch = JSON.parse(JSON.stringify(dispatchTeams));
@@ -6986,14 +7002,14 @@ function saveDispatch() {
 // Creates one packing session per dispatch team from the SO's dispatch
 // Each session is linked back to the SO via soId + dispatchTeamId
 function createPackingSessionsFromSO(orderId) {
-  const o = DB.salesOrders.find(x => x.id === orderId);
+  const o = live('salesOrders').find(x => x.id === orderId);
   if (!o) { showToast('Order not found', 'error'); return; }
   if (!o.dispatch || o.dispatch.length === 0) {
     showToast('Order has not been dispatched yet', 'error'); return;
   }
 
   // Check for existing sessions already linked to this SO
-  const existing = (DB.packings || []).filter(p => p.soId === orderId);
+  const existing = (live('packings') || []).filter(p => p.soId === orderId);
   if (existing.length > 0) {
     const existingTeams = existing.map(p => p.team).join(', ');
     const confirmMsg = `Packing sessions for ${o.orderNo} already exist (Teams: ${existingTeams}).\n\n` +
@@ -7183,7 +7199,7 @@ function renderDispatchBoard() {
   const el = document.getElementById('so-dispatch-board');
   if (!el) return;
   const filter = (document.getElementById('so-dispatch-filter')||{}).value||'pending';
-  let orders = DB.salesOrders.filter(o => {
+  let orders = live('salesOrders').filter(o => {
     if (filter==='pending') return ['New','Confirmed'].includes(o.status);
     if (filter==='active')  return o.status==='Packing';
     return !['Delivered','Cancelled'].includes(o.status);
@@ -7466,7 +7482,7 @@ function renderPackingWages() {
     return;
   }
 
-  let sessions = DB.packings.filter(p=>
+  let sessions = live('packings').filter(p=>
     (!monthF || p.date.startsWith(monthF)) &&
     (!teamF  || p.team===teamF)
   ).sort((a,b)=>b.date.localeCompare(a.date));
@@ -7564,7 +7580,7 @@ function renderPackingWages() {
 function payPackingWages() {
   const monthF = (document.getElementById('pw-month-filter')||{}).value||'';
   const teamF  = (document.getElementById('pw-team-filter')||{}).value||'';
-  const sessions = DB.packings.filter(p=>
+  const sessions = live('packings').filter(p=>
     (!monthF || p.date.startsWith(monthF)) &&
     (!teamF  || p.team===teamF)
   );
@@ -7915,7 +7931,7 @@ function openPackingModal(id) {
   populatePackingSOPicker();
 
   if (id) {
-    const p = DB.packings.find(x=>x.id===id);
+    const p = live('packings').find(x=>x.id===id);
     if (!p) return;
     document.getElementById('pk-date').value  = p.date;
     document.getElementById('pk-team').value  = p.team||'A';
@@ -7949,7 +7965,7 @@ function populatePackingSOPicker() {
   // Build list of dispatched SOs that have at least one team without a session yet
   // (or allow re-linking if editing — but for simplicity, we just show all dispatched SOs)
   const opts = ['<option value="">— None (ad-hoc packing) —</option>'];
-  (DB.salesOrders || [])
+  (live('salesOrders') || [])
     .filter(o => o.dispatch && o.dispatch.length > 0 && o.status !== 'Delivered' && o.status !== 'Cancelled')
     .sort((a,b) => (b.deliveryDate||'').localeCompare(a.deliveryDate||''))
     .forEach(o => {
@@ -7959,7 +7975,7 @@ function populatePackingSOPicker() {
         const itemCount = (d.items || []).filter(i => i.qty > 0).length;
         if (itemCount === 0) return;
         // Check if session for this SO + team already exists
-        const exists = (DB.packings || []).some(p =>
+        const exists = (live('packings') || []).some(p =>
           p.soId === o.id && p.team === d.team && p.id !== editingPackingId
         );
         const label = `${o.orderNo} · ${customers} · Team ${d.team} (${itemCount} item${itemCount>1?'s':''})${exists?' — session exists':''}${deliveryStr}`;
@@ -7975,7 +7991,7 @@ function linkPackingToSO() {
   const [soIdStr, dispatchIdStr] = sel.value.split('|');
   const soId = parseInt(soIdStr);
   const dispatchId = parseFloat(dispatchIdStr);
-  const o = DB.salesOrders.find(x => x.id === soId);
+  const o = live('salesOrders').find(x => x.id === soId);
   if (!o) { showToast('Sales Order not found', 'error'); return; }
   const d = (o.dispatch || []).find(x => x.id === dispatchId);
   if (!d) { showToast('Dispatch team not found', 'error'); return; }
@@ -8060,7 +8076,7 @@ function savePacking() {
     totalKg:  parseFloat(totalKg.toFixed(3)),
     // SO link (may be null for ad-hoc sessions, but we chose strict mode — UI will typically have these set)
     soId:           pkLinkedSoId,
-    soOrderNo:      pkLinkedSoId ? (DB.salesOrders.find(o=>o.id===pkLinkedSoId)?.orderNo || null) : null,
+    soOrderNo:      pkLinkedSoId ? (live('salesOrders').find(o=>o.id===pkLinkedSoId)?.orderNo || null) : null,
     dispatchTeamId: pkLinkedDispatchTeamId,
   };
 
@@ -8078,10 +8094,18 @@ function savePacking() {
 }
 
 function deletePacking(id) {
-  if (!confirm('Delete this packing record?')) return;
-  DB.packings = DB.packings.filter(x=>x.id!==id);
-  showToast('Packing record deleted');
+  const p = DB.packings.find(x => x.id === id && !x.deleted_at);
+  if (!p) { showToast('Packing record not found', 'error'); return; }
+  const reason = prompt(
+    `Move packing record (${p.date}, Team ${p.team||''}, ${p.packs||0} packs) to Trash?\n\n` +
+    `Why? (optional, recommended for audit)`,
+    ''
+  );
+  if (reason === null) return;
+  softDelete('packings', id, reason.trim());
+  showToast('Packing record moved to Trash. Restore from Settings → Trash.');
   renderPacking();
+  if (typeof sbPersist === 'function') sbPersist('packings', p);
 }
 
 // ============================================================
@@ -8102,7 +8126,7 @@ function renderPackingTeams() {
 
   // Count how many packing sessions each team has (usage)
   const usage = {};
-  (DB.packings || []).forEach(p => { usage[p.team] = (usage[p.team] || 0) + 1; });
+  (live('packings') || []).forEach(p => { usage[p.team] = (usage[p.team] || 0) + 1; });
 
   const teams = [...DB.packingTeams].sort((a,b) => a.team.localeCompare(b.team));
 
@@ -8199,7 +8223,7 @@ function renderPackingSummary() {
   const customerF = (document.getElementById('ps-customer-filter')||{}).value?.toLowerCase()||'';
 
   // Filter packings
-  let data = DB.packings.filter(p =>
+  let data = live('packings').filter(p =>
     (!monthF  || p.date.startsWith(monthF)) &&
     (!teamF   || p.team === teamF)
   );
@@ -8373,22 +8397,22 @@ function printPackingSummary() {
 function renderPacking() {
   const monthF = (document.getElementById('pk-month-filter')||{}).value||'';
 
-  let data = DB.packings.filter(p =>
+  let data = live('packings').filter(p =>
     (!monthF || p.date.startsWith(monthF))
   ).sort((a,b)=>b.date.localeCompare(a.date));
 
   const totalPacks = data.reduce((s,p)=>s+p.packs,0);
   const totalKg    = data.reduce((s,p)=>s+p.totalKg,0);
   const thisMonth  = new Date().toISOString().slice(0,7);
-  const monthPacks = DB.packings.filter(p=>p.date.startsWith(thisMonth)).reduce((s,p)=>s+p.packs,0);
-  const monthKg    = DB.packings.filter(p=>p.date.startsWith(thisMonth)).reduce((s,p)=>s+p.totalKg,0);
+  const monthPacks = live('packings').filter(p=>p.date.startsWith(thisMonth)).reduce((s,p)=>s+p.packs,0);
+  const monthKg    = live('packings').filter(p=>p.date.startsWith(thisMonth)).reduce((s,p)=>s+p.totalKg,0);
 
   const metricsEl = document.getElementById('pk-metrics');
   if (metricsEl) metricsEl.innerHTML = `
     <div class="metric-card"><div class="metric-label">This Month</div><div class="metric-value" style="color:var(--green);">${monthPacks.toLocaleString()} packs</div><div class="metric-change neutral">${monthKg.toFixed(1)} kg</div></div>
     <div class="metric-card"><div class="metric-label">Filtered Packs</div><div class="metric-value">${totalPacks.toLocaleString()}</div><div class="metric-change neutral">${data.length} sessions</div></div>
     <div class="metric-card"><div class="metric-label">Filtered Weight</div><div class="metric-value">${totalKg.toFixed(1)} kg</div><div class="metric-change neutral">Total packed</div></div>
-    <div class="metric-card"><div class="metric-label">All Time</div><div class="metric-value">${DB.packings.reduce((s,p)=>s+p.packs,0).toLocaleString()} packs</div><div class="metric-change neutral">${DB.packings.reduce((s,p)=>s+p.totalKg,0).toFixed(1)} kg</div></div>`;
+    <div class="metric-card"><div class="metric-label">All Time</div><div class="metric-value">${live('packings').reduce((s,p)=>s+p.packs,0).toLocaleString()} packs</div><div class="metric-change neutral">${live('packings').reduce((s,p)=>s+p.totalKg,0).toFixed(1)} kg</div></div>`;
 
   const pkTotalEl = document.getElementById('pk-total');
   if (pkTotalEl) pkTotalEl.textContent = `${data.length} sessions · ${totalPacks.toLocaleString()} packs · ${totalKg.toFixed(1)} kg`;
@@ -8468,15 +8492,15 @@ function openHarvestModal(id) {
     DB.staff.map(s=>`<option value="${s.name}">${s.name}</option>`).join('');
 
   // Populate batch dropdown — active harvesting/fruiting batches first
-  const activeBatches = DB.batches.filter(b=>['Fruiting','Harvesting','Completed'].includes(b.status));
-  const otherBatches  = DB.batches.filter(b=>!['Fruiting','Harvesting','Completed'].includes(b.status) && b.status!=='Discarded');
+  const activeBatches = live('batches').filter(b=>['Fruiting','Harvesting','Completed'].includes(b.status));
+  const otherBatches  = live('batches').filter(b=>!['Fruiting','Harvesting','Completed'].includes(b.status) && b.status!=='Discarded');
   const allBatches    = [...activeBatches, ...otherBatches];
   document.getElementById('hv-batch').innerHTML = allBatches.map(b=>
     `<option value="${b.id}">${b.no} — ${b.type} (${b.status})</option>`
   ).join('') || '<option value="">No batches yet</option>';
 
   if (id) {
-    const h = DB.harvests.find(x=>x.id===id);
+    const h = live('harvests').find(x=>x.id===id);
     if (!h) return;
     document.getElementById('hv-date').value  = h.date;
     document.getElementById('hv-batch').value = h.batchId;
@@ -8492,11 +8516,11 @@ function openHarvestModal(id) {
 
 function onHvBatchChange() {
   const batchId = parseInt(document.getElementById('hv-batch').value);
-  const b = DB.batches.find(x=>x.id===batchId);
+  const b = live('batches').find(x=>x.id===batchId);
   document.getElementById('hv-type').value = b ? b.type : '';
   // Auto-suggest flush number
   if (b && !editingHarvestId) {
-    const prevFlushes = DB.harvests.filter(h=>h.batchId===batchId);
+    const prevFlushes = live('harvests').filter(h=>h.batchId===batchId);
     const maxFlush = prevFlushes.length > 0 ? Math.max(...prevFlushes.map(h=>h.flush)) : 0;
     document.getElementById('hv-flush').value = Math.min(maxFlush+1, 5);
   }
@@ -8556,7 +8580,7 @@ function saveHarvest() {
     const total    = parseFloat(document.getElementById('hv-sale-total').value)||0;
     const acct     = document.getElementById('hv-sale-account').value;
     const saleType = document.getElementById('hv-sale-type').value;
-    const b        = DB.batches.find(x=>x.id===batchId);
+    const b        = live('batches').find(x=>x.id===batchId);
     if (customer && total > 0) {
       h.saleCustomer = customer;
       h.saleTotal = total;
@@ -8564,9 +8588,9 @@ function saveHarvest() {
   }
 
   // Update batch totals
-  const b = DB.batches.find(x=>x.id===batchId);
+  const b = live('batches').find(x=>x.id===batchId);
   if (b) {
-    const allHarvests = DB.harvests.filter(x=>x.batchId===batchId && x.id !== h.id);
+    const allHarvests = live('harvests').filter(x=>x.batchId===batchId && x.id !== h.id);
     b.harvestKg = parseFloat((allHarvests.reduce((s,x)=>s+x.kg,0) + kg).toFixed(2));
     if (['Fruiting','Colonising'].includes(b.status)) b.status = 'Harvesting';
     if (!b.harvestDate) b.harvestDate = date;
@@ -8587,14 +8611,25 @@ function saveHarvest() {
 }
 
 function deleteHarvest(id) {
-  const h = DB.harvests.find(x=>x.id===id);
-  if (!confirm('Delete this harvest record?')) return;
-  // Recalculate batch total
-  const b = DB.batches.find(x=>x.id===h?.batchId);
-  DB.harvests = DB.harvests.filter(x=>x.id!==id);
-  if (b) b.harvestKg = parseFloat(DB.harvests.filter(x=>x.batchId===b.id).reduce((s,x)=>s+x.kg,0).toFixed(2));
-  showToast('Harvest deleted');
+  const h = DB.harvests.find(x => x.id === id && !x.deleted_at);
+  if (!h) { showToast('Harvest not found', 'error'); return; }
+  const reason = prompt(
+    `Move harvest record (${h.date}, batch ${h.batchId}, ${h.kg}kg) to Trash?\n\n` +
+    `Why? (optional, recommended for audit)\n` +
+    `Note: the batch's total harvest weight will be recalculated.`,
+    ''
+  );
+  if (reason === null) return;
+  softDelete('harvests', id, reason.trim());
+  // Recalculate batch total (excluding trashed harvests)
+  const b = live('batches').find(x => x.id === h.batchId);
+  if (b) {
+    b.harvestKg = parseFloat(live('harvests').filter(x => x.batchId === b.id).reduce((s,x) => s+x.kg, 0).toFixed(2));
+    if (typeof sbPersist === 'function') sbPersist('batches', b);
+  }
+  showToast('Harvest moved to Trash. Restore from Settings → Trash.');
   renderHarvest();
+  if (typeof sbPersist === 'function') sbPersist('harvests', h);
 }
 
 function renderHarvest() {
@@ -8610,11 +8645,11 @@ function renderHarvest() {
   if (batchFilter) {
     const cur = batchFilter.value;
     batchFilter.innerHTML = '<option value="">All batches</option>' +
-      DB.batches.map(b=>`<option value="${b.id}"${String(b.id)===cur?' selected':''}>${b.no} — ${b.type}</option>`).join('');
+      live('batches').map(b=>`<option value="${b.id}"${String(b.id)===cur?' selected':''}>${b.no} — ${b.type}</option>`).join('');
   }
   const typeFilter = document.getElementById('hv-type-filter');
   if (typeFilter) {
-    const types = [...new Set(DB.batches.map(b=>b.type))];
+    const types = [...new Set(live('batches').map(b=>b.type))];
     const cur = typeFilter.value;
     typeFilter.innerHTML = '<option value="">All types</option>' +
       types.map(t=>`<option${t===cur?' selected':''}>${t}</option>`).join('');
@@ -8624,20 +8659,20 @@ function renderHarvest() {
   const now = new Date();
   const thisMonth = now.toISOString().slice(0,7);
   const last30 = new Date(now); last30.setDate(now.getDate()-30);
-  const monthHarvests = DB.harvests.filter(h=>h.date.startsWith(thisMonth));
+  const monthHarvests = live('harvests').filter(h=>h.date.startsWith(thisMonth));
   const totalKgMonth  = monthHarvests.reduce((s,h)=>s+h.kg,0);
-  const totalKgAll    = DB.harvests.reduce((s,h)=>s+h.kg,0);
-  const linkedSales   = DB.harvests.filter(h=>h.saleId).length;
-  const avgFlushKg    = DB.harvests.length > 0 ? (totalKgAll/DB.harvests.length).toFixed(1) : 0;
+  const totalKgAll    = live('harvests').reduce((s,h)=>s+h.kg,0);
+  const linkedSales   = live('harvests').filter(h=>h.saleId).length;
+  const avgFlushKg    = live('harvests').length > 0 ? (totalKgAll/live('harvests').length).toFixed(1) : 0;
 
   const metricsEl = document.getElementById('harvest-metrics');
   if (metricsEl) metricsEl.innerHTML = `
     <div class="metric-card"><div class="metric-label">This Month</div><div class="metric-value" style="color:var(--green);">${totalKgMonth.toFixed(1)} kg</div><div class="metric-change up">${monthHarvests.length} entries</div></div>
-    <div class="metric-card"><div class="metric-label">All Time</div><div class="metric-value">${totalKgAll.toFixed(1)} kg</div><div class="metric-change neutral">${DB.harvests.length} records</div></div>`;
+    <div class="metric-card"><div class="metric-label">All Time</div><div class="metric-value">${totalKgAll.toFixed(1)} kg</div><div class="metric-change neutral">${live('harvests').length} records</div></div>`;
 
   if (hvTab === 1) {
-    let data = DB.harvests.filter(h => {
-      const b = DB.batches.find(x=>x.id===h.batchId);
+    let data = live('harvests').filter(h => {
+      const b = live('batches').find(x=>x.id===h.batchId);
       return (!monthF || h.date.startsWith(monthF)) &&
              (!batchF || String(h.batchId)===batchF) &&
              (!typeF  || (b && b.type===typeF));
@@ -8658,7 +8693,7 @@ function renderHarvest() {
         <th class="text-right">Qty (kg)</th><th>Sale Linked</th><th>Notes</th><th></th>
       </tr></thead>
       <tbody>${data.map(h => {
-        const b = DB.batches.find(x=>x.id===h.batchId);
+        const b = live('batches').find(x=>x.id===h.batchId);
         const s = null; // sales removed
         const flushLabel = ['','1st','2nd','3rd','4th','5th+'][h.flush]||h.flush+'th';
         return `<tr>
@@ -8683,13 +8718,13 @@ function renderHarvest() {
     // Batch / flush summary
     const el2 = document.getElementById('hv-batch-summary');
     if (!el2) return;
-    const batchesWithHarvests = DB.batches.filter(b=>DB.harvests.some(h=>h.batchId===b.id));
+    const batchesWithHarvests = live('batches').filter(b=>live('harvests').some(h=>h.batchId===b.id));
     if (batchesWithHarvests.length === 0) {
       el2.innerHTML = '<div class="empty-state card"><div class="icon">🌾</div><p>No harvest data yet</p></div>';
       return;
     }
     el2.innerHTML = batchesWithHarvests.map(b => {
-      const harvests = DB.harvests.filter(h=>h.batchId===b.id).sort((a,c)=>a.date.localeCompare(c.date));
+      const harvests = live('harvests').filter(h=>h.batchId===b.id).sort((a,c)=>a.date.localeCompare(c.date));
       const totalKg  = harvests.reduce((s,h)=>s+h.kg,0);
       const byFlush  = {};
       harvests.forEach(h=>{ byFlush[h.flush]=(byFlush[h.flush]||0)+h.kg; });
@@ -8774,7 +8809,7 @@ function openBatchModal(id) {
   document.getElementById('batch-modal-title').textContent = id ? 'Edit Batch' : 'New Production Batch';
   const today = new Date().toISOString().split('T')[0];
   if (id) {
-    const b = DB.batches.find(x=>x.id===id);
+    const b = live('batches').find(x=>x.id===id);
     if (!b) return;
     document.getElementById('batch-no').value           = b.no;
     document.getElementById('batch-type').value         = b.type;
@@ -8835,14 +8870,27 @@ function saveBatch() {
 }
 
 function deleteBatch(id) {
-  if (!confirm('Delete this batch?')) return;
-  DB.batches = DB.batches.filter(b=>b.id!==id);
-  showToast('Batch deleted');
+  const b = DB.batches.find(x => x.id === id && !x.deleted_at);
+  if (!b) { showToast('Batch not found', 'error'); return; }
+  // Warn if batch has linked harvests
+  const linkedHarvests = live('harvests').filter(h => h.batchId === id).length;
+  if (linkedHarvests > 0) {
+    if (!confirm(`Batch ${b.no || '#'+id} has ${linkedHarvests} harvest record(s). Trashing the batch leaves the harvests in place. Continue?`)) return;
+  }
+  const reason = prompt(
+    `Move batch ${b.no || '#'+id} (${b.bags||0} bags, ${b.status||''}) to Trash?\n\n` +
+    `Why? (optional, recommended for audit)`,
+    ''
+  );
+  if (reason === null) return;
+  softDelete('batches', id, reason.trim());
+  showToast('Batch moved to Trash. Restore from Settings → Trash.');
   renderProduction();
+  if (typeof sbPersist === 'function') sbPersist('batches', b);
 }
 
 function updateBatchStatus(id, status) {
-  const b = DB.batches.find(x=>x.id===id);
+  const b = live('batches').find(x=>x.id===id);
   if (!b) return;
   b.status = status;
   if (status==='Harvesting' && !b.harvestDate) b.harvestDate = new Date().toISOString().split('T')[0];
@@ -8915,11 +8963,11 @@ function batchCard(b, compact) {
 
 function renderProduction() {
   // Metrics
-  const active   = DB.batches.filter(b=>!['Completed','Discarded'].includes(b.status));
+  const active   = live('batches').filter(b=>!['Completed','Discarded'].includes(b.status));
   const totalBags = active.reduce((s,b)=>s+b.bags,0);
-  const totalHarvest = DB.batches.reduce((s,b)=>s+b.harvestKg,0);
-  const avgYield = DB.batches.filter(b=>b.harvestKg>0&&b.bags>0).length > 0
-    ? (DB.batches.filter(b=>b.harvestKg>0).reduce((s,b)=>s+b.harvestKg/b.bags*1000,0) / DB.batches.filter(b=>b.harvestKg>0&&b.bags>0).length).toFixed(0)
+  const totalHarvest = live('batches').reduce((s,b)=>s+b.harvestKg,0);
+  const avgYield = live('batches').filter(b=>b.harvestKg>0&&b.bags>0).length > 0
+    ? (live('batches').filter(b=>b.harvestKg>0).reduce((s,b)=>s+b.harvestKg/b.bags*1000,0) / live('batches').filter(b=>b.harvestKg>0&&b.bags>0).length).toFixed(0)
     : 0;
   const overdueBatches = active.filter(b=>b.maturityDate && b.maturityDate < new Date().toISOString().split('T')[0] && !['Fruiting','Harvesting'].includes(b.status));
 
@@ -8933,7 +8981,7 @@ function renderProduction() {
   // Populate type filter
   const typeFilter = document.getElementById('prod-type-filter');
   if (typeFilter) {
-    const types = [...new Set(DB.batches.map(b=>b.type))];
+    const types = [...new Set(live('batches').map(b=>b.type))];
     const cur = typeFilter.value;
     typeFilter.innerHTML = '<option value="">All types</option>' + types.map(t=>`<option${t===cur?' selected':''}>${t}</option>`).join('');
   }
@@ -8961,7 +9009,7 @@ function renderProduction() {
     const search  = (document.getElementById('prod-search')||{}).value?.toLowerCase()||'';
     const statusF = (document.getElementById('prod-status-filter')||{}).value||'';
     const typeF   = (document.getElementById('prod-type-filter')||{}).value||'';
-    let data = DB.batches.filter(b =>
+    let data = live('batches').filter(b =>
       (!search  || b.no.toLowerCase().includes(search) || b.type.toLowerCase().includes(search) || (b.notes||'').toLowerCase().includes(search)) &&
       (!statusF || b.status===statusF) &&
       (!typeF   || b.type===typeF)
@@ -9167,7 +9215,7 @@ function renderExpenses() {
   const cat     = document.getElementById('exp-cat-filter').value;
   const month   = document.getElementById('exp-month-filter').value;
   const statusF = document.getElementById('exp-status-filter').value;
-  let data = DB.expenses.filter(e =>
+  let data = live('expenses').filter(e =>
     (!search || e.desc.toLowerCase().includes(search) || (e.supplier||'').toLowerCase().includes(search) || e.cat.toLowerCase().includes(search)) &&
     (!cat    || e.cat === cat) &&
     (!month  || e.date.startsWith(month)) &&
@@ -9248,7 +9296,7 @@ function renderExpenses() {
 }
 
 function markExpensePaid(id) {
-  const e = DB.expenses.find(x => x.id === id);
+  const e = live('expenses').find(x => x.id === id);
   if (!e) return;
   document.getElementById('pay-exp-label').textContent = `${e.desc} — ${fmt(e.amount)}`;
   document.getElementById('pay-exp-id').value = id;
@@ -9260,7 +9308,7 @@ function markExpensePaid(id) {
 function confirmExpensePaid() {
   const id      = parseInt(document.getElementById('pay-exp-id').value);
   const account = document.getElementById('pay-exp-account').value;
-  const e       = DB.expenses.find(x => x.id === id);
+  const e       = live('expenses').find(x => x.id === id);
   if (!e) return;
   e.status  = 'paid';
   e.account = account;
@@ -9532,10 +9580,18 @@ function saveExpenses() {
 }
 
 function deleteExpense(id) {
-  if (!confirm('Delete this expense record?')) return;
-  DB.expenses = DB.expenses.filter(e => e.id !== id);
-  showToast('Expense deleted');
+  const e = DB.expenses.find(x => x.id === id && !x.deleted_at);
+  if (!e) { showToast('Expense not found', 'error'); return; }
+  const reason = prompt(
+    `Move expense "${e.desc||'(no description)'}" (${fmt(e.amount)}, ${e.date}) to Trash?\n\n` +
+    `Why? (optional, recommended for audit)`,
+    ''
+  );
+  if (reason === null) return;
+  softDelete('expenses', id, reason.trim());
+  showToast('Expense moved to Trash. Restore from Settings → Trash.');
   renderExpenses();
+  if (typeof sbPersist === 'function') sbPersist('expenses', e);
 }
 
 // ============================================================
@@ -9801,7 +9857,7 @@ function populatePayHistCustomers() {
   const el = document.getElementById('pay-hist-customer');
   if (!el) return;
   const cur = el.value;
-  const names = [...new Set((DB.payments||[]).map(p=>p.customer))].sort();
+  const names = [...new Set((live('payments')||[]).map(p=>p.customer))].sort();
   el.innerHTML = '<option value="">All customers</option>' + names.map(n=>`<option${n===cur?' selected':''}>${n}</option>`).join('');
 }
 
@@ -9827,18 +9883,18 @@ function renderCustomerStatement() {
     i.customer === customer && (!year || (i.date||'').startsWith(year))
   ).sort((a,b) => a.date.localeCompare(b.date));
 
-  const pays = (DB.payments||[]).filter(p =>
+  const pays = (live('payments')||[]).filter(p =>
     p.customer === customer && (!year || (p.date||'').startsWith(year))
   ).sort((a,b) => a.date.localeCompare(b.date));
 
   // Credit notes against this customer (non-Draft, non-Voided)
-  const cns = (DB.creditNotes||[]).filter(cn =>
+  const cns = (live('creditNotes')||[]).filter(cn =>
     cn.customer === customer && (!year || (cn.date||'').startsWith(year)) &&
     cn.status !== 'Draft' && cn.status !== 'Voided'
   ).sort((a,b) => a.date.localeCompare(b.date));
 
   // Sales debit notes against this customer (non-Draft, non-Voided)
-  const dns = (DB.debitNotes||[]).filter(dn =>
+  const dns = (live('debitNotes')||[]).filter(dn =>
     dn.kind === 'sales' && dn.partyName === customer &&
     (!year || (dn.date||'').startsWith(year)) &&
     dn.status !== 'Draft' && dn.status !== 'Voided'
@@ -9947,7 +10003,7 @@ function renderPaymentHistory() {
   if (!el) return;
   const custF  = (document.getElementById('pay-hist-customer')||{}).value||'';
   const monthF = (document.getElementById('pay-hist-month')||{}).value||'';
-  const pays = (DB.payments||[]).filter(p =>
+  const pays = (live('payments')||[]).filter(p =>
     (!custF  || p.customer === custF) &&
     (!monthF || (p.date||'').startsWith(monthF))
   ).sort((a,b) => b.date.localeCompare(a.date));
@@ -9984,7 +10040,7 @@ function renderPaymentHistory() {
 }
 
 function editPayment(payId) {
-  const p = (DB.payments||[]).find(x=>x.id===payId);
+  const p = (live('payments')||[]).find(x=>x.id===payId);
   if (!p) return;
   const inv = live('invoices').find(i=>i.id===p.invoiceId);
   const cs = (p.currency||'MYR') === 'SGD' ? 'SGD' : 'RM';
@@ -10002,7 +10058,7 @@ function editPayment(payId) {
 
 function saveEditPayment() {
   const payId  = parseInt(document.getElementById('edit-pay-id').value);
-  const p      = (DB.payments||[]).find(x=>x.id===payId);
+  const p      = (live('payments')||[]).find(x=>x.id===payId);
   if (!p) return;
   p.date      = document.getElementById('edit-pay-date').value;
   p.amount    = parseFloat(document.getElementById('edit-pay-amount').value)||0;
@@ -10012,7 +10068,7 @@ function saveEditPayment() {
   // Recalculate invoice status
   const inv = live('invoices').find(i=>i.id===p.invoiceId);
   if (inv) {
-    const totalPaid = DB.payments.filter(x=>x.invoiceId===inv.id).reduce((s,x)=>s+x.amount,0);
+    const totalPaid = live('payments').filter(x=>x.invoiceId===inv.id).reduce((s,x)=>s+x.amount,0);
     if (totalPaid >= inv.total) { inv.status = 'Paid'; inv.account = p.account; }
     else if (totalPaid > 0) inv.status = 'Partial';
     else inv.status = 'Pending';
@@ -10024,26 +10080,32 @@ function saveEditPayment() {
 }
 
 function deletePayment(payId) {
-  if (!confirm('Delete this payment record?')) return;
-  const p = (DB.payments||[]).find(x=>x.id===payId);
-  DB.payments = DB.payments.filter(x=>x.id!==payId);
-  // Recalculate invoice status
-  if (p) {
-    const inv = live('invoices').find(i=>i.id===p.invoiceId);
-    if (inv) {
-      const totalPaid = DB.payments.filter(x=>x.invoiceId===inv.id).reduce((s,x)=>s+x.amount,0);
-      if (totalPaid >= inv.total) { inv.status = 'Paid'; }
-      else if (totalPaid > 0) inv.status = 'Partial';
-      else { inv.status = 'Pending'; inv.account = ''; }
-    }
+  const p = (DB.payments||[]).find(x=>x.id===payId && !x.deleted_at);
+  if (!p) { showToast('Payment not found', 'error'); return; }
+  const reason = prompt(
+    `Move payment of ${fmt(p.amount)} (${p.customer}, ${p.date}) to Trash?\n\n` +
+    `Why? (optional, but recommended for audit)`,
+    ''
+  );
+  if (reason === null) return;
+  softDelete('payments', payId, reason.trim());
+  // Recalculate invoice status (excluding this now-trashed payment)
+  const inv = live('invoices').find(i=>i.id===p.invoiceId);
+  if (inv) {
+    const totalPaid = live('payments').filter(x=>x.invoiceId===inv.id).reduce((s,x)=>s+x.amount,0);
+    if (totalPaid >= inv.total) { inv.status = 'Paid'; }
+    else if (totalPaid > 0) inv.status = 'Partial';
+    else { inv.status = 'Pending'; inv.account = ''; }
+    if (typeof sbPersist === 'function') sbPersist('invoices', inv);
   }
-  showToast('Payment deleted');
+  showToast('Payment moved to Trash. Restore from Settings → Trash.');
   renderPaymentHistory();
   renderInvoices();
+  if (typeof sbPersist === 'function') sbPersist('payments', p);
 }
 
 function reprintReceipt(payId) {
-  const p = (DB.payments||[]).find(x=>x.id===payId);
+  const p = (live('payments')||[]).find(x=>x.id===payId);
   if (!p) return;
   const inv = live('invoices').find(i=>i.id===p.invoiceId);
   if (!inv) return;
@@ -10484,7 +10546,7 @@ function markInvoicePaid(id) {
   if (!inv) return;
   const currency = inv.currency || 'MYR';
   const currSym  = currency === 'SGD' ? 'SGD' : 'RM';
-  const paid     = (DB.payments||[]).filter(p => p.invoiceId === id).reduce((s,p) => s + (p.amount||0), 0);
+  const paid     = (live('payments')||[]).filter(p => p.invoiceId === id).reduce((s,p) => s + (p.amount||0), 0);
   const balance  = (inv.total||0) - paid;
 
   document.getElementById('pay-inv-id').value = id;
@@ -10511,7 +10573,7 @@ function updatePayBalance() {
   const currency = inv.currency || 'MYR';
   const currSym  = currency === 'SGD' ? 'SGD' : 'RM';
   const amount  = parseFloat(document.getElementById('pay-inv-amount').value) || 0;
-  const paid    = (DB.payments||[]).filter(p => p.invoiceId === id).reduce((s,p) => s + (p.amount||0), 0);
+  const paid    = (live('payments')||[]).filter(p => p.invoiceId === id).reduce((s,p) => s + (p.amount||0), 0);
   const newBal  = (inv.total||0) - paid - amount;
   const el = document.getElementById('pay-balance-info');
   if (!el) return;
@@ -10550,7 +10612,7 @@ function confirmMarkPaid() {
   DB.payments.unshift(payment);
 
   // Check if fully paid
-  const totalPaid = DB.payments.filter(p => p.invoiceId === id).reduce((s,p) => s + (p.amount||0), 0);
+  const totalPaid = live('payments').filter(p => p.invoiceId === id).reduce((s,p) => s + (p.amount||0), 0);
   if (totalPaid >= inv.total) {
     inv.status = 'Paid';
     inv.account = account;
@@ -10570,7 +10632,7 @@ function confirmMarkPaid() {
 function printReceipt(payment, inv) {
   const co = DB.company || {};
   const currSym = (inv.currency || 'MYR') === 'SGD' ? 'SGD' : 'RM';
-  const totalPaid = (DB.payments||[]).filter(p => p.invoiceId === inv.id).reduce((s,p) => s + (p.amount||0), 0);
+  const totalPaid = (live('payments')||[]).filter(p => p.invoiceId === inv.id).reduce((s,p) => s + (p.amount||0), 0);
   const balance   = (inv.total||0) - totalPaid;
   const win = window.open('','_blank');
   win.document.write(`<!DOCTYPE html><html><head>
@@ -10887,7 +10949,7 @@ function togglePayRateLabel() {
 
 function calcPackingWages(staffName, month) {
   let total = 0;
-  DB.packings.filter(p => p.date.startsWith(month) && (p.members||[]).includes(staffName))
+  live('packings').filter(p => p.date.startsWith(month) && (p.members||[]).includes(staffName))
     .forEach(p => {
       const sessionWage = calcSessionWage(p);
       const memberCount = (p.members||[]).length || 1;
@@ -10899,7 +10961,7 @@ function calcPackingWages(staffName, month) {
 function calcTripWages(staffName, month) {
   // Sum all trip wages for this driver in the given month
   return parseFloat(
-    DB.trips
+    live('trips')
       .filter(t => t.date.startsWith(month) && t.driver === staffName)
       .reduce((s, t) => s + (t.wage||0), 0)
       .toFixed(2)
@@ -10954,7 +11016,7 @@ function calcNetPay(staff, att, month) {
   const statutory = calcStatutory(staff, taxableGross);
 
   const manualDeduct  = parseFloat(att.deduction) || 0;
-  const advanceDeduct = DB.wageAdvances
+  const advanceDeduct = live('wageAdvances')
     .filter(a => a.staffId === staff.id && a.deductMonth === month && !a.deducted)
     .reduce((s, a) => s + a.amount, 0);
   const deduct = manualDeduct + advanceDeduct + statutory.totalEmp;
@@ -11718,7 +11780,7 @@ function processPayroll(month) {
     entries, totalNet
   };
   // Mark advances as deducted
-  DB.wageAdvances.forEach(a => {
+  live('wageAdvances').forEach(a => {
     if (a.deductMonth === month && !a.deducted) a.deducted = true;
   });
   DB.payrollRuns = DB.payrollRuns.filter(r => r.month !== month);
@@ -12045,17 +12107,17 @@ function deleteStaff(id) {
 function renderReport() {
   const month = document.getElementById('report-month').value;
   const monthLabel = new Date(month + '-01').toLocaleDateString('en-MY', {month:'long', year:'numeric'});
-  const exps = filterByMonth(DB.expenses, 'date', month);
-  const sals = filterByMonth((DB.payments||[]), 'date', month);
-  const legacyInvs = filterByMonth(live('invoices').filter(i=>(i.status==='Paid'||i.status==='Partial') && !(DB.payments||[]).some(p=>p.invoiceId===i.id)), 'date', month);
+  const exps = filterByMonth(live('expenses'), 'date', month);
+  const sals = filterByMonth((live('payments')||[]), 'date', month);
+  const legacyInvs = filterByMonth(live('invoices').filter(i=>(i.status==='Paid'||i.status==='Partial') && !(live('payments')||[]).some(p=>p.invoiceId===i.id)), 'date', month);
 
   // CN/DN adjustments for this month (exclude Draft & Voided)
-  const cnThisMonth = (DB.creditNotes||[]).filter(cn =>
+  const cnThisMonth = (live('creditNotes')||[]).filter(cn =>
     (cn.date||'').startsWith(month) && cn.status !== 'Draft' && cn.status !== 'Voided'
   );
   const cnReduction = cnThisMonth.reduce((s,cn) => s + (cn.total||0), 0);
 
-  const dnThisMonth = (DB.debitNotes||[]).filter(dn =>
+  const dnThisMonth = (live('debitNotes')||[]).filter(dn =>
     (dn.date||'').startsWith(month) && dn.status !== 'Draft' && dn.status !== 'Voided'
   );
   const salesDnAddition    = dnThisMonth.filter(d => d.kind === 'sales').reduce((s,d) => s + (d.total||0), 0);
@@ -12180,12 +12242,12 @@ function populateAccountSelects() {
 
 function accountBalance(acct) {
   // Payments recorded against invoices
-  const paymentsIn = (DB.payments||[]).filter(p => p.account === acct.name).reduce((s,p) => s+p.amount, 0);
+  const paymentsIn = (live('payments')||[]).filter(p => p.account === acct.name).reduce((s,p) => s+p.amount, 0);
   // Paid invoices with no payment records (legacy)
   const legacyIn  = live('invoices').filter(i => i.status==='Paid' && i.account === acct.name &&
-    !(DB.payments||[]).some(p => p.invoiceId === i.id)
+    !(live('payments')||[]).some(p => p.invoiceId === i.id)
   ).reduce((s,x) => s+x.total, 0);
-  const outflow   = DB.expenses.filter(e => (e.status||'paid') === 'paid' && e.account === acct.name).reduce((s,x) => s+x.amount, 0);
+  const outflow   = live('expenses').filter(e => (e.status||'paid') === 'paid' && e.account === acct.name).reduce((s,x) => s+x.amount, 0);
   const xfrIn     = DB.transfers.filter(t => t.to === acct.name).reduce((s,t) => s+t.amount, 0);
   const xfrOut    = DB.transfers.filter(t => t.from === acct.name).reduce((s,t) => s+t.amount, 0);
   return (acct.openingBalance || 0) + paymentsIn + legacyIn - outflow + xfrIn - xfrOut;
@@ -12461,7 +12523,7 @@ function suppInitials(name) {
 }
 
 function suppTotalSpend(name) {
-  return DB.expenses.filter(e => e.supplier === name).reduce((s,e) => s + e.amount, 0);
+  return live('expenses').filter(e => e.supplier === name).reduce((s,e) => s + e.amount, 0);
 }
 
 function populateSupplierTypeahead() {
@@ -12508,8 +12570,8 @@ function renderSuppliers() {
         </tr></thead>
         <tbody>${data.map(s => {
           const spend     = suppTotalSpend(s.name);
-          const expCount  = DB.expenses.filter(e=>e.supplier===s.name).length;
-          const unpaidAmt = DB.expenses.filter(e=>e.supplier===s.name&&(e.status||'paid')==='unpaid').reduce((sum,e)=>sum+e.amount,0);
+          const expCount  = live('expenses').filter(e=>e.supplier===s.name).length;
+          const unpaidAmt = live('expenses').filter(e=>e.supplier===s.name&&(e.status||'paid')==='unpaid').reduce((sum,e)=>sum+e.amount,0);
           return `<tr>
             <td>
               <div style="font-weight:500;">${s.name}</div>
@@ -12533,8 +12595,8 @@ function renderSuppliers() {
     document.getElementById('suppliers-grid').className = 'customers-grid';
     document.getElementById('suppliers-grid').innerHTML = data.map(s => {
       const spend     = suppTotalSpend(s.name);
-      const expCount  = DB.expenses.filter(e => e.supplier === s.name).length;
-      const unpaidAmt = DB.expenses.filter(e => e.supplier === s.name && (e.status||'paid') === 'unpaid').reduce((sum,e)=>sum+e.amount,0);
+      const expCount  = live('expenses').filter(e => e.supplier === s.name).length;
+      const unpaidAmt = live('expenses').filter(e => e.supplier === s.name && (e.status||'paid') === 'unpaid').reduce((sum,e)=>sum+e.amount,0);
       return `<div class="customer-card">
         <div class="customer-avatar" style="background:var(--bg2);color:var(--text2);font-size:18px;">${catIcon[s.cat]||'🏪'}</div>
         <div class="customer-info">
@@ -12676,7 +12738,7 @@ function renderCustomers() {
         <tbody>${data.map(c => {
           const invCount  = live('invoices').filter(i=>i.customer===c.name).length;
           const invTotal  = live('invoices').filter(i=>i.customer===c.name).reduce((s,i)=>s+i.total,0);
-          const saleTotal = (DB.payments||[]).filter(p=>p.customer===c.name).reduce((s,p)=>s+p.amount,0);
+          const saleTotal = (live('payments')||[]).filter(p=>p.customer===c.name).reduce((s,p)=>s+p.amount,0);
           return `<tr>
             <td>
               <div style="font-weight:500;">${c.name}</div>
@@ -12699,7 +12761,7 @@ function renderCustomers() {
     document.getElementById('customers-grid').innerHTML = data.map(c => {
       const invCount  = live('invoices').filter(i=>i.customer===c.name).length;
       const invTotal  = live('invoices').filter(i=>i.customer===c.name).reduce((s,i)=>s+i.total,0);
-      const saleTotal = (DB.payments||[]).filter(p=>p.customer===c.name).reduce((s,p)=>s+p.amount,0);
+      const saleTotal = (live('payments')||[]).filter(p=>p.customer===c.name).reduce((s,p)=>s+p.amount,0);
       return `<div class="customer-card">
         <div class="customer-avatar">${custInitials(c.name)}</div>
         <div class="customer-info">
@@ -13335,7 +13397,7 @@ function viewLineSupplierInv(lineId) {
 
 
 function viewSuppInvoice(expId) {
-  const e = DB.expenses.find(x => x.id === expId);
+  const e = live('expenses').find(x => x.id === expId);
   if (!e || !e.supplierInvoice) return;
   document.getElementById('receipt-modal-title').textContent =
     `Supplier Invoice${e.supplierInvoiceRef ? ' — ' + e.supplierInvoiceRef : ''} (${e.desc})`;
@@ -13361,8 +13423,8 @@ function renderWageAdvances(month) {
   if (advAcct)  advAcct.innerHTML  = acctOpts;
 
   // Filter to show all advances, highlight ones for current month
-  const data = [...DB.wageAdvances].sort((a,b) => b.date.localeCompare(a.date));
-  const pending = DB.wageAdvances.filter(a => !a.deducted);
+  const data = [...live('wageAdvances')].sort((a,b) => b.date.localeCompare(a.date));
+  const pending = live('wageAdvances').filter(a => !a.deducted);
   const pendingAmt = pending.reduce((s,a) => s + a.amount, 0);
   document.getElementById('adv-summary').textContent =
     `${pending.length} pending · ${fmt(pendingAmt)} to be deducted`;
@@ -13431,11 +13493,22 @@ function saveWageAdvance() {
 }
 
 function deleteAdvance(id) {
-  if (!confirm('Delete this wage advance record?')) return;
-  DB.wageAdvances = DB.wageAdvances.filter(a => a.id !== id);
-  showToast('Advance deleted');
+  const adv = DB.wageAdvances.find(a => a.id === id && !a.deleted_at);
+  if (!adv) { showToast('Advance not found', 'error'); return; }
+  if (adv.deducted) {
+    if (!confirm('This advance has already been deducted in a payroll run. Trashing it now will NOT reverse the deduction. Continue anyway?')) return;
+  }
+  const reason = prompt(
+    `Move advance for ${adv.name||'#'+adv.staffId} (${fmt(adv.amount)}, ${adv.date}) to Trash?\n\n` +
+    `Why? (optional, recommended for audit)`,
+    ''
+  );
+  if (reason === null) return;
+  softDelete('wageAdvances', id, reason.trim());
+  showToast('Wage advance moved to Trash. Restore from Settings → Trash.');
   const month = document.getElementById('payroll-month').value;
   renderWageAdvances(month);
+  if (typeof sbPersist === 'function') sbPersist('wageAdvances', adv);
 }
 
 function openWageAdvanceModal() {
@@ -13450,7 +13523,7 @@ function openWageAdvanceModal() {
 
 function attachReceiptToSaved(input) {
   const expId = parseInt(input.dataset.expid);
-  const e     = DB.expenses.find(x => x.id === expId);
+  const e     = live('expenses').find(x => x.id === expId);
   const file  = input.files[0];
   if (!file || !e) return;
   if (file.size > 5 * 1024 * 1024) { showToast('File too large — max 5MB', 'error'); return; }
@@ -13504,7 +13577,7 @@ function viewReceiptLine(lineId) {
 
 // View receipt from saved expense record
 function viewExpReceipt(expId) {
-  const e = DB.expenses.find(x => x.id === expId);
+  const e = live('expenses').find(x => x.id === expId);
   if (!e || !e.receipt) return;
   showReceiptModal(e.receipt, e.receiptName, e.receiptType, () => {
     e.receipt = null; e.receiptName = null; e.receiptType = null;
@@ -13560,21 +13633,21 @@ function renderStatement() {
   const txs = [];
 
   // Money IN: payments recorded against invoices
-  (DB.payments||[]).filter(p => p.account === acctName).forEach(p => {
+  (live('payments')||[]).filter(p => p.account === acctName).forEach(p => {
     if (month && !p.date.startsWith(month)) return;
     txs.push({ date:p.date, desc:`Payment — ${p.customer} (${p.invoiceNo})${p.reference?' · '+p.reference:''}`, ref:'Invoice', type:'in', amount:p.amount, raw:p.amount });
   });
 
   // Money IN: legacy paid invoices with no payment records
   live('invoices').filter(i => i.status === 'Paid' && i.account === acctName &&
-    !(DB.payments||[]).some(p => p.invoiceId === i.id)
+    !(live('payments')||[]).some(p => p.invoiceId === i.id)
   ).forEach(i => {
     if (month && !i.date.startsWith(month)) return;
     txs.push({ date:i.paidDate||i.date, desc:`Invoice ${i.no} — ${i.customer}`, ref:'Invoice', type:'in', amount:i.total, raw:i.total });
   });
 
   // Money OUT: paid expenses
-  DB.expenses.filter(e => (e.status||'paid') === 'paid' && e.account === acctName).forEach(e => {
+  live('expenses').filter(e => (e.status||'paid') === 'paid' && e.account === acctName).forEach(e => {
     if (month && !e.date.startsWith(month)) return;
     txs.push({ date:e.date, desc:`${e.desc}${e.supplier ? ' ('+e.supplier+')' : ''}`, ref:e.cat, type:'out', amount:e.amount, raw:e.amount });
   });
@@ -13744,7 +13817,7 @@ function getCashflowEvents(days = 60) {
   });
 
   // Auto: unpaid expenses (money OUT)
-  DB.expenses.filter(e => (e.status||'paid') === 'unpaid' && e.dueDate).forEach(exp => {
+  live('expenses').filter(e => (e.status||'paid') === 'unpaid' && e.dueDate).forEach(exp => {
     if (exp.dueDate >= todayStr && exp.dueDate <= horizonStr) {
       events.push({ id: 'exp-'+exp.id, type:'out', desc: exp.desc,
         amount: exp.amount, date: exp.dueDate, cat: exp.cat,
@@ -14994,7 +15067,7 @@ let editingCnId = null;
 // Sum of all non-voided credit notes against a given invoice
 function getTotalCreditsForInvoice(invoiceId) {
   if (!invoiceId) return 0;
-  return (DB.creditNotes || [])
+  return (live('creditNotes') || [])
     .filter(cn => cn.invoiceId === invoiceId && cn.status !== 'Voided' && cn.status !== 'Draft')
     .reduce((s, cn) => s + (cn.total || 0), 0);
 }
@@ -15003,7 +15076,7 @@ function getTotalCreditsForInvoice(invoiceId) {
 function getInvoiceBalance(inv) {
   if (!inv) return 0;
   const credits = getTotalCreditsForInvoice(inv.id);
-  const paid = (DB.payments || [])
+  const paid = (live('payments') || [])
     .filter(p => p.invoiceId === inv.id)
     .reduce((s, p) => s + (p.amount || 0), 0);
   return Math.max((inv.total || 0) - credits - paid, 0);
@@ -15016,7 +15089,7 @@ function renderCreditNotes() {
   const month  = document.getElementById('cn-month-filter').value || '';
   const status = document.getElementById('cn-status-filter').value || '';
 
-  let items = [...(DB.creditNotes || [])].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  let items = [...(live('creditNotes') || [])].sort((a,b) => (b.date||'').localeCompare(a.date||''));
   if (month)  items = items.filter(cn => (cn.date||'').startsWith(month));
   if (status) items = items.filter(cn => cn.status === status);
   if (search) {
@@ -15160,10 +15233,10 @@ function calcCnTotal() {
     const inv = (DB.invoices||[]).find(i => i.id === invId);
     if (inv) {
       // When editing, exclude this CN's own amount from the existing-credits calculation
-      const existingCredits = (DB.creditNotes||[])
+      const existingCredits = (live('creditNotes')||[])
         .filter(cn => cn.invoiceId === invId && cn.id !== editingCnId && cn.status !== 'Voided' && cn.status !== 'Draft')
         .reduce((s,cn) => s + (cn.total||0), 0);
-      const paid = (DB.payments||[]).filter(p => p.invoiceId === invId).reduce((s,p) => s + (p.amount||0), 0);
+      const paid = (live('payments')||[]).filter(p => p.invoiceId === invId).reduce((s,p) => s + (p.amount||0), 0);
       const available = (inv.total||0) - existingCredits - paid;
       if (total > available + 0.01) {
         warn.style.display = 'block';
@@ -15212,10 +15285,10 @@ function saveCreditNote() {
   // Enforce "cannot exceed invoice balance" only when the CN will actually apply (Issued/Applied)
   const status = document.getElementById('cn-status').value;
   if (status === 'Issued' || status === 'Applied') {
-    const existingCredits = (DB.creditNotes||[])
+    const existingCredits = (live('creditNotes')||[])
       .filter(cn => cn.invoiceId === invId && cn.id !== editingCnId && cn.status !== 'Voided' && cn.status !== 'Draft')
       .reduce((s,cn) => s + (cn.total||0), 0);
-    const paid = (DB.payments||[]).filter(p => p.invoiceId === invId).reduce((s,p) => s + (p.amount||0), 0);
+    const paid = (live('payments')||[]).filter(p => p.invoiceId === invId).reduce((s,p) => s + (p.amount||0), 0);
     const available = (inv.total||0) - existingCredits - paid;
     if (total > available + 0.01) {
       if (!confirm(`This CN (${fmt(total)}) exceeds the invoice's available balance (${fmt(Math.max(available,0))}).\n\nSave anyway?`)) return;
@@ -15256,7 +15329,7 @@ function saveCreditNote() {
 }
 
 function editCreditNote(id) {
-  const cn = (DB.creditNotes||[]).find(c => c.id === id);
+  const cn = (live('creditNotes')||[]).find(c => c.id === id);
   if (!cn) return;
   editingCnId = id;
   document.getElementById('cn-modal-heading').textContent = 'Edit Credit Note';
@@ -15273,10 +15346,17 @@ function editCreditNote(id) {
 }
 
 function deleteCreditNote(id) {
-  if (!confirm('Delete this credit note? This cannot be undone.')) return;
-  DB.creditNotes = (DB.creditNotes||[]).filter(c => c.id !== id);
-  showToast('Credit note deleted');
-  if (typeof sbDelete === 'function') sbDelete('creditNotes', id);
+  const cn = (DB.creditNotes||[]).find(c => c.id === id && !c.deleted_at);
+  if (!cn) { showToast('Credit note not found', 'error'); return; }
+  const reason = prompt(
+    `Move credit note ${cn.no || '#'+id} (${cn.customer||''}, ${fmt(cn.total||0)}) to Trash?\n\n` +
+    `Why? (optional, recommended for audit)`,
+    ''
+  );
+  if (reason === null) return;
+  softDelete('creditNotes', id, reason.trim());
+  showToast('Credit note moved to Trash. Restore from Settings → Trash.');
+  if (typeof sbPersist === 'function') sbPersist('creditNotes', cn);
   renderCreditNotes();
 }
 
@@ -15426,7 +15506,7 @@ function renderDebitNotes() {
   const month  = document.getElementById('dn-month-filter').value || '';
   const status = document.getElementById('dn-status-filter').value || '';
 
-  let items = [...(DB.debitNotes||[])].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  let items = [...(live('debitNotes')||[])].sort((a,b) => (b.date||'').localeCompare(a.date||''));
   if (kindF)  items = items.filter(dn => dn.kind === kindF);
   if (month)  items = items.filter(dn => (dn.date||'').startsWith(month));
   if (status) items = items.filter(dn => dn.status === status);
@@ -15647,7 +15727,7 @@ function saveDebitNote() {
 }
 
 function editDebitNote(id) {
-  const dn = (DB.debitNotes||[]).find(d => d.id === id);
+  const dn = (live('debitNotes')||[]).find(d => d.id === id);
   if (!dn) return;
   editingDnId = id;
   document.getElementById('dn-modal-heading').textContent = 'Edit Debit Note';
@@ -15688,10 +15768,18 @@ function editDebitNote(id) {
 }
 
 function deleteDebitNote(id) {
-  if (!confirm('Delete this debit note? This cannot be undone.')) return;
-  DB.debitNotes = (DB.debitNotes||[]).filter(d => d.id !== id);
-  showToast('Debit note deleted');
-  if (typeof sbDelete === 'function') sbDelete('debitNotes', id);
+  const dn = (DB.debitNotes||[]).find(d => d.id === id && !d.deleted_at);
+  if (!dn) { showToast('Debit note not found', 'error'); return; }
+  const partyName = dn.partyName || dn.customer || '';
+  const reason = prompt(
+    `Move debit note ${dn.no || '#'+id} (${partyName}, ${fmt(dn.total||0)}) to Trash?\n\n` +
+    `Why? (optional, recommended for audit)`,
+    ''
+  );
+  if (reason === null) return;
+  softDelete('debitNotes', id, reason.trim());
+  showToast('Debit note moved to Trash. Restore from Settings → Trash.');
+  if (typeof sbPersist === 'function') sbPersist('debitNotes', dn);
   renderDebitNotes();
 }
 
@@ -15817,7 +15905,7 @@ function openReceivePaymentModal() {
   const customersWithBalance = new Set();
   (live('invoices')||[]).forEach(inv => {
     if (inv.status === 'Paid') return;
-    const paid = (DB.payments||[]).filter(p => p.invoiceId === inv.id).reduce((s,p) => s + (p.amount||0), 0);
+    const paid = (live('payments')||[]).filter(p => p.invoiceId === inv.id).reduce((s,p) => s + (p.amount||0), 0);
     const credits = (typeof getTotalCreditsForInvoice === 'function') ? getTotalCreditsForInvoice(inv.id) : 0;
     const bal = (inv.total||0) - paid - credits;
     if (bal > 0.009) customersWithBalance.add(inv.customer);
@@ -15883,7 +15971,7 @@ function onRpCustomerChange() {
   rpInvoices = (live('invoices')||[])
     .filter(inv => inv.customer === cust && inv.status !== 'Paid')
     .map(inv => {
-      const paid    = (DB.payments||[]).filter(p => p.invoiceId === inv.id).reduce((s,p) => s + (p.amount||0), 0);
+      const paid    = (live('payments')||[]).filter(p => p.invoiceId === inv.id).reduce((s,p) => s + (p.amount||0), 0);
       const credits = (typeof getTotalCreditsForInvoice === 'function') ? getTotalCreditsForInvoice(inv.id) : 0;
       const balance = Math.max((inv.total||0) - paid - credits, 0);
       return {
@@ -16065,7 +16153,7 @@ function saveReceivePayment() {
     createdPayments.push(payment);
 
     // Update invoice status
-    const totalPaidNow = DB.payments.filter(p => p.invoiceId === r.id).reduce((s,p) => s + (p.amount||0), 0);
+    const totalPaidNow = live('payments').filter(p => p.invoiceId === r.id).reduce((s,p) => s + (p.amount||0), 0);
     const credits      = (typeof getTotalCreditsForInvoice === 'function') ? getTotalCreditsForInvoice(r.id) : 0;
     if (totalPaidNow + credits >= (inv.total||0) - 0.009) {
       inv.status = 'Paid';
