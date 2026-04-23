@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MycoBooks — Mushroom Farm Finance</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root {
   --bg: #f5f4f0;
@@ -273,16 +274,20 @@ tr:hover td { background:var(--bg); }
       <p>Mushroom Farm Financial Manager</p>
     </div>
     <div class="login-field">
-      <label>Username</label>
-      <input type="text" id="login-user" placeholder="Username" autocomplete="off">
+      <label id="login-id-label">Email</label>
+      <input type="text" id="login-user" placeholder="you@company.com" autocomplete="username">
     </div>
     <div class="login-field">
       <label>Password</label>
-      <input type="password" id="login-pass" placeholder="Password" autocomplete="off">
+      <input type="password" id="login-pass" placeholder="Password" autocomplete="current-password">
     </div>
     <button class="login-btn" onclick="doLogin()">Sign In</button>
-
-
+    <div style="text-align:center;margin-top:12px;">
+      <a href="#" onclick="doForgotPassword();return false;" style="font-size:12px;color:#7aab82;text-decoration:none;">Forgot password?</a>
+    </div>
+    <div id="login-mode-banner" style="display:none;margin-top:14px;padding:8px 10px;background:#5a3a1a;border-radius:6px;font-size:11px;color:#f0c878;text-align:center;">
+      ⚠ Legacy mode active (?legacy=1) — using old username/password. Remove URL flag for normal login.
+    </div>
   </div>
 </div>
 
@@ -3334,6 +3339,23 @@ tr:hover td { background:var(--bg); }
 const SUPABASE_URL = 'https://cknxqcmlnftwijaqeglo.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrbnhxY21sbmZ0d2lqYXFlZ2xvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4OTY1NzcsImV4cCI6MjA5MTQ3MjU3N30.ffSHZjFOj6QDhLNJgb5IGiajC1dtfTgziGaSP34Vl7Q';
 
+// ---- AUTH CLIENT (Supabase Auth) ----
+// Legacy mode: ?legacy=1 in URL falls back to old username/password against DB.users
+const LEGACY_AUTH = new URLSearchParams(window.location.search).get('legacy') === '1';
+let sbAuth = null;
+try {
+  if (window.supabase && window.supabase.createClient) {
+    sbAuth = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,   // for password-reset redirect
+        storageKey: 'mycobooks_auth',
+      }
+    });
+  }
+} catch(e) { console.warn('Supabase Auth client init failed:', e); }
+
 const SB = {
   async req(method, path, body) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -3714,12 +3736,22 @@ function quickLogin(u, name, p) {
   document.getElementById('login-user').value = u;
   document.getElementById('login-pass').value = p;
 }
-function doLogin() {
-  try {
-  const u = document.getElementById('login-user').value.trim();
-  const p = document.getElementById('login-pass').value;
-  const user = DB.users.find(x => x.username === u && x.password === p && x.active !== false);
-  if (!user) { showToast('Invalid username or password', 'error'); return; }
+
+// Show legacy banner + change label if in legacy mode
+function applyLegacyLoginUI() {
+  if (LEGACY_AUTH) {
+    const label  = document.getElementById('login-id-label');
+    const input  = document.getElementById('login-user');
+    const banner = document.getElementById('login-mode-banner');
+    if (label)  label.textContent = 'Username';
+    if (input)  { input.placeholder = 'Username'; input.type = 'text'; }
+    if (banner) banner.style.display = '';
+  }
+}
+
+// Shared post-login: shows app, applies perms, loads data, renders dashboard.
+// `user` is the matched DB.users row (profile).
+function _completeLogin(user) {
   DB.currentUser = user;
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
@@ -3743,7 +3775,6 @@ function doLogin() {
   } catch(e) {}
   // Load all data from Supabase then re-render
   sbLoad().then(() => {
-    // Keep current user from session (sbLoad overwrites DB.users)
     if (!DB.currentUser) DB.currentUser = user;
     applyPermissions();
     setToday();
@@ -3754,14 +3785,83 @@ function doLogin() {
     if (typeof applyCurrencyLabels === 'function') applyCurrencyLabels();
     startAutoSave();
   });
-  } catch(e) { alert('Login error: ' + e.message + '\n' + e.stack); }
 }
-function doLogout() {
+
+async function doLogin() {
+  try {
+    const idVal = document.getElementById('login-user').value.trim();
+    const p     = document.getElementById('login-pass').value;
+    if (!idVal || !p) { showToast('Enter your credentials', 'error'); return; }
+
+    // ---- LEGACY MODE: old username/password against DB.users ----
+    if (LEGACY_AUTH) {
+      const user = DB.users.find(x => x.username === idVal && x.password === p && x.active !== false);
+      if (!user) { showToast('Invalid username or password', 'error'); return; }
+      _completeLogin(user);
+      return;
+    }
+
+    // ---- NEW MODE: Supabase Auth ----
+    if (!sbAuth) { showToast('Auth client not loaded — try ?legacy=1', 'error'); return; }
+    const { data, error } = await sbAuth.auth.signInWithPassword({ email: idVal, password: p });
+    if (error) { showToast(error.message || 'Sign-in failed', 'error'); return; }
+    const authUserId = data.user && data.user.id;
+    if (!authUserId) { showToast('No user returned from auth', 'error'); return; }
+
+    // Look up the matching profile in DB.users by auth_id
+    const profile = DB.users.find(u => u.auth_id === authUserId && u.active !== false);
+    if (!profile) {
+      await sbAuth.auth.signOut();
+      showToast('Account not linked to a user profile. Contact admin.', 'error');
+      return;
+    }
+    _completeLogin(profile);
+  } catch(e) {
+    console.error('Login error:', e);
+    showToast('Login error: ' + e.message, 'error');
+  }
+}
+
+async function doLogout() {
+  try {
+    if (sbAuth && !LEGACY_AUTH) await sbAuth.auth.signOut();
+  } catch(e) { console.warn('signOut error:', e); }
   DB.currentUser = null;
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-user').value = '';
   document.getElementById('login-pass').value = '';
+}
+
+// Forgot password — sends reset email via Supabase Auth
+async function doForgotPassword() {
+  if (LEGACY_AUTH) { alert('Password reset is not available in legacy mode. Ask an admin to reset directly.'); return; }
+  if (!sbAuth) { alert('Auth not available'); return; }
+  const email = (document.getElementById('login-user').value || '').trim();
+  if (!email) { alert('Enter your email in the field above first, then click Forgot Password.'); return; }
+  try {
+    const { error } = await sbAuth.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname
+    });
+    if (error) { alert('Could not send reset email: ' + error.message); return; }
+    alert('Password reset email sent to ' + email + '. Check your inbox (and spam folder).');
+  } catch(e) {
+    alert('Error sending reset: ' + e.message);
+  }
+}
+
+// Auto-logout when Supabase session expires/revokes mid-use
+function _watchAuthState() {
+  if (!sbAuth || LEGACY_AUTH) return;
+  sbAuth.auth.onAuthStateChange((event, session) => {
+    // SIGNED_OUT or session disappears while user is in the app → kick to login
+    if (DB.currentUser && (event === 'SIGNED_OUT' || (!session && event === 'TOKEN_REFRESHED'))) {
+      showToast('Session expired — please sign in again', 'error');
+      DB.currentUser = null;
+      document.getElementById('app').style.display = 'none';
+      document.getElementById('login-screen').style.display = 'flex';
+    }
+  });
 }
 
 // ============================================================
@@ -15466,8 +15566,30 @@ function printBulkReceipt(data) {
   win.document.close();
 }
 
-// Run on page load — fetch users from Supabase so login works across devices
-sbInit();
+// Run on page load — fetch users, apply legacy UI, check for existing auth session
+async function _boot() {
+  applyLegacyLoginUI();
+  await sbInit();   // load DB.users from Supabase
+
+  // Auto-resume if a valid Supabase Auth session already exists
+  if (sbAuth && !LEGACY_AUTH) {
+    try {
+      const { data } = await sbAuth.auth.getSession();
+      const session  = data && data.session;
+      if (session && session.user) {
+        const profile = DB.users.find(u => u.auth_id === session.user.id && u.active !== false);
+        if (profile) {
+          _completeLogin(profile);
+        } else {
+          // session exists but no matching profile → force sign out
+          await sbAuth.auth.signOut();
+        }
+      }
+    } catch(e) { console.warn('Session resume failed:', e); }
+    _watchAuthState();
+  }
+}
+_boot();
 
 </script>
 </body>
