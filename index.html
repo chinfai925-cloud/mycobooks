@@ -316,6 +316,11 @@ tr:hover td { background:var(--bg); }
         <div class="name" id="user-name-display">Admin</div>
         <div class="role-badge" id="user-role-display">Administrator</div>
       </div>
+      <button title="My Account"
+        onclick="openMyAccountModal()"
+        style="background:transparent;border:1px solid #2d4a32;border-radius:4px;padding:4px 7px;color:#7aab82;cursor:pointer;font-family:inherit;font-size:11px;flex-shrink:0;transition:all 0.15s;"
+        onmouseover="this.style.borderColor='#52b788';this.style.color='#a8c8ac';"
+        onmouseout="this.style.borderColor='#2d4a32';this.style.color='#7aab82';">⚙</button>
     </div>
     <div style="padding:0 12px 10px;">
       <button id="btn-sb-save" onclick="sbSaveAll()" style="width:100%;padding:7px 10px;background:var(--green-light);border:1px solid #b7e4c7;border-radius:var(--radius-sm);color:var(--green);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;">☁ Save to Cloud</button>
@@ -2782,7 +2787,7 @@ tr:hover td { background:var(--bg); }
 
 <!-- User Modal -->
 <div class="modal-backdrop" id="modal-user">
-  <div class="modal" style="width:420px;">
+  <div class="modal" style="width:480px;">
     <div class="modal-head">
       <span class="modal-title" id="user-modal-title">Add User</span>
       <button class="modal-close" onclick="closeModal('modal-user')">×</button>
@@ -2790,7 +2795,8 @@ tr:hover td { background:var(--bg); }
     <div class="modal-body">
       <div class="form-grid form-grid-2">
         <div class="form-group" style="grid-column:1/-1"><label>Full Name</label><input type="text" id="usr-name" placeholder="Full name"></div>
-        <div class="form-group"><label>Username</label><input type="text" id="usr-username" placeholder="Login username"></div>
+        <div class="form-group"><label>Email <span style="color:var(--red);">*</span></label><input type="email" id="usr-email" placeholder="user@company.com" autocomplete="off"></div>
+        <div class="form-group"><label>Username <span style="color:var(--text3);font-size:10px;">(legacy / display)</span></label><input type="text" id="usr-username" placeholder="login username"></div>
         <div class="form-group"><label>Role</label>
           <select id="usr-role">
             <option value="admin">Admin</option>
@@ -2800,15 +2806,35 @@ tr:hover td { background:var(--bg); }
             <option value="salesperson">Salesperson (orders only)</option>
           </select>
         </div>
-        <div class="form-group"><label>Password</label><input type="password" id="usr-password" placeholder="Set password"></div>
-        <div class="form-group"><label>Confirm Password</label><input type="password" id="usr-password2" placeholder="Re-enter password"></div>
-        <div class="form-group" style="grid-column:1/-1"><label>Status</label>
+        <div class="form-group"><label>Status</label>
           <select id="usr-active">
             <option value="true">Active</option>
-            <option value="false">Inactive</option>
+            <option value="false">Inactive (cannot log in)</option>
           </select>
         </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Auth ID <span style="color:var(--text3);font-size:10px;">(Supabase UUID — leave blank, link later)</span></label>
+          <input type="text" id="usr-auth-id" placeholder="00000000-0000-0000-0000-000000000000" style="font-family:'DM Mono',monospace;font-size:11px;">
+        </div>
       </div>
+
+      <!-- New-user workflow helper -->
+      <div id="usr-workflow-help" style="display:none;margin-top:14px;padding:12px;background:#fff8e1;border:1px solid #ffe082;border-radius:6px;font-size:12px;line-height:1.5;color:#5d4037;">
+        <strong style="color:#bf6f00;">📋 Workflow for new users:</strong>
+        <ol style="margin:6px 0 0 18px;padding:0;">
+          <li>Save this user (with email filled in, Auth ID blank)</li>
+          <li>Open Supabase Dashboard → Authentication → Users → <strong>Add User</strong></li>
+          <li>Use the same email. Choose: send invite email <em>or</em> set password manually</li>
+          <li>Copy the new user's UID, return here, click <strong>"🔗 Link Auth"</strong> on this user's row</li>
+        </ol>
+      </div>
+
+      <!-- Linked-user info -->
+      <div id="usr-linked-info" style="display:none;margin-top:14px;padding:10px 12px;background:var(--green-light);border-radius:6px;font-size:12px;color:var(--green);">
+        ✓ Linked to Supabase Auth. This user can log in with their email + password.
+        <a href="#" id="usr-send-reset" onclick="sendUserResetEmail();return false;" style="margin-left:8px;color:var(--green);text-decoration:underline;">Send reset email</a>
+      </div>
+
       <div class="form-actions">
         <button class="btn btn-outline" onclick="closeModal('modal-user')">Cancel</button>
         <button class="btn btn-primary" onclick="saveUser()">Save User</button>
@@ -2817,6 +2843,75 @@ tr:hover td { background:var(--bg); }
   </div>
 </div>
 
+<!-- My Account Modal -->
+<div class="modal-backdrop" id="modal-my-account">
+  <div class="modal" style="width:440px;">
+    <div class="modal-head">
+      <span class="modal-title">My Account</span>
+      <button class="modal-close" onclick="closeModal('modal-my-account')">×</button>
+    </div>
+    <div class="modal-body">
+      <!-- Account info -->
+      <div style="padding:12px;background:var(--bg);border-radius:6px;margin-bottom:16px;font-size:12px;">
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 14px;">
+          <span style="color:var(--text2);">Name:</span>      <strong id="ma-name">—</strong>
+          <span style="color:var(--text2);">Role:</span>      <strong id="ma-role">—</strong>
+          <span style="color:var(--text2);">Email:</span>     <strong id="ma-email" style="font-family:'DM Mono',monospace;">—</strong>
+          <span style="color:var(--text2);">Auth status:</span><strong id="ma-auth-status">—</strong>
+        </div>
+      </div>
+
+      <!-- Change password -->
+      <div style="margin-bottom:18px;">
+        <h4 style="font-size:13px;font-weight:600;margin:0 0 10px;color:var(--text);">Change Password</h4>
+        <div class="form-grid form-grid-2">
+          <div class="form-group" style="grid-column:1/-1"><label>New Password</label>
+            <input type="password" id="ma-new-pass" placeholder="At least 6 characters" autocomplete="new-password">
+          </div>
+          <div class="form-group" style="grid-column:1/-1"><label>Confirm New Password</label>
+            <input type="password" id="ma-new-pass2" placeholder="Re-enter new password" autocomplete="new-password">
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="changeMyPassword()" style="margin-top:8px;">Update Password</button>
+      </div>
+
+      <!-- Change email -->
+      <div style="margin-bottom:14px;">
+        <h4 style="font-size:13px;font-weight:600;margin:0 0 10px;color:var(--text);">Change Email</h4>
+        <div class="form-group">
+          <label>New Email</label>
+          <input type="email" id="ma-new-email" placeholder="new@email.com" autocomplete="off">
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">A confirmation email will be sent to the new address. Email won't change until confirmed.</div>
+        <button class="btn btn-outline btn-sm" onclick="changeMyEmail()" style="margin-top:8px;">Update Email</button>
+      </div>
+
+      <div class="form-actions" style="border-top:1px solid var(--border);padding-top:12px;">
+        <button class="btn btn-outline" onclick="closeModal('modal-my-account')">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Set New Password Screen (after clicking reset email link) -->
+<div id="reset-screen" style="display:none;position:fixed;inset:0;background: linear-gradient(135deg, #1a2e1e 0%, #2d4a32 50%, #1e3a2a 100%);align-items:center;justify-content:center;z-index:9999;">
+  <div class="login-box">
+    <div class="login-logo">
+      <span class="mushroom">🍄</span>
+      <h1>Set New Password</h1>
+      <p>Choose a new password for your account</p>
+    </div>
+    <div class="login-field">
+      <label>New Password</label>
+      <input type="password" id="reset-pass" placeholder="At least 6 characters" autocomplete="new-password">
+    </div>
+    <div class="login-field">
+      <label>Confirm Password</label>
+      <input type="password" id="reset-pass2" placeholder="Re-enter password" autocomplete="new-password">
+    </div>
+    <button class="login-btn" onclick="completePasswordReset()">Save & Sign In</button>
+  </div>
+</div>
 <!-- Mark Paid Modal -->
 <div class="modal-backdrop" id="modal-mark-paid">
   <div class="modal" style="width:460px;">
@@ -3551,7 +3646,7 @@ async function sbPersist(tableKey, record) {
 // ---- SAVE ALL DATA TO SUPABASE ----
 // Column whitelist — only send fields that exist in Supabase schema
 const COLS = {
-  users:        ['id','username','password','name','role','initials','active'],
+  users:        ['id','username','password','name','role','initials','active','email','auth_id'],
   expenses:     ['id','date','desc','cat','amount','supplier','status','paid','account','notes','dueDate','recurring','recurringId'],
   sales:        ['id','date','customer','product','qty','price','total','type','account','notes','harvestId'],
   invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','currency','notes','product','qty','unit','discount','soId','soOrderNo'],
@@ -3854,6 +3949,13 @@ async function doForgotPassword() {
 function _watchAuthState() {
   if (!sbAuth || LEGACY_AUTH) return;
   sbAuth.auth.onAuthStateChange((event, session) => {
+    // Password reset flow — user clicked the email link, has a recovery session
+    if (event === 'PASSWORD_RECOVERY') {
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'none';
+      document.getElementById('reset-screen').style.display = 'flex';
+      return;
+    }
     // SIGNED_OUT or session disappears while user is in the app → kick to login
     if (DB.currentUser && (event === 'SIGNED_OUT' || (!session && event === 'TOKEN_REFRESHED'))) {
       showToast('Session expired — please sign in again', 'error');
@@ -3862,6 +3964,89 @@ function _watchAuthState() {
       document.getElementById('login-screen').style.display = 'flex';
     }
   });
+}
+
+// ---- Complete password reset (after clicking reset email link) ----
+async function completePasswordReset() {
+  const p1 = document.getElementById('reset-pass').value;
+  const p2 = document.getElementById('reset-pass2').value;
+  if (!p1 || p1.length < 6) { alert('Password must be at least 6 characters'); return; }
+  if (p1 !== p2) { alert('Passwords do not match'); return; }
+  if (!sbAuth) { alert('Auth not available'); return; }
+  try {
+    const { data, error } = await sbAuth.auth.updateUser({ password: p1 });
+    if (error) { alert('Could not update password: ' + error.message); return; }
+    document.getElementById('reset-screen').style.display = 'none';
+    document.getElementById('reset-pass').value  = '';
+    document.getElementById('reset-pass2').value = '';
+    // updateUser leaves the user signed in, so resume normally
+    const authUserId = data && data.user && data.user.id;
+    await sbInit(); // reload users so we can find the profile
+    const profile = DB.users.find(u => u.auth_id === authUserId && u.active !== false);
+    if (profile) {
+      _completeLogin(profile);
+    } else {
+      alert('Password updated, but no user profile linked to your account. Contact admin.');
+      await sbAuth.auth.signOut();
+      document.getElementById('login-screen').style.display = 'flex';
+    }
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+// ---- My Account modal ----
+function openMyAccountModal() {
+  if (!DB.currentUser) return;
+  const u = DB.currentUser;
+  const roleLabel = { admin:'Administrator', manager:'Manager', staff:'Staff', salesperson:'Salesperson', adminstaff:'Admin Staff' };
+  document.getElementById('ma-name').textContent  = u.name || '—';
+  document.getElementById('ma-role').textContent  = roleLabel[u.role] || u.role || '—';
+  document.getElementById('ma-email').textContent = u.email || '(no email on file)';
+  if (LEGACY_AUTH) {
+    document.getElementById('ma-auth-status').innerHTML = '<span style="color:var(--amber);">⚠ Legacy mode (old username/password)</span>';
+  } else if (u.auth_id) {
+    document.getElementById('ma-auth-status').innerHTML = '<span style="color:var(--green);">✓ Linked to Supabase Auth</span>';
+  } else {
+    document.getElementById('ma-auth-status').innerHTML = '<span style="color:var(--text3);">Not linked</span>';
+  }
+  // Clear inputs each open
+  ['ma-new-pass','ma-new-pass2','ma-new-email'].forEach(id => document.getElementById(id).value = '');
+  openModal('modal-my-account');
+}
+
+async function changeMyPassword() {
+  if (LEGACY_AUTH) { alert('Cannot change password in legacy mode. Sign in normally first.'); return; }
+  if (!sbAuth) { alert('Auth not available'); return; }
+  const p1 = document.getElementById('ma-new-pass').value;
+  const p2 = document.getElementById('ma-new-pass2').value;
+  if (!p1 || p1.length < 6) { alert('Password must be at least 6 characters'); return; }
+  if (p1 !== p2) { alert('Passwords do not match'); return; }
+  try {
+    const { error } = await sbAuth.auth.updateUser({ password: p1 });
+    if (error) { alert('Could not update password: ' + error.message); return; }
+    document.getElementById('ma-new-pass').value  = '';
+    document.getElementById('ma-new-pass2').value = '';
+    showToast('Password updated');
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function changeMyEmail() {
+  if (LEGACY_AUTH) { alert('Cannot change email in legacy mode. Sign in normally first.'); return; }
+  if (!sbAuth) { alert('Auth not available'); return; }
+  const newEmail = document.getElementById('ma-new-email').value.trim().toLowerCase();
+  if (!newEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) { alert('Invalid email format'); return; }
+  if (newEmail === (DB.currentUser.email||'').toLowerCase()) { alert('That is already your email'); return; }
+  try {
+    const { error } = await sbAuth.auth.updateUser({ email: newEmail });
+    if (error) { alert('Could not update email: ' + error.message); return; }
+    document.getElementById('ma-new-email').value = '';
+    alert('Confirmation email sent to ' + newEmail + '. Click the link in that email to confirm the change. Your current email stays active until then.');
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
 }
 
 // ============================================================
@@ -12556,23 +12741,54 @@ function renderUsers() {
   const roleBadge = { admin:'badge-green', manager:'badge-blue', staff:'badge-gray', salesperson:'badge-amber', adminstaff:'badge-blue' };
 
   // Users list
-  document.getElementById('users-list').innerHTML = DB.users.map(u => `
+  document.getElementById('users-list').innerHTML = DB.users.map(u => {
+    const linked   = !!u.auth_id;
+    const active   = u.active !== false;
+    const hasLegacy = !!u.password;
+    let statusBadge, statusTitle;
+    if (!active) {
+      statusBadge = '<span class="badge badge-red" style="font-size:10px;">⚫ Disabled</span>';
+      statusTitle = 'User cannot log in';
+    } else if (linked) {
+      statusBadge = '<span class="badge badge-green" style="font-size:10px;">🟢 Active</span>';
+      statusTitle = 'Linked to Supabase Auth — can log in normally';
+    } else if (hasLegacy) {
+      statusBadge = '<span class="badge badge-amber" style="font-size:10px;">🟠 Legacy Only</span>';
+      statusTitle = 'No Auth link — can only log in via ?legacy=1';
+    } else {
+      statusBadge = '<span class="badge badge-gray" style="font-size:10px;">🟡 Pending Link</span>';
+      statusTitle = 'No password & no Auth link — needs setup';
+    }
+    const isMe = u.id === DB.currentUser.id;
+    const linkBtn = !linked
+      ? `<button class="btn btn-outline btn-sm" title="Paste the Supabase Auth UID to link this profile" onclick="openLinkAuthModal(${u.id})">🔗 Link Auth</button>`
+      : `<button class="btn btn-outline btn-sm" title="Send password reset email" onclick="sendResetForUser(${u.id})">↻ Reset Pwd</button>`;
+    const toggleBtn = !isMe
+      ? `<button class="btn btn-outline btn-sm" onclick="toggleUserActive(${u.id})">${active ? 'Disable' : 'Enable'}</button>`
+      : '';
+    return `
     <div style="padding:12px 16px;border-bottom:1px solid var(--border);">
-      <div style="display:flex;align-items:center;gap:10px;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <div class="avatar" style="background:var(--green-light);color:var(--green);font-size:11px;width:34px;height:34px;flex-shrink:0;">
           ${u.initials || u.name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}
         </div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-weight:500;font-size:13px;">${u.name} ${u.id === DB.currentUser.id ? '<span style="font-size:10px;color:var(--green);">(you)</span>' : ''}</div>
-          <div style="font-size:11px;color:var(--text2);margin-top:2px;">@${u.username} · <span class="badge ${roleBadge[u.role]||'badge-gray'}" style="font-size:10px;padding:1px 7px;">${roleLabel[u.role]||u.role}</span> · <span class="badge ${u.active!==false?'badge-green':'badge-red'}" style="font-size:10px;">${u.active!==false?'Active':'Inactive'}</span></div>
+        <div style="flex:1;min-width:180px;">
+          <div style="font-weight:500;font-size:13px;">${u.name} ${isMe ? '<span style="font-size:10px;color:var(--green);">(you)</span>' : ''}</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px;">
+            ${u.email ? `<span style="font-family:'DM Mono',monospace;">${u.email}</span> · ` : ''}@${u.username||'—'} ·
+            <span class="badge ${roleBadge[u.role]||'badge-gray'}" style="font-size:10px;padding:1px 7px;">${roleLabel[u.role]||u.role}</span> ·
+            <span title="${statusTitle}">${statusBadge}</span>
+          </div>
         </div>
-        <div style="display:flex;gap:6px;flex-shrink:0;">
+        <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;">
+          ${linkBtn}
+          ${toggleBtn}
           <button class="btn btn-outline btn-sm" onclick="openUserModal(${u.id})">Edit</button>
-          ${u.id !== DB.currentUser.id ? `<button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id})">Del</button>` : ''}
+          ${!isMe ? `<button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id})">Del</button>` : ''}
         </div>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 
   // Permission matrix — now with 4 roles
   const tick  = `<span style="color:var(--green);font-size:14px;">✓</span>`;
@@ -12591,50 +12807,63 @@ function renderUsers() {
 
 function openUserModal(id) {
   editingUserId = id || null;
+  const helpEl   = document.getElementById('usr-workflow-help');
+  const linkedEl = document.getElementById('usr-linked-info');
   if (id) {
     const u = DB.users.find(x => x.id === id);
     if (!u) return;
     document.getElementById('user-modal-title').textContent = 'Edit User';
-    document.getElementById('usr-name').value = u.name;
-    document.getElementById('usr-username').value = u.username;
-    document.getElementById('usr-role').value = u.role;
-    document.getElementById('usr-password').value = '';
-    document.getElementById('usr-password2').value = '';
-    document.getElementById('usr-active').value = String(u.active !== false);
+    document.getElementById('usr-name').value     = u.name || '';
+    document.getElementById('usr-email').value    = u.email || '';
+    document.getElementById('usr-username').value = u.username || '';
+    document.getElementById('usr-role').value     = u.role || 'staff';
+    document.getElementById('usr-active').value   = String(u.active !== false);
+    document.getElementById('usr-auth-id').value  = u.auth_id || '';
+    helpEl.style.display   = u.auth_id ? 'none' : '';
+    linkedEl.style.display = u.auth_id ? '' : 'none';
   } else {
     document.getElementById('user-modal-title').textContent = 'Add User';
-    ['usr-name','usr-username','usr-password','usr-password2'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('usr-role').value = 'staff';
+    ['usr-name','usr-email','usr-username','usr-auth-id'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('usr-role').value   = 'staff';
     document.getElementById('usr-active').value = 'true';
+    helpEl.style.display   = '';
+    linkedEl.style.display = 'none';
   }
   openModal('modal-user');
 }
 
 function saveUser() {
   const name     = document.getElementById('usr-name').value.trim();
+  const email    = document.getElementById('usr-email').value.trim().toLowerCase();
   const username = document.getElementById('usr-username').value.trim();
   const role     = document.getElementById('usr-role').value;
-  const pw       = document.getElementById('usr-password').value;
-  const pw2      = document.getElementById('usr-password2').value;
   const active   = document.getElementById('usr-active').value === 'true';
+  const authId   = document.getElementById('usr-auth-id').value.trim() || null;
 
-  if (!name || !username) { showToast('Name and username are required', 'error'); return; }
-  if (!editingUserId && !pw) { showToast('Password is required for new users', 'error'); return; }
-  if (pw && pw !== pw2) { showToast('Passwords do not match', 'error'); return; }
+  if (!name)  { showToast('Name is required', 'error'); return; }
+  if (!email) { showToast('Email is required (used to log in)', 'error'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToast('Invalid email format', 'error'); return; }
 
-  // Check duplicate username
-  const dup = DB.users.find(u => u.username === username && u.id !== editingUserId);
-  if (dup) { showToast('Username already exists', 'error'); return; }
+  // Check duplicate email
+  const dupEmail = DB.users.find(u => (u.email||'').toLowerCase() === email && u.id !== editingUserId);
+  if (dupEmail) { showToast('Email already used by another user', 'error'); return; }
+  // Check duplicate auth_id
+  if (authId) {
+    const dupAuth = DB.users.find(u => u.auth_id === authId && u.id !== editingUserId);
+    if (dupAuth) { showToast('That Auth ID is already linked to ' + dupAuth.name, 'error'); return; }
+  }
 
   const initials = name.split(' ').filter(Boolean).map(n=>n[0].toUpperCase()).join('').slice(0,2);
 
   if (editingUserId) {
     const idx = DB.users.findIndex(u => u.id === editingUserId);
     DB.users[idx] = {
-      ...DB.users[idx], name, username, role, active, initials,
-      ...(pw ? { password: pw } : {})
+      ...DB.users[idx],
+      name, email,
+      username: username || DB.users[idx].username,
+      role, active, initials,
+      auth_id: authId,
     };
-    // If editing self, update display
     if (editingUserId === DB.currentUser.id) {
       DB.currentUser = DB.users[idx];
       document.getElementById('user-avatar').textContent = initials;
@@ -12643,19 +12872,94 @@ function saveUser() {
     showToast('User updated');
     editingUserId = null;
   } else {
-    DB.users.push({ id: DB.nextIds.users++, name, username, password: pw, role, active, initials });
-    showToast('User added');
+    DB.users.push({
+      id: DB.nextIds.users++,
+      name, email,
+      username: username || email.split('@')[0],
+      role, active, initials,
+      auth_id: authId,
+    });
+    showToast(authId
+      ? 'User added & linked'
+      : 'User saved. Now create them in Supabase Auth and click 🔗 Link Auth.');
   }
   closeModal('modal-user');
   renderUsers();
+  // Persist immediately
+  if (typeof sbSaveAll === 'function') sbSaveAll().catch(()=>{});
 }
 
 function deleteUser(id) {
   if (id === DB.currentUser.id) { showToast('Cannot delete your own account', 'error'); return; }
-  if (!confirm('Delete this user?')) return;
+  const u = DB.users.find(x => x.id === id);
+  if (!u) return;
+  const warn = u.auth_id
+    ? `Delete this user profile? The Supabase Auth account will NOT be deleted automatically — remove it manually in Supabase Dashboard → Authentication → Users to fully revoke access.`
+    : 'Delete this user?';
+  if (!confirm(warn)) return;
   DB.users = DB.users.filter(u => u.id !== id);
   showToast('User deleted');
   renderUsers();
+  if (typeof sbSaveAll === 'function') sbSaveAll().catch(()=>{});
+}
+
+// ---- Toggle active flag ----
+function toggleUserActive(id) {
+  const u = DB.users.find(x => x.id === id);
+  if (!u) return;
+  const turning = u.active === false ? 'enable' : 'disable';
+  if (!confirm(`${turning === 'disable' ? 'Disable' : 'Enable'} ${u.name}? ${turning === 'disable' ? 'They will no longer be able to log in.' : ''}`)) return;
+  u.active = !(u.active !== false); // flip; default-true becomes false, false becomes true
+  showToast(`${u.name} ${u.active ? 'enabled' : 'disabled'}`);
+  renderUsers();
+  if (typeof sbSaveAll === 'function') sbSaveAll().catch(()=>{});
+}
+
+// ---- Quick "Link Auth" modal: just paste the UID ----
+let linkingUserId = null;
+function openLinkAuthModal(userId) {
+  linkingUserId = userId;
+  const u = DB.users.find(x => x.id === userId);
+  if (!u) return;
+  const uid = prompt(
+    `Paste the Supabase Auth UID for ${u.name} (${u.email||'no email set'}).\n\n` +
+    `Get it from: Supabase Dashboard → Authentication → Users → click the user → copy UID.\n\n` +
+    `Format: 00000000-0000-0000-0000-000000000000`
+  );
+  if (!uid) return;
+  const cleaned = uid.trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleaned)) {
+    showToast('That doesn\'t look like a valid UUID', 'error');
+    return;
+  }
+  // Check duplicate
+  const dup = DB.users.find(x => x.auth_id === cleaned && x.id !== userId);
+  if (dup) { showToast('That Auth ID is already linked to ' + dup.name, 'error'); return; }
+  u.auth_id = cleaned;
+  showToast(`✓ ${u.name} linked to Auth — they can now sign in`);
+  renderUsers();
+  if (typeof sbSaveAll === 'function') sbSaveAll().catch(()=>{});
+}
+
+// ---- Send password reset email (called from user list and from inside edit modal) ----
+async function sendResetForUser(userId) {
+  const u = DB.users.find(x => x.id === userId);
+  if (!u) return;
+  if (!u.email) { showToast('No email on file for this user', 'error'); return; }
+  if (!sbAuth) { showToast('Auth client not loaded', 'error'); return; }
+  if (!confirm(`Send a password reset email to ${u.email}?`)) return;
+  try {
+    const { error } = await sbAuth.auth.resetPasswordForEmail(u.email, {
+      redirectTo: window.location.origin + window.location.pathname
+    });
+    if (error) { showToast('Reset failed: ' + error.message, 'error'); return; }
+    showToast(`Reset email sent to ${u.email}`);
+  } catch(e) {
+    showToast('Reset error: ' + e.message, 'error');
+  }
+}
+function sendUserResetEmail() {
+  if (editingUserId) sendResetForUser(editingUserId);
 }
 
 function attachLineSupplierInv(input) {
