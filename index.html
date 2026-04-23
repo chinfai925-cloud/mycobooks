@@ -10827,25 +10827,83 @@ function escAttr(s) {
     .replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// Sort state for Attendance — defaults to Name A→Z
+let attSort = { col: 'name', dir: 'asc' };
+
+function sortAttendance(col) {
+  if (attSort.col === col) { attSort.dir = attSort.dir === 'asc' ? 'desc' : 'asc'; }
+  else {
+    attSort.col = col;
+    // numeric columns default to descending (largest first)
+    attSort.dir = ['main','overtime','allowances','deduction'].includes(col) ? 'desc' : 'asc';
+  }
+  renderAttendance(document.getElementById('payroll-month').value);
+}
+
+function attSortIcon(col) {
+  if (attSort.col !== col) return '<span style="color:var(--text3);margin-left:3px;">⇅</span>';
+  return attSort.dir === 'asc'
+    ? '<span style="color:var(--green);margin-left:3px;">↑</span>'
+    : '<span style="color:var(--green);margin-left:3px;">↓</span>';
+}
+
+function attTh(col, label, extra='') {
+  return `<th style="cursor:pointer;user-select:none;${extra}" onclick="sortAttendance('${col}')">${label}${attSortIcon(col)}</th>`;
+}
+
+// Returns the numeric "main quantity" used in the days/hours/trips/sales column
+function attMainValue(s, att, wd) {
+  const pt = s.payType || 'salary';
+  if (pt === 'salary' || pt === 'daily') return att.days ?? wd;
+  if (pt === 'hourly')     return att.hours    ?? 0;
+  if (pt === 'trip')       return att.trips    ?? 0;
+  if (pt === 'commission') return att.salesAmt ?? 0;
+  return 0;
+}
+
 function renderAttendance(month) {
   const wd = workingDays(month);
   const label = new Date(month+'-01').toLocaleDateString('en-MY',{month:'long',year:'numeric'});
   document.getElementById('att-month-label').textContent = label;
   document.getElementById('att-workdays').textContent = wd;
 
+  // Build a sortable list — each row keeps a reference to the staff record + computed sort values
+  const rows = DB.staff.map(s => {
+    const att = getAttendance(s.id, month);
+    const effectiveAllowances = Array.isArray(att.allowances) ? att.allowances : (s.allowances || []);
+    const allowTotal = effectiveAllowances.reduce((sum,a) => sum + (parseFloat(a.amount)||0), 0);
+    return {
+      s, att,
+      _name:       (s.name||'').toLowerCase(),
+      _payType:    payTypeLabel(s).toLowerCase(),
+      _main:       attMainValue(s, att, wd),
+      _overtime:   parseFloat(att.overtime)||0,
+      _allowances: allowTotal,
+      _deduction:  parseFloat(att.deduction)||0,
+      _note:       (att.note||'').toLowerCase(),
+    };
+  });
+  const dir = attSort.dir === 'asc' ? 1 : -1;
+  const key = '_' + (attSort.col === 'name' ? 'name' : attSort.col === 'payType' ? 'payType' : attSort.col);
+  rows.sort((a,b) => {
+    const av = a[key], bv = b[key];
+    if (av < bv) return -1 * dir;
+    if (av > bv) return  1 * dir;
+    return 0;
+  });
+
   document.getElementById('att-table').innerHTML = `
     <table>
       <thead><tr>
-        <th>Staff</th>
-        <th>Pay Type</th>
-        <th style="text-align:center;">Days / Hours / Trips / Sales</th>
-        <th style="text-align:center;">OT Hours</th>
-        <th style="text-align:center;">Allowances</th>
-        <th style="text-align:center;">Deduction (RM)</th>
+        ${attTh('name','Staff')}
+        ${attTh('payType','Pay Type')}
+        ${attTh('main','Days / Hours / Trips / Sales','text-align:center;')}
+        ${attTh('overtime','OT Hours','text-align:center;')}
+        ${attTh('allowances','Allowances','text-align:center;')}
+        ${attTh('deduction','Deduction (RM)','text-align:center;')}
         <th>Note</th>
       </tr></thead>
-      <tbody>${DB.staff.map(s => {
-        const att   = getAttendance(s.id, month);
+      <tbody>${rows.map(({s, att}) => {
         const pt    = s.payType || 'salary';
         const isSalary = pt === 'salary';
         const isDaily  = pt === 'daily';
@@ -11043,6 +11101,30 @@ function setPayrollAccount(staffId, acct) {
   payrollAccounts[staffId] = acct;
 }
 
+// Sort state for Run Payroll — defaults to Name A→Z
+let runPaySort = { col: 'name', dir: 'asc' };
+
+function sortRunPayroll(col) {
+  if (runPaySort.col === col) { runPaySort.dir = runPaySort.dir === 'asc' ? 'desc' : 'asc'; }
+  else {
+    runPaySort.col = col;
+    // numeric columns default to descending (largest first)
+    runPaySort.dir = ['gross','epfEmp','statEmp','epfEmr','statEmr','otherDeduct','net'].includes(col) ? 'desc' : 'asc';
+  }
+  renderRunPayroll(document.getElementById('payroll-month').value);
+}
+
+function runPaySortIcon(col) {
+  if (runPaySort.col !== col) return '<span style="color:var(--text3);margin-left:3px;">⇅</span>';
+  return runPaySort.dir === 'asc'
+    ? '<span style="color:var(--green);margin-left:3px;">↑</span>'
+    : '<span style="color:var(--green);margin-left:3px;">↓</span>';
+}
+
+function runPayTh(col, label, extra='') {
+  return `<th style="cursor:pointer;user-select:none;${extra}" onclick="sortRunPayroll('${col}')">${label}${runPaySortIcon(col)}</th>`;
+}
+
 function renderRunPayroll(month) {
   const wd = workingDays(month);
   const label = new Date(month+'-01').toLocaleDateString('en-MY',{month:'long',year:'numeric'});
@@ -11072,6 +11154,27 @@ function renderRunPayroll(month) {
   const acctSummary = Object.entries(byAcct).map(([a,v]) =>
     `<span style="font-size:12px;color:var(--text2);margin-right:12px;">${a}: <strong>${fmt(v)}</strong></span>`
   ).join('');
+
+  // Sort entries (totals are unaffected since they're sums)
+  const _dir = runPaySort.dir === 'asc' ? 1 : -1;
+  const sortedEntries = entries.slice().sort((a,b) => {
+    let av, bv;
+    switch (runPaySort.col) {
+      case 'name':        av = (a.s.name||'').toLowerCase(); bv = (b.s.name||'').toLowerCase(); break;
+      case 'gross':       av = a.grossPay;  bv = b.grossPay;  break;
+      case 'epfEmp':      av = a.statutory.epfEmp; bv = b.statutory.epfEmp; break;
+      case 'statEmp':     av = a.statutory.socsoEmp + a.statutory.eisEmp; bv = b.statutory.socsoEmp + b.statutory.eisEmp; break;
+      case 'epfEmr':      av = a.statutory.epfEmr; bv = b.statutory.epfEmr; break;
+      case 'statEmr':     av = a.statutory.socsoEmr + a.statutory.eisEmr; bv = b.statutory.socsoEmr + b.statutory.eisEmr; break;
+      case 'otherDeduct': av = (a.manualDeduct||0) + (a.advanceDeduct||0); bv = (b.manualDeduct||0) + (b.advanceDeduct||0); break;
+      case 'net':         av = a.net;       bv = b.net;       break;
+      case 'acct':        av = (a.acct||'').toLowerCase(); bv = (b.acct||'').toLowerCase(); break;
+      default:            av = (a.s.name||'').toLowerCase(); bv = (b.s.name||'').toLowerCase();
+    }
+    if (av < bv) return -1 * _dir;
+    if (av > bv) return  1 * _dir;
+    return 0;
+  });
 
   document.getElementById('run-payroll-content').innerHTML = `
     <div class="card" style="margin-bottom:14px;">
@@ -11104,16 +11207,17 @@ function renderRunPayroll(month) {
       <div class="table-wrap">
         <table>
           <thead><tr>
-            <th>Staff</th><th>Gross Pay</th>
-            <th style="text-align:center;color:var(--red);">EPF<br><span style="font-weight:400;font-size:10px;">Emp 11%</span></th>
-            <th style="text-align:center;color:var(--red);">SOCSO+EIS<br><span style="font-weight:400;font-size:10px;">Employee</span></th>
-            <th style="text-align:center;color:var(--amber);">EPF<br><span style="font-weight:400;font-size:10px;">Emr 13%</span></th>
-            <th style="text-align:center;color:var(--amber);">SOCSO+EIS<br><span style="font-weight:400;font-size:10px;">Employer</span></th>
-            <th style="text-align:center;">Other Deduct</th>
-            <th class="text-right" style="color:var(--green);">Net Pay</th>
-            <th>Pay Via</th>
+            ${runPayTh('name','Staff')}
+            ${runPayTh('gross','Gross Pay')}
+            ${runPayTh('epfEmp','EPF<br><span style="font-weight:400;font-size:10px;">Emp 11%</span>','text-align:center;color:var(--red);')}
+            ${runPayTh('statEmp','SOCSO+EIS<br><span style="font-weight:400;font-size:10px;">Employee</span>','text-align:center;color:var(--red);')}
+            ${runPayTh('epfEmr','EPF<br><span style="font-weight:400;font-size:10px;">Emr 13%</span>','text-align:center;color:var(--amber);')}
+            ${runPayTh('statEmr','SOCSO+EIS<br><span style="font-weight:400;font-size:10px;">Employer</span>','text-align:center;color:var(--amber);')}
+            ${runPayTh('otherDeduct','Other Deduct','text-align:center;')}
+            ${runPayTh('net','Net Pay','text-align:right;color:var(--green);')}
+            ${runPayTh('acct','Pay Via')}
           </tr></thead>
-          <tbody>${entries.map(({s,att,basePay,otPay,packingWage,tripWage,grossPay,statutory,deduct,advanceDeduct,manualDeduct,net,acct}) => {
+          <tbody>${sortedEntries.map(({s,att,basePay,otPay,packingWage,tripWage,grossPay,statutory,deduct,advanceDeduct,manualDeduct,net,acct}) => {
             const acctSelect = existing
               ? `<span style="font-size:12px;color:var(--text2);">${acct}</span>`
               : `<select data-staffid="${s.id}" onchange="setPayrollAccount(${s.id},this.value)"
