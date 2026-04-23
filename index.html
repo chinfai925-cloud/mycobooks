@@ -412,6 +412,10 @@ tr:hover td { background:var(--bg); }
         <svg viewBox="0 0 15 15" fill="none"><circle cx="5" cy="4.5" r="2" stroke="currentColor"/><path d="M1 13c0-2.2 1.8-4 4-4M9.5 9l1 1 2.5-2.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg>
         User Management
       </div>
+      <div class="nav-link admin-only" data-page="trash" onclick="navigate('trash',this)" style="display:none;">
+        <svg viewBox="0 0 15 15" fill="none"><path d="M3 4h9M5.5 4V2.5h4V4M4 4l.5 9h6l.5-9M6 6.5v4M9 6.5v4" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Trash
+      </div>
     </nav>
     <div class="sidebar-footer">
       <button class="logout-btn" onclick="doLogout()">Sign Out</button>
@@ -1450,6 +1454,22 @@ tr:hover td { background:var(--bg); }
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- TRASH (admin-only) -->
+    <div class="page" id="page-trash">
+      <div class="page-header">
+        <div>
+          <div class="page-title">🗑 Trash</div>
+          <div class="page-subtitle">Deleted records — restore or permanently delete. Admin only.</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-outline btn-sm" onclick="renderTrash()">↻ Refresh</button>
+        </div>
+      </div>
+      <!-- Tabs for each soft-delete table -->
+      <div style="display:flex;gap:6px;border-bottom:1px solid var(--border);margin-bottom:16px;flex-wrap:wrap;" id="trash-tabs"></div>
+      <div id="trash-content"></div>
     </div>
 
     <!-- SETTINGS -->
@@ -3653,37 +3673,81 @@ async function sbPersist(tableKey, record) {
 // Column whitelist — only send fields that exist in Supabase schema
 const COLS = {
   users:        ['id','username','name','role','initials','active','email','auth_id'],
-  expenses:     ['id','date','desc','cat','amount','supplier','status','paid','account','notes','dueDate','recurring','recurringId'],
+  expenses:     ['id','date','desc','cat','amount','supplier','status','paid','account','notes','dueDate','recurring','recurringId','deleted_at','deleted_by','deleted_reason'],
   sales:        ['id','date','customer','product','qty','price','total','type','account','notes','harvestId'],
-  invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','currency','notes','product','qty','unit','discount','soId','soOrderNo'],
+  invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','currency','notes','product','qty','unit','discount','soId','soOrderNo','deleted_at','deleted_by','deleted_reason'],
   inventory:    ['id','name','cat','unit','stock','reorder','cost','supplier'],
   staff:        ['id','name','role','dept','payType','salary','ic','phone','joinDate','empType','epf','socso','eis','bank','bankAcc','notes','address','emergencyName','emergencyPhone','emergencyRel','allowances'],
   customers:    ['id','name','contact','phone','email','address','terms','currency','priceList','notes'],
   products:     ['id','name','cat','unit','price','priceSgd','weight','desc','status','sort'],
   accounts:     ['id','name','type','description','balance'],
   suppliers:    ['id','name','cat','contact','phone','email','address','terms','notes'],
-  payrollRuns:  ['id','month','processedOn','entries','totalNet'],
-  wageAdvances: ['id','staffId','name','amount','date','deductMonth','reason','account','deducted'],
+  payrollRuns:  ['id','month','processedOn','entries','totalNet','deleted_at','deleted_by','deleted_reason'],
+  wageAdvances: ['id','staffId','name','amount','date','deductMonth','reason','account','deducted','deleted_at','deleted_by','deleted_reason'],
   transfers:    ['id','date','fromAccount','toAccount','amount','notes'],
   cashflowItems:['id','date','desc','amount','type','notes'],
   loans:        ['id','name','lender','amount','balance','rate','term','startDate','account','notes','payments'],
   claims:       ['id','date','submittedOn','claimant','claimType','cat','desc','amount','status','reviewNotes','reviewedOn','paidOn','paidAccount','bulkPaid'],
   recurringExpenses:['id','desc','amount','cat','supplier','day','account','start','end','notes','active','generated'],
-  batches:      ['id','no','type','bags','substrate','bagDate','inocDate','maturityDate','status','harvestDate','harvestKg','notes','createdOn'],
-  harvests:     ['id','date','batchId','kg','flush','grade','harvester','notes','saleId'],
-  packings:     ['id','date','team','members','notes','orders','packs','totalKg','soId','soOrderNo','dispatchTeamId'],
+  batches:      ['id','no','type','bags','substrate','bagDate','inocDate','maturityDate','status','harvestDate','harvestKg','notes','createdOn','deleted_at','deleted_by','deleted_reason'],
+  harvests:     ['id','date','batchId','kg','flush','grade','harvester','notes','saleId','deleted_at','deleted_by','deleted_reason'],
+  packings:     ['id','date','team','members','notes','orders','packs','totalKg','soId','soOrderNo','dispatchTeamId','deleted_at','deleted_by','deleted_reason'],
   packingRates: ['id','product','ratePerPack','notes'],
   packingTeams: ['id','team','members','notes'],
-  salesOrders:  ['id','orderNo','customers','lines','customer','deliveryDate','salesperson','priority','notes','total','status','createdOn','dispatch','invoiceIds'],
+  salesOrders:  ['id','orderNo','customers','lines','customer','deliveryDate','salesperson','priority','notes','total','status','createdOn','dispatch','invoiceIds','deleted_at','deleted_by','deleted_reason'],
   lorries:      ['id','plate','name','model','odometer','serviceIntervalKm','lastServiceKm','roadTaxExpiry','insuranceExpiry','puspakomDate','puspakomNext'],
   refuels:      ['id','date','lorryId','odometer','km','litres','cost','ppl','efficiency','driver','account','notes'],
   maintenance:  ['id','date','lorryId','desc','type','status','odometer','nextKm','vendor','cost','account','nextDate','notes'],
-  trips:        ['id','date','lorryId','driver','routeId','route','wage','mileage','expLines','diesel','toll','other','wageAccount','notes','totalCost'],
+  trips:        ['id','date','lorryId','driver','routeId','route','wage','mileage','expLines','diesel','toll','other','wageAccount','notes','totalCost','deleted_at','deleted_by','deleted_reason'],
   routeRates:   ['id','route','rate','km','notes'],
-  payments:     ['id','invoiceId','invoiceNo','customer','date','amount','currency','account','reference','notes','type'],
-  creditNotes:  ['id','no','date','invoiceId','invoiceNo','customer','lines','total','currency','reason','status','notes','createdOn'],
-  debitNotes:   ['id','no','date','kind','partyType','partyName','invoiceId','invoiceNo','lines','total','currency','reason','status','notes','createdOn'],
+  payments:     ['id','invoiceId','invoiceNo','customer','date','amount','currency','account','reference','notes','type','deleted_at','deleted_by','deleted_reason'],
+  creditNotes:  ['id','no','date','invoiceId','invoiceNo','customer','lines','total','currency','reason','status','notes','createdOn','deleted_at','deleted_by','deleted_reason'],
+  debitNotes:   ['id','no','date','kind','partyType','partyName','invoiceId','invoiceNo','lines','total','currency','reason','status','notes','createdOn','deleted_at','deleted_by','deleted_reason'],
 };
+
+// ---- SOFT DELETE HELPERS ----
+// Tables that support soft delete (have deleted_at column)
+const SOFT_DELETE_TABLES = new Set([
+  'invoices','payments','expenses','payrollRuns','creditNotes','debitNotes','wageAdvances',  // Tier 1
+  'salesOrders','trips','harvests','packings','batches'                                       // Tier 2
+]);
+
+// Returns the LIVE rows of a table (deleted items filtered out).
+// For non-soft-delete tables, returns the raw array.
+function live(tableKey) {
+  const arr = DB[tableKey] || [];
+  if (!SOFT_DELETE_TABLES.has(tableKey)) return arr;
+  return arr.filter(r => !r.deleted_at);
+}
+
+// Returns the TRASHED rows of a soft-delete table.
+function trashed(tableKey) {
+  const arr = DB[tableKey] || [];
+  if (!SOFT_DELETE_TABLES.has(tableKey)) return [];
+  return arr.filter(r => !!r.deleted_at);
+}
+
+// Mark a record as deleted (soft delete). Returns the modified record or null.
+function softDelete(tableKey, id, reason) {
+  const arr = DB[tableKey] || [];
+  const rec = arr.find(r => r.id === id);
+  if (!rec) return null;
+  rec.deleted_at     = new Date().toISOString();
+  rec.deleted_by     = (DB.currentUser && DB.currentUser.name) || 'unknown';
+  rec.deleted_reason = reason || '';
+  return rec;
+}
+
+// Clear soft-delete fields (restore from trash). Returns the modified record or null.
+function softRestore(tableKey, id) {
+  const arr = DB[tableKey] || [];
+  const rec = arr.find(r => r.id === id);
+  if (!rec) return null;
+  rec.deleted_at     = null;
+  rec.deleted_by     = null;
+  rec.deleted_reason = null;
+  return rec;
+}
 
 let sbSaving = false;
 async function sbSaveAll(opts) {
@@ -4238,12 +4302,13 @@ function navigate(page, el) {
   if (el) el.classList.add('active');
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
-  const renders = { dashboard:renderDashboard, expenses:renderExpenses, invoices:renderInvoices, orders:renderOrders, customers:renderCustomers, suppliers:renderSuppliers, products:renderProducts, inventory:renderInventory, production:renderProduction, harvest:renderHarvest, fleet:renderFleet, payroll:renderPayroll, reports:renderReport, statement:renderStatement, cashflow:renderCashflow, loans:renderLoans, claims:renderClaims, settings:renderSettings, users:renderUsers, creditnotes:renderCreditNotes, debitnotes:renderDebitNotes };
+  const renders = { dashboard:renderDashboard, expenses:renderExpenses, invoices:renderInvoices, orders:renderOrders, customers:renderCustomers, suppliers:renderSuppliers, products:renderProducts, inventory:renderInventory, production:renderProduction, harvest:renderHarvest, fleet:renderFleet, payroll:renderPayroll, reports:renderReport, statement:renderStatement, cashflow:renderCashflow, loans:renderLoans, claims:renderClaims, settings:renderSettings, users:renderUsers, creditnotes:renderCreditNotes, debitnotes:renderDebitNotes, trash:renderTrash };
   // Access guards
   if (page === 'payroll'   && !can('seePayroll'))  { showToast('Access denied — Payroll is Admin only', 'error'); return; }
   if (page === 'reports'   && !can('seeReports'))  { showToast('Access denied — Reports is Admin & Manager only', 'error'); return; }
   if (page === 'statement' && !can('seeReports'))  { showToast('Access denied — Statements is Admin & Manager only', 'error'); return; }
   if (page === 'users'     && !can('seeUsers'))    { showToast('Access denied — User Management is Admin only', 'error'); return; }
+  if (page === 'trash'     && !can('seeUsers'))    { showToast('Access denied — Trash is Admin only', 'error'); return; }
   if (renders[page]) renders[page]();
 }
 
@@ -4330,11 +4395,11 @@ function renderDashboard() {
   const totalExp = exps.reduce((s,x) => s + x.amount, 0);
   // Revenue = recorded payments + legacy paid invoices (no payment record)
   const paymentRev = (DB.payments||[]).filter(p=>{ const d=p.date||''; return !month||d.startsWith(month); }).reduce((s,p)=>s+p.amount,0);
-  const legacyPaid = DB.invoices.filter(i=>(i.status==='Paid'||i.status==='Partial') && !(DB.payments||[]).some(p=>p.invoiceId===i.id));
+  const legacyPaid = live('invoices').filter(i=>(i.status==='Paid'||i.status==='Partial') && !(DB.payments||[]).some(p=>p.invoiceId===i.id));
   const legacyRev  = legacyPaid.filter(i=>{ const d=i.paidDate||i.date||''; return !month||d.startsWith(month); }).reduce((s,i)=>s+i.total,0);
   const totalSal = paymentRev + legacyRev;
   const profit = totalSal - totalExp;
-  const pending = DB.invoices.filter(i => i.status === 'Pending' || i.status === 'Overdue');
+  const pending = live('invoices').filter(i => i.status === 'Pending' || i.status === 'Overdue');
   // Net pending = invoice totals − applied credit notes (excludes Draft/Voided) + outstanding Sales DNs
   const pendingInvAmt = pending.reduce((s,i) => {
     const credits = (typeof getTotalCreditsForInvoice === 'function') ? getTotalCreditsForInvoice(i.id) : 0;
@@ -4380,7 +4445,7 @@ function renderDashboard() {
   // Recent transactions (last 6)
   const allTx = [
     ...DB.expenses.map(e => ({...e, txType:'expense', txAmt: -e.amount, txLabel: e.desc, txCat: e.cat})),
-    ...DB.invoices.map(i => ({...i, txType:'sale', txAmt: i.total, txLabel: i.customer + ' — ' + i.no, txCat: i.status}))
+    ...live('invoices').map(i => ({...i, txType:'sale', txAmt: i.total, txLabel: i.customer + ' — ' + i.no, txCat: i.status}))
   ].sort((a,b) => b.date.localeCompare(a.date)).slice(0,6);
 
   document.getElementById('dash-recent-tx').innerHTML = allTx.map(t => `
@@ -9728,7 +9793,7 @@ function populateStmtCustomers() {
   const el = document.getElementById('stmt-customer-filter');
   if (!el) return;
   const cur = el.value;
-  const names = [...new Set(DB.invoices.map(i=>i.customer))].sort();
+  const names = [...new Set(live('invoices').map(i=>i.customer))].sort();
   el.innerHTML = '<option value="">— Select customer —</option>' + names.map(n=>`<option${n===cur?' selected':''}>${n}</option>`).join('');
 }
 
@@ -9743,7 +9808,7 @@ function populatePayHistCustomers() {
 function viewPayments(invId) {
   switchInvTab(3);
   setTimeout(() => {
-    const inv = DB.invoices.find(i=>i.id===invId);
+    const inv = live('invoices').find(i=>i.id===invId);
     if (inv) {
       const el = document.getElementById('pay-hist-customer');
       if (el) { el.value = inv.customer; renderPaymentHistory(); }
@@ -9758,7 +9823,7 @@ function renderCustomerStatement() {
   const year     = (document.getElementById('stmt-year-filter')||{}).value||'';
   if (!customer) { el.innerHTML = '<div class="empty-state card"><p>Select a customer to view their statement</p></div>'; return; }
 
-  const invs = DB.invoices.filter(i =>
+  const invs = live('invoices').filter(i =>
     i.customer === customer && (!year || (i.date||'').startsWith(year))
   ).sort((a,b) => a.date.localeCompare(b.date));
 
@@ -9921,7 +9986,7 @@ function renderPaymentHistory() {
 function editPayment(payId) {
   const p = (DB.payments||[]).find(x=>x.id===payId);
   if (!p) return;
-  const inv = DB.invoices.find(i=>i.id===p.invoiceId);
+  const inv = live('invoices').find(i=>i.id===p.invoiceId);
   const cs = (p.currency||'MYR') === 'SGD' ? 'SGD' : 'RM';
   document.getElementById('edit-pay-id').value = payId;
   document.getElementById('edit-pay-date').value = p.date||'';
@@ -9945,7 +10010,7 @@ function saveEditPayment() {
   p.reference = document.getElementById('edit-pay-ref').value.trim();
   p.notes     = document.getElementById('edit-pay-notes').value.trim();
   // Recalculate invoice status
-  const inv = DB.invoices.find(i=>i.id===p.invoiceId);
+  const inv = live('invoices').find(i=>i.id===p.invoiceId);
   if (inv) {
     const totalPaid = DB.payments.filter(x=>x.invoiceId===inv.id).reduce((s,x)=>s+x.amount,0);
     if (totalPaid >= inv.total) { inv.status = 'Paid'; inv.account = p.account; }
@@ -9964,7 +10029,7 @@ function deletePayment(payId) {
   DB.payments = DB.payments.filter(x=>x.id!==payId);
   // Recalculate invoice status
   if (p) {
-    const inv = DB.invoices.find(i=>i.id===p.invoiceId);
+    const inv = live('invoices').find(i=>i.id===p.invoiceId);
     if (inv) {
       const totalPaid = DB.payments.filter(x=>x.invoiceId===inv.id).reduce((s,x)=>s+x.amount,0);
       if (totalPaid >= inv.total) { inv.status = 'Paid'; }
@@ -9980,7 +10045,7 @@ function deletePayment(payId) {
 function reprintReceipt(payId) {
   const p = (DB.payments||[]).find(x=>x.id===payId);
   if (!p) return;
-  const inv = DB.invoices.find(i=>i.id===p.invoiceId);
+  const inv = live('invoices').find(i=>i.id===p.invoiceId);
   if (!inv) return;
   printReceipt(p, inv);
 }
@@ -9989,7 +10054,7 @@ function renderInvoices() {
   const search = document.getElementById('inv-search').value.toLowerCase();
   const status = document.getElementById('inv-status-filter').value;
   const month  = (document.getElementById('inv-month-filter')||{}).value||'';
-  let data = DB.invoices.filter(i =>
+  let data = live('invoices').filter(i =>
     (!search || i.customer.toLowerCase().includes(search) || i.no.toLowerCase().includes(search)) &&
     (!status || i.status === status) &&
     (!month  || (i.date||'').startsWith(month))
@@ -10028,7 +10093,7 @@ function renderInvoices() {
 }
 
 function printInvoice(id) {
-  const i = DB.invoices.find(x=>x.id===id);
+  const i = live('invoices').find(x=>x.id===id);
   if (!i) return;
 
   const co = DB.company || {};
@@ -10174,7 +10239,7 @@ function printInvoice(id) {
 }
 
 function printDO(id) {
-  const i = DB.invoices.find(x=>x.id===id);
+  const i = live('invoices').find(x=>x.id===id);
   if (!i) return;
   const co = DB.company || {};
 
@@ -10289,7 +10354,7 @@ function printDO(id) {
 }
 
 function editInvoice(id) {
-  const inv = DB.invoices.find(i => i.id === id);
+  const inv = live('invoices').find(i => i.id === id);
   if (!inv) return;
   editingInvoiceId = id;
   document.getElementById('inv-modal-heading').textContent = 'Edit Invoice';
@@ -10415,7 +10480,7 @@ function createSalesFromInvoice(inv, account) {
 }
 
 function markInvoicePaid(id) {
-  const inv = DB.invoices.find(i => i.id === id);
+  const inv = live('invoices').find(i => i.id === id);
   if (!inv) return;
   const currency = inv.currency || 'MYR';
   const currSym  = currency === 'SGD' ? 'SGD' : 'RM';
@@ -10441,7 +10506,7 @@ function markInvoicePaid(id) {
 
 function updatePayBalance() {
   const id      = parseInt(document.getElementById('pay-inv-id').value);
-  const inv     = DB.invoices.find(i => i.id === id);
+  const inv     = live('invoices').find(i => i.id === id);
   if (!inv) return;
   const currency = inv.currency || 'MYR';
   const currSym  = currency === 'SGD' ? 'SGD' : 'RM';
@@ -10468,7 +10533,7 @@ function confirmMarkPaid() {
   const date    = document.getElementById('pay-inv-date').value;
   const ref     = document.getElementById('pay-inv-ref').value.trim();
   const notes   = document.getElementById('pay-inv-notes').value.trim();
-  const inv     = DB.invoices.find(i => i.id === id);
+  const inv     = live('invoices').find(i => i.id === id);
   if (!inv || amount <= 0) { showToast('Enter a valid amount', 'error'); return; }
 
   // Record payment
@@ -10550,11 +10615,18 @@ function printReceipt(payment, inv) {
 
 
 function deleteInvoice(id) {
-  if (!confirm('Delete this invoice? Any linked sales records will also be removed.')) return;
   const inv = DB.invoices.find(i => i.id === id);
-  DB.invoices = DB.invoices.filter(i => i.id !== id);
-  showToast('Invoice and linked sales deleted');
+  if (!inv) return;
+  const reason = prompt(
+    `Move invoice ${inv.no || '#'+id} (${inv.customer}, ${fmt(inv.total)}) to Trash?\n\n` +
+    `Why are you deleting this? (optional, but recommended for audit)`,
+    ''
+  );
+  if (reason === null) return; // cancelled
+  softDelete('invoices', id, reason.trim());
+  showToast(`Invoice moved to Trash. Restore from Settings → Trash.`);
   renderInvoices();
+  if (typeof sbPersist === 'function') sbPersist('invoices', inv);
 }
 
 // ============================================================
@@ -11975,7 +12047,7 @@ function renderReport() {
   const monthLabel = new Date(month + '-01').toLocaleDateString('en-MY', {month:'long', year:'numeric'});
   const exps = filterByMonth(DB.expenses, 'date', month);
   const sals = filterByMonth((DB.payments||[]), 'date', month);
-  const legacyInvs = filterByMonth(DB.invoices.filter(i=>(i.status==='Paid'||i.status==='Partial') && !(DB.payments||[]).some(p=>p.invoiceId===i.id)), 'date', month);
+  const legacyInvs = filterByMonth(live('invoices').filter(i=>(i.status==='Paid'||i.status==='Partial') && !(DB.payments||[]).some(p=>p.invoiceId===i.id)), 'date', month);
 
   // CN/DN adjustments for this month (exclude Draft & Voided)
   const cnThisMonth = (DB.creditNotes||[]).filter(cn =>
@@ -12001,7 +12073,7 @@ function renderReport() {
 
   const byProduct = {};
   sals.forEach(p => {
-    const inv = DB.invoices.find(i=>i.id===p.invoiceId);
+    const inv = live('invoices').find(i=>i.id===p.invoiceId);
     if (inv && inv.lines) inv.lines.forEach(l => { byProduct[l.product] = (byProduct[l.product]||0) + (l.subtotal||0); });
     else if (inv) byProduct[inv.customer] = (byProduct[inv.customer]||0) + (p.amount||0);
   });
@@ -12110,7 +12182,7 @@ function accountBalance(acct) {
   // Payments recorded against invoices
   const paymentsIn = (DB.payments||[]).filter(p => p.account === acct.name).reduce((s,p) => s+p.amount, 0);
   // Paid invoices with no payment records (legacy)
-  const legacyIn  = DB.invoices.filter(i => i.status==='Paid' && i.account === acct.name &&
+  const legacyIn  = live('invoices').filter(i => i.status==='Paid' && i.account === acct.name &&
     !(DB.payments||[]).some(p => p.invoiceId === i.id)
   ).reduce((s,x) => s+x.total, 0);
   const outflow   = DB.expenses.filter(e => (e.status||'paid') === 'paid' && e.account === acct.name).reduce((s,x) => s+x.amount, 0);
@@ -12602,8 +12674,8 @@ function renderCustomers() {
           <th class="text-right">Invoices</th><th class="text-right">Invoiced</th><th class="text-right">Sales</th><th></th>
         </tr></thead>
         <tbody>${data.map(c => {
-          const invCount  = DB.invoices.filter(i=>i.customer===c.name).length;
-          const invTotal  = DB.invoices.filter(i=>i.customer===c.name).reduce((s,i)=>s+i.total,0);
+          const invCount  = live('invoices').filter(i=>i.customer===c.name).length;
+          const invTotal  = live('invoices').filter(i=>i.customer===c.name).reduce((s,i)=>s+i.total,0);
           const saleTotal = (DB.payments||[]).filter(p=>p.customer===c.name).reduce((s,p)=>s+p.amount,0);
           return `<tr>
             <td>
@@ -12625,8 +12697,8 @@ function renderCustomers() {
   } else {
     document.getElementById('customers-grid').className = 'customers-grid';
     document.getElementById('customers-grid').innerHTML = data.map(c => {
-      const invCount  = DB.invoices.filter(i=>i.customer===c.name).length;
-      const invTotal  = DB.invoices.filter(i=>i.customer===c.name).reduce((s,i)=>s+i.total,0);
+      const invCount  = live('invoices').filter(i=>i.customer===c.name).length;
+      const invTotal  = live('invoices').filter(i=>i.customer===c.name).reduce((s,i)=>s+i.total,0);
       const saleTotal = (DB.payments||[]).filter(p=>p.customer===c.name).reduce((s,p)=>s+p.amount,0);
       return `<div class="customer-card">
         <div class="customer-avatar">${custInitials(c.name)}</div>
@@ -12818,6 +12890,189 @@ const PERM_LABELS = [
   { key:'seeReports',   label:'Access P&L Reports' },
   { key:'seeUsers',     label:'Manage users' },
 ];
+
+// ============================================================
+// TRASH (admin-only) — view/restore/permanently-delete soft-deleted records
+// ============================================================
+let trashTab = 'invoices';
+
+function renderTrash() {
+  // Build tabs — one per soft-delete table, with badge count
+  const tableLabels = {
+    invoices: '📄 Invoices', payments: '💰 Payments', expenses: '🧾 Expenses',
+    payrollRuns: '📅 Payroll Runs', creditNotes: 'CR Notes', debitNotes: 'DR Notes',
+    wageAdvances: '💵 Wage Advances',
+    salesOrders: '📦 Sales Orders', trips: '🚛 Trips', harvests: '🌾 Harvests',
+    packings: '📦 Packings', batches: '🧪 Batches'
+  };
+  const order = ['invoices','payments','expenses','payrollRuns','creditNotes','debitNotes','wageAdvances','salesOrders','trips','harvests','packings','batches'];
+  document.getElementById('trash-tabs').innerHTML = order.map(key => {
+    const count = trashed(key).length;
+    const active = trashTab === key;
+    return `<button onclick="trashTab='${key}';renderTrash()"
+      style="padding:8px 14px;border:none;background:${active?'var(--green)':'transparent'};color:${active?'#fff':'var(--text2)'};
+             border-bottom:2px solid ${active?'var(--green)':'transparent'};cursor:pointer;font-size:12px;font-family:inherit;border-radius:6px 6px 0 0;">
+      ${tableLabels[key]||key} ${count>0 ? `<span style="background:${active?'rgba(255,255,255,.25)':'var(--red-light)'};color:${active?'#fff':'var(--red)'};padding:1px 6px;border-radius:8px;font-size:10px;margin-left:4px;">${count}</span>` : ''}
+    </button>`;
+  }).join('');
+
+  // Render content for active tab
+  const items = trashed(trashTab);
+  if (items.length === 0) {
+    document.getElementById('trash-content').innerHTML = `
+      <div style="text-align:center;padding:40px;color:var(--text3);">
+        <div style="font-size:48px;margin-bottom:8px;">🗑</div>
+        <div style="font-size:14px;">No ${(tableLabels[trashTab]||trashTab).replace(/^[^\s]+\s/,'')} in Trash</div>
+      </div>`;
+    return;
+  }
+
+  // Per-table column rendering
+  const renderRow = (item) => {
+    let primary = '', secondary = '', amount = '';
+    switch (trashTab) {
+      case 'invoices':
+        primary   = `${item.no || '#'+item.id} — ${item.customer || ''}`;
+        secondary = `Date: ${item.date || '—'} · Status: ${item.status || '—'}`;
+        amount    = fmt(item.total||0);
+        break;
+      case 'payments':
+        primary   = `${item.invoiceNo || '#'+item.id} — ${item.customer || ''}`;
+        secondary = `Date: ${item.date || '—'} · Account: ${item.account||'—'}`;
+        amount    = fmt(item.amount||0);
+        break;
+      case 'expenses':
+        primary   = item.desc || '(no description)';
+        secondary = `Date: ${item.date || '—'} · Cat: ${item.cat||'—'} · Supplier: ${item.supplier||'—'}`;
+        amount    = fmt(item.amount||0);
+        break;
+      case 'payrollRuns':
+        primary   = `Payroll — ${item.month}`;
+        secondary = `Processed: ${item.processedOn||'—'}`;
+        amount    = fmt(item.totalNet||0);
+        break;
+      case 'creditNotes':
+      case 'debitNotes':
+        primary   = `${item.no || '#'+item.id} — ${item.customer || item.partyName || ''}`;
+        secondary = `Date: ${item.date || '—'} · Inv: ${item.invoiceNo||'—'} · ${item.reason||''}`;
+        amount    = fmt(item.total||0);
+        break;
+      case 'wageAdvances':
+        primary   = `Advance — ${item.name || '#'+item.staffId}`;
+        secondary = `Date: ${item.date || '—'} · Deduct: ${item.deductMonth||'—'}`;
+        amount    = fmt(item.amount||0);
+        break;
+      case 'salesOrders':
+        primary   = `${item.orderNo || '#'+item.id} — ${item.customer || ''}`;
+        secondary = `Delivery: ${item.deliveryDate || '—'} · Status: ${item.status||'—'}`;
+        amount    = fmt(item.total||0);
+        break;
+      case 'trips':
+        primary   = `Trip ${item.route || '#'+item.id}`;
+        secondary = `Date: ${item.date || '—'} · Driver: ${item.driver||'—'}`;
+        amount    = fmt(item.totalCost||0);
+        break;
+      case 'harvests':
+        primary   = `Harvest — Batch ${item.batchId || '?'}`;
+        secondary = `Date: ${item.date || '—'} · ${item.kg||0}kg · ${item.grade||''}`;
+        amount    = `${item.kg||0} kg`;
+        break;
+      case 'packings':
+        primary   = `Packing — Team ${item.team || '?'}`;
+        secondary = `Date: ${item.date || '—'} · ${item.totalKg||0}kg`;
+        amount    = `${item.packs||0} packs`;
+        break;
+      case 'batches':
+        primary   = `Batch ${item.no || '#'+item.id}`;
+        secondary = `Bagged: ${item.bagDate || '—'} · ${item.bags||0} bags · ${item.status||''}`;
+        amount    = `${item.bags||0}`;
+        break;
+      default:
+        primary = `#${item.id}`;
+        secondary = '';
+    }
+    const deletedAgo = item.deleted_at
+      ? new Date(item.deleted_at).toLocaleString('en-MY', { dateStyle:'medium', timeStyle:'short' })
+      : '—';
+    return `
+      <tr>
+        <td>
+          <div style="font-weight:500;font-size:13px;">${primary}</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px;">${secondary}</div>
+        </td>
+        <td class="mono text-right" style="font-weight:500;">${amount}</td>
+        <td>
+          <div style="font-size:12px;">${item.deleted_by || '—'}</div>
+          <div style="font-size:10px;color:var(--text3);">${deletedAgo}</div>
+        </td>
+        <td style="font-size:12px;color:var(--text2);max-width:200px;">${item.deleted_reason || '<span style="color:var(--text3);">—</span>'}</td>
+        <td>
+          <div style="display:flex;gap:6px;justify-content:flex-end;">
+            <button class="btn btn-outline btn-sm" onclick="trashRestore('${trashTab}',${item.id})">↩ Restore</button>
+            <button class="btn btn-danger btn-sm" onclick="trashPurge('${trashTab}',${item.id})">✕ Purge</button>
+          </div>
+        </td>
+      </tr>`;
+  };
+
+  document.getElementById('trash-content').innerHTML = `
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">${tableLabels[trashTab]||trashTab} in Trash (${items.length})</span>
+        ${items.length > 1 ? `<button class="btn btn-danger btn-sm" onclick="trashEmpty('${trashTab}')">🗑 Empty This Tab</button>` : ''}
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Item</th>
+            <th class="text-right">Amount</th>
+            <th>Deleted By</th>
+            <th>Reason</th>
+            <th></th>
+          </tr></thead>
+          <tbody>${items.map(renderRow).join('')}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function trashRestore(tableKey, id) {
+  const rec = (DB[tableKey]||[]).find(r => r.id === id);
+  if (!rec) return;
+  if (!confirm(`Restore this item? It will reappear in the normal ${tableKey} list.`)) return;
+  softRestore(tableKey, id);
+  showToast('Restored ✓');
+  renderTrash();
+  if (typeof sbPersist === 'function') sbPersist(tableKey, rec);
+}
+
+function trashPurge(tableKey, id) {
+  const rec = (DB[tableKey]||[]).find(r => r.id === id);
+  if (!rec) return;
+  const label = rec.no || rec.desc || rec.invoiceNo || `#${id}`;
+  if (!confirm(`PERMANENTLY DELETE "${label}" from ${tableKey}?\n\nThis cannot be undone. The record will be removed from Supabase forever.`)) return;
+  if (!confirm(`Are you absolutely sure? Type-confirm by clicking OK one more time.`)) return;
+  // Remove from local array
+  DB[tableKey] = (DB[tableKey]||[]).filter(r => r.id !== id);
+  showToast('Permanently deleted');
+  renderTrash();
+  if (typeof sbDelete === 'function') sbDelete(tableKey, id);
+}
+
+function trashEmpty(tableKey) {
+  const items = trashed(tableKey);
+  if (items.length === 0) return;
+  if (!confirm(`PERMANENTLY DELETE all ${items.length} items in ${tableKey} trash?\n\nThis cannot be undone.`)) return;
+  if (!confirm(`Truly sure? ${items.length} records will be erased from Supabase forever.`)) return;
+  const ids = items.map(r => r.id);
+  DB[tableKey] = (DB[tableKey]||[]).filter(r => !ids.includes(r.id));
+  showToast(`${ids.length} records permanently deleted`);
+  renderTrash();
+  // Delete each from Supabase
+  if (typeof sbDelete === 'function') {
+    ids.forEach(id => { try { sbDelete(tableKey, id); } catch(e){} });
+  }
+}
 
 function renderUsers() {
   const roleLabel = { admin:'Administrator', manager:'Manager', staff:'Staff', salesperson:'Salesperson', adminstaff:'Admin Staff' };
@@ -13311,7 +13566,7 @@ function renderStatement() {
   });
 
   // Money IN: legacy paid invoices with no payment records
-  DB.invoices.filter(i => i.status === 'Paid' && i.account === acctName &&
+  live('invoices').filter(i => i.status === 'Paid' && i.account === acctName &&
     !(DB.payments||[]).some(p => p.invoiceId === i.id)
   ).forEach(i => {
     if (month && !i.date.startsWith(month)) return;
@@ -13479,7 +13734,7 @@ function getCashflowEvents(days = 60) {
   });
 
   // Auto: unpaid invoices (money IN)
-  DB.invoices.filter(i => i.status !== 'Paid' && (i.due || i.dueDate)).forEach(inv => {
+  live('invoices').filter(i => i.status !== 'Paid' && (i.due || i.dueDate)).forEach(inv => {
     const dueDate = inv.due || inv.dueDate;
     if (dueDate >= todayStr && dueDate <= horizonStr) {
       events.push({ id: 'inv-'+inv.id, type:'in', desc: `Invoice ${inv.no} — ${inv.customer}`,
@@ -14811,7 +15066,7 @@ function renderCreditNotes() {
 function populateCnInvoiceSelect(selectedId) {
   const sel = document.getElementById('cn-invoice');
   if (!sel) return;
-  const list = [...(DB.invoices||[])].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const list = [...(live('invoices')||[])].sort((a,b) => (b.date||'').localeCompare(a.date||''));
   sel.innerHTML = '<option value="">— Select an invoice —</option>' +
     list.map(i => {
       const bal = getInvoiceBalance(i);
@@ -15240,7 +15495,7 @@ function onDnCustomerChange() {
   const custName = document.getElementById('dn-customer').value;
   const sel = document.getElementById('dn-invoice');
   if (!sel) return;
-  const invs = (DB.invoices||[]).filter(i => i.customer === custName)
+  const invs = (live('invoices')||[]).filter(i => i.customer === custName)
     .sort((a,b) => (b.date||'').localeCompare(a.date||''));
   sel.innerHTML = '<option value="">— None (standalone DN) —</option>' +
     invs.map(i => `<option value="${i.id}">${i.no} · ${fmtDate(i.date)} · ${fmtCurr(i.total||0, i.currency||'MYR')}</option>`).join('');
@@ -15560,7 +15815,7 @@ function openReceivePaymentModal() {
   // Populate customer select with only customers that have outstanding invoices
   const sel = document.getElementById('rp-customer');
   const customersWithBalance = new Set();
-  (DB.invoices||[]).forEach(inv => {
+  (live('invoices')||[]).forEach(inv => {
     if (inv.status === 'Paid') return;
     const paid = (DB.payments||[]).filter(p => p.invoiceId === inv.id).reduce((s,p) => s + (p.amount||0), 0);
     const credits = (typeof getTotalCreditsForInvoice === 'function') ? getTotalCreditsForInvoice(inv.id) : 0;
@@ -15625,7 +15880,7 @@ function onRpCustomerChange() {
   const custRecord = (DB.customers||[]).find(c => c.name === cust);
   rpCurrency = (custRecord && custRecord.currency) || 'MYR';
 
-  rpInvoices = (DB.invoices||[])
+  rpInvoices = (live('invoices')||[])
     .filter(inv => inv.customer === cust && inv.status !== 'Paid')
     .map(inv => {
       const paid    = (DB.payments||[]).filter(p => p.invoiceId === inv.id).reduce((s,p) => s + (p.amount||0), 0);
@@ -15791,7 +16046,7 @@ function saveReceivePayment() {
   const updatedInvoices = [];
 
   applied.forEach(r => {
-    const inv = DB.invoices.find(i => i.id === r.id);
+    const inv = live('invoices').find(i => i.id === r.id);
     if (!inv) return;
     const payment = {
       id: DB.nextIds.payments++,
