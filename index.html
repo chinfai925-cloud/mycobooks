@@ -10769,7 +10769,6 @@ function saveInvoice() {
     due: document.getElementById('inv-due').value,
     customer, address: document.getElementById('inv-address').value,
     lines: validLines.map(l => ({ product: l.product, qty: parseFloat(l.qty)||0, unitPrice: parseFloat(l.unitPrice)||0, subtotal: (parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0) })),
-    taxPct: parseFloat(document.getElementById('inv-tax-pct').value) || 0,
     discount: (discValue > 0) ? { type: discType, value: discValue, amount: discAmt } : null,
     total: grand,
     currency,
