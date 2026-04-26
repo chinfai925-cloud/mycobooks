@@ -620,7 +620,11 @@ tr:hover td { background:var(--bg); }
           <div class="page-title">Invoices</div>
           <div class="page-subtitle">Create and manage customer invoices</div>
         </div>
-        <button id="btn-add-invoice" class="btn btn-primary" onclick="resetInvModal();openModal('modal-invoice')">+ New Invoice</button>
+        <div style="display:flex;gap:8px;">
+          <button id="btn-inter-co-settlement" class="btn btn-outline" onclick="openInterCoSettlementModal()" title="Record a settlement payment between sister companies (e.g. via Moolahgo)">⇄ Inter-Co Settlement</button>
+          <button id="btn-inter-co-shipment" class="btn btn-outline" onclick="openInterCoShipmentModal()" title="Record an inter-company shipment to a sister company">⇄ Inter-Co Shipment</button>
+          <button id="btn-add-invoice" class="btn btn-primary" onclick="resetInvModal();openModal('modal-invoice')">+ New Invoice</button>
+        </div>
       </div>
       <div class="tab-bar">
         <button id="inv-tab-1" onclick="switchInvTab(1)" class="btn btn-outline" style="border-bottom:2px solid var(--green);color:var(--green);border-radius:var(--radius-sm) var(--radius-sm) 0 0;">🧾 Invoices</button>
@@ -2690,6 +2694,161 @@ tr:hover td { background:var(--bg); }
   </div>
 </div>
 
+<!-- Inter-Company Shipment Modal -->
+<div class="modal-backdrop" id="modal-inter-co-shipment">
+  <div class="modal" style="width:880px;max-width:96vw;">
+    <div class="modal-head">
+      <span class="modal-title">⇄ Record Inter-Company Shipment</span>
+      <button class="modal-close" onclick="closeModal('modal-inter-co-shipment')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#fff7ed;border:1px solid #fdba74;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;font-size:12px;color:#9a3412;">
+        Records a shipment from <b id="ics-from-name">—</b> to a sister company. Creates: a sales invoice in <b id="ics-from-name-2">—</b>, an inventory increment in the receiver, and matched inter-company entries on both sides.
+      </div>
+
+      <div class="form-grid form-grid-2" style="margin-bottom:14px;">
+        <div class="form-group"><label>From <span style="font-weight:400;color:var(--text3);">(your active company)</span></label>
+          <input type="text" id="ics-from" readonly style="background:var(--bg);">
+        </div>
+        <div class="form-group"><label>To (Receiver)</label>
+          <select id="ics-to" onchange="onIcsReceiverChange()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
+        </div>
+        <div class="form-group"><label>Shipment Date</label>
+          <input type="date" id="ics-date">
+        </div>
+        <div class="form-group"><label>Reference <span style="font-weight:400;color:var(--text3);">(e.g. DN no.)</span></label>
+          <input type="text" id="ics-ref" placeholder="DN-2026-001">
+        </div>
+        <div class="form-group"><label>Invoice No. <span style="font-weight:400;color:var(--text3);">(in your books)</span></label>
+          <input type="text" id="ics-inv-no" placeholder="auto">
+        </div>
+        <div class="form-group"><label>Currency</label>
+          <input type="text" id="ics-currency" readonly style="background:var(--bg);">
+        </div>
+      </div>
+
+      <div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:10px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="background:var(--bg);">
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:left;border-bottom:1px solid var(--border);">Product</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:90px;border-bottom:1px solid var(--border);">Qty</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:left;width:80px;border-bottom:1px solid var(--border);">Unit</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:120px;border-bottom:1px solid var(--border);">Unit Price</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:130px;border-bottom:1px solid var(--border);">Line Total</th>
+              <th style="padding:8px 10px;width:36px;border-bottom:1px solid var(--border);"></th>
+            </tr>
+          </thead>
+          <tbody id="ics-lines-body"></tbody>
+          <tfoot>
+            <tr>
+              <td colspan="6" style="padding:8px 10px;border-top:1px solid var(--border);">
+                <button type="button" class="btn btn-outline btn-sm" onclick="addIcsLine()" style="font-size:11px;">+ Add Line</button>
+              </td>
+            </tr>
+            <tr>
+              <td colspan="4" style="padding:10px;text-align:right;font-size:13px;font-weight:600;color:var(--text2);background:var(--bg);">Total</td>
+              <td style="padding:10px;text-align:right;font-size:14px;font-weight:700;color:var(--green);background:var(--bg);font-family:'DM Mono',monospace;" id="ics-total-cell">—</td>
+              <td style="background:var(--bg);"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="form-group" style="margin-bottom:8px;"><label>Notes <span style="font-weight:400;color:var(--text3);">(optional)</span></label>
+        <input type="text" id="ics-notes" placeholder="Internal notes about this shipment...">
+      </div>
+
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);margin-bottom:12px;cursor:pointer;">
+        <input type="checkbox" id="ics-auto-create" checked>
+        Auto-create missing products in receiver's inventory (recommended)
+      </label>
+
+      <div class="form-actions">
+        <button class="btn btn-outline" onclick="closeModal('modal-inter-co-shipment')">Cancel</button>
+        <button class="btn btn-primary" id="ics-save-btn" onclick="saveInterCoShipment()">Record Shipment</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Inter-Company Settlement Modal -->
+<div class="modal-backdrop" id="modal-inter-co-settlement">
+  <div class="modal" style="width:760px;max-width:96vw;">
+    <div class="modal-head">
+      <span class="modal-title">⇄ Record Inter-Company Settlement</span>
+      <button class="modal-close" onclick="closeModal('modal-inter-co-settlement')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;font-size:12px;color:#166534;">
+        Records a money transfer between sister companies (e.g. SGD via Moolahgo → MYR). Closes off the inter-company balance built up by inter-co invoices.
+      </div>
+
+      <div class="form-grid form-grid-2" style="margin-bottom:8px;">
+        <div class="form-group" style="grid-column:1/-1;"><label>Settle With</label>
+          <select id="ics-set-partner" onchange="onIcsSettlementPartnerChange()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
+          <div id="ics-set-balance" style="font-size:12px;margin-top:6px;color:var(--text2);"></div>
+        </div>
+        <div class="form-group" style="grid-column:1/-1;">
+          <label>Direction</label>
+          <div style="display:flex;gap:6px;padding:3px;background:var(--bg);border-radius:6px;">
+            <button type="button" id="ics-set-dir-out" onclick="setIcsSettlementDirection('out')" class="btn btn-sm" style="flex:1;padding:8px 12px;border:none;font-size:12px;">→ We pay them</button>
+            <button type="button" id="ics-set-dir-in" onclick="setIcsSettlementDirection('in')" class="btn btn-sm" style="flex:1;padding:8px 12px;border:none;font-size:12px;">← They pay us</button>
+          </div>
+        </div>
+        <div class="form-group"><label>Date</label><input type="date" id="ics-set-date"></div>
+        <div class="form-group"><label>Reference <span style="font-weight:400;color:var(--text3);">(e.g. Moolahgo TXN)</span></label><input type="text" id="ics-set-ref" placeholder="MOOLAHGO-2026-..."></div>
+      </div>
+
+      <!-- Sender side -->
+      <div id="ics-set-sender-block" style="margin:12px 0 8px;padding:12px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:var(--radius-sm);">
+        <div style="font-size:11px;font-weight:600;color:#991b1b;margin-bottom:8px;letter-spacing:0.04em;">FROM (sender) — <span id="ics-set-sender-name">—</span></div>
+        <div class="form-grid form-grid-2" style="gap:10px 14px;">
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:11px;">Account</label>
+            <select id="ics-set-sender-acct" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:inherit;"></select>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:11px;">Amount Sent <span id="ics-set-sender-cur" style="font-weight:400;color:var(--text3);">—</span></label>
+            <input type="number" id="ics-set-sender-amount" placeholder="0.00" min="0" step="0.01" oninput="onIcsSettlementAmountsChange()">
+          </div>
+        </div>
+      </div>
+
+      <!-- Receiver side -->
+      <div id="ics-set-receiver-block" style="margin:8px 0 12px;padding:12px 14px;background:#f0fdf4;border:1px solid #86efac;border-radius:var(--radius-sm);">
+        <div style="font-size:11px;font-weight:600;color:#166534;margin-bottom:8px;letter-spacing:0.04em;">TO (receiver) — <span id="ics-set-receiver-name">—</span></div>
+        <div class="form-grid form-grid-2" style="gap:10px 14px;">
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:11px;">Account</label>
+            <select id="ics-set-receiver-acct" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:inherit;"></select>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:11px;">Amount Received <span id="ics-set-receiver-cur" style="font-weight:400;color:var(--text3);">—</span></label>
+            <input type="number" id="ics-set-receiver-amount" placeholder="0.00" min="0" step="0.01" oninput="onIcsSettlementAmountsChange()">
+          </div>
+        </div>
+        <div id="ics-set-rate-info" style="font-size:11px;margin-top:8px;color:#166534;font-family:'DM Mono',monospace;">Implied rate: —</div>
+      </div>
+
+      <!-- Inter-co balance impact -->
+      <div id="ics-set-impact" style="padding:10px 14px;background:var(--bg);border-radius:var(--radius-sm);font-size:12px;margin-bottom:12px;">
+        <div>Inter-co balance impact: <strong id="ics-set-impact-amount" style="font-family:'DM Mono',monospace;">—</strong></div>
+        <div id="ics-set-impact-detail" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:8px;"><label>Notes <span style="font-weight:400;color:var(--text3);">(optional)</span></label>
+        <input type="text" id="ics-set-notes" placeholder="Internal notes...">
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-outline" onclick="closeModal('modal-inter-co-settlement')">Cancel</button>
+        <button class="btn btn-primary" id="ics-set-save-btn" onclick="saveInterCoSettlement()">Record Settlement</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Wage Advance Modal -->
 <div class="modal-backdrop" id="modal-wage-advance">
   <div class="modal" style="width:420px;">
@@ -3831,15 +3990,18 @@ async function sbPersistFor(prefix, tableKey, record) {
 // table. We can't rely on DB.nextIds (that's the active company's counter),
 // so we ask Supabase for the current max id in that company's prefix.
 async function nextIntercompanyTxnId(prefix) {
+  return nextIdFor(prefix, 'intercompanyTransactions');
+}
+
+// Generic: ask a sister company's table for next id by querying max id + 1.
+async function nextIdFor(prefix, tableKey) {
   try {
-    const tbl = sbTableFor(prefix, 'intercompanyTransactions');
+    const tbl = sbTableFor(prefix, tableKey);
     const rows = await SB.get(`${tbl}?select=id&order=id.desc&limit=1`);
     const maxId = (Array.isArray(rows) && rows.length > 0) ? (parseInt(rows[0].id) || 0) : 0;
     return maxId + 1;
   } catch(e) {
-    console.warn('nextIntercompanyTxnId failed, falling back to timestamp id:', e.message);
-    // Fallback: use a millisecond timestamp (unique enough; won't collide with autoincrement ids
-    // because real id sequences are tiny by comparison)
+    console.warn(`nextIdFor ${prefix}_${tableKey} failed:`, e.message);
     return Date.now();
   }
 }
@@ -4094,7 +4256,7 @@ const COLS = {
   users:        ['id','username','name','role','initials','active','email','auth_id'],
   expenses:     ['id','date','desc','cat','amount','supplier','status','paid','account','notes','dueDate','recurring','recurringId','deleted_at','deleted_by','deleted_reason'],
   sales:        ['id','date','customer','product','qty','price','total','type','account','notes','harvestId'],
-  invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','currency','notes','product','qty','unit','discount','soId','soOrderNo','deleted_at','deleted_by','deleted_reason'],
+  invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','currency','notes','product','qty','unit','discount','soId','soOrderNo','is_intercompany','intercompany_id','intercompany_partner_id','intercompany_partner_name','deleted_at','deleted_by','deleted_reason'],
   inventory:    ['id','name','cat','unit','stock','reorder','cost','supplier'],
   staff:        ['id','name','role','dept','payType','salary','ic','phone','joinDate','empType','epf','socso','eis','bank','bankAcc','notes','address','emergencyName','emergencyPhone','emergencyRel','allowances'],
   customers:    ['id','name','contact','phone','email','address','terms','currency','priceList','notes'],
@@ -4122,7 +4284,7 @@ const COLS = {
   payments:     ['id','invoiceId','invoiceNo','customer','date','amount','currency','account','reference','notes','type','intercompany_id','received_currency','received_amount','exchange_rate','received_company_id','received_company_name','received_account','deleted_at','deleted_by','deleted_reason'],
   creditNotes:  ['id','no','date','invoiceId','invoiceNo','customer','lines','total','currency','reason','status','notes','createdOn','deleted_at','deleted_by','deleted_reason'],
   debitNotes:   ['id','no','date','kind','partyType','partyName','invoiceId','invoiceNo','lines','total','currency','reason','status','notes','createdOn','deleted_at','deleted_by','deleted_reason'],
-  intercompanyTransactions: ['id','date','intercompany_id','partner_id','partner_name','partner_prefix','amount','partner_amount','currency','partner_currency','exchange_rate','account','kind','linked_invoice_id','linked_invoice_no','linked_payment_id','customer','supplier','notes','created_by','deleted_at','deleted_by','deleted_reason'],
+  intercompanyTransactions: ['id','date','intercompany_id','partner_id','partner_name','partner_prefix','amount','partner_amount','currency','partner_currency','exchange_rate','account','cash_amount','cash_currency','kind','linked_invoice_id','linked_invoice_no','linked_payment_id','customer','supplier','notes','created_by','deleted_at','deleted_by','deleted_reason'],
 };
 
 // ---- SOFT DELETE HELPERS ----
@@ -10556,7 +10718,7 @@ function renderInvoices() {
     : `<table>
       <thead><tr><th>Invoice No.</th><th>Customer</th><th>Items</th><th>Issue Date</th><th>Due Date</th><th>Status</th><th class="text-right">Amount</th><th></th></tr></thead>
       <tbody>${data.map(i => `<tr>
-        <td style="font-family:'DM Mono',monospace;font-size:12px;">${i.no}</td>
+        <td style="font-family:'DM Mono',monospace;font-size:12px;">${i.no}${i.is_intercompany?' <span style="font-family:inherit;display:inline-block;font-size:9px;padding:1px 6px;border-radius:8px;background:#fff7ed;color:#9a3412;border:1px solid #fdba74;font-weight:600;letter-spacing:0.02em;vertical-align:middle;margin-left:4px;">INTER-CO</span>':''}</td>
         <td><div style="font-weight:500">${i.customer}</div><div style="font-size:11px;color:var(--text2)">${i.address||''}</div></td>
         <td style="font-size:12px;color:var(--text2);">${i.lines ? i.lines.map(l=>`${l.product} ×${l.qty}`).join('<br>') : (i.product ? `${i.product} ×${i.qty}` : '—')}</td>
         <td style="color:var(--text2)">${fmtDate(i.date)}</td>
@@ -15832,7 +15994,7 @@ function generateSetupSql(prefix) {
     users: `id int8 primary key, username text, password text, name text, role text, initials text, active bool`,
     expenses: `id int8 primary key, date text, "desc" text, cat text, amount numeric, supplier text, status text, paid text, account text, notes text, "dueDate" text, recurring bool, "recurringId" int8`,
     sales: `id int8 primary key, date text, customer text, product text, qty numeric, price numeric, total numeric, type text, account text, notes text, "harvestId" int8`,
-    invoices: `id int8 primary key, no text, date text, due text, customer text, address text, lines text, total numeric, tax numeric, sst numeric, status text, account text, currency text, notes text, product text, qty numeric, unit text, discount text, "soId" int8, "soOrderNo" text`,
+    invoices: `id int8 primary key, no text, date text, due text, customer text, address text, lines text, total numeric, tax numeric, sst numeric, status text, account text, currency text, notes text, product text, qty numeric, unit text, discount text, "soId" int8, "soOrderNo" text, is_intercompany bool, intercompany_id text, intercompany_partner_id text, intercompany_partner_name text`,
     inventory: `id int8 primary key, name text, cat text, unit text, stock numeric, reorder numeric, cost numeric, supplier text`,
     staff: `id int8 primary key, name text, role text, dept text, "payType" text, salary numeric, ic text, phone text, "joinDate" text, "empType" text, epf bool, socso bool, eis bool, bank text, "bankAcc" text, notes text`,
     customers: `id int8 primary key, name text, contact text, phone text, email text, address text, terms text, currency text, "priceList" text, notes text`,
@@ -15860,7 +16022,7 @@ function generateSetupSql(prefix) {
     payments: `id int8 primary key, "invoiceId" int8, "invoiceNo" text, customer text, date text, amount numeric, currency text, account text, reference text, notes text, type text, intercompany_id text, received_currency text, received_amount numeric, exchange_rate numeric, received_company_id text, received_company_name text, received_account text`,
     credit_notes: `id int8 primary key, no text, date text, "invoiceId" int8, "invoiceNo" text, customer text, lines text, total numeric, currency text, reason text, status text, notes text, "createdOn" text`,
     debit_notes: `id int8 primary key, no text, date text, kind text, "partyType" text, "partyName" text, "invoiceId" int8, "invoiceNo" text, lines text, total numeric, currency text, reason text, status text, notes text, "createdOn" text`,
-    intercompany_transactions: `id int8 primary key, date text, intercompany_id text, partner_id text, partner_name text, partner_prefix text, amount numeric, partner_amount numeric, currency text, partner_currency text, exchange_rate numeric, account text, kind text, linked_invoice_id int8, linked_invoice_no text, linked_payment_id int8, customer text, supplier text, notes text, created_by text, deleted_at text, deleted_by text, deleted_reason text`,
+    intercompany_transactions: `id int8 primary key, date text, intercompany_id text, partner_id text, partner_name text, partner_prefix text, amount numeric, partner_amount numeric, currency text, partner_currency text, exchange_rate numeric, account text, cash_amount numeric, cash_currency text, kind text, linked_invoice_id int8, linked_invoice_no text, linked_payment_id int8, customer text, supplier text, notes text, created_by text, deleted_at text, deleted_by text, deleted_reason text`,
   };
   const stmts = Object.entries(schemas).map(([t, cols]) =>
     `CREATE TABLE IF NOT EXISTS ${prefix}_${t} (${cols});\nALTER TABLE ${prefix}_${t} ENABLE ROW LEVEL SECURITY;\nDROP POLICY IF EXISTS "anon_all" ON ${prefix}_${t};\nCREATE POLICY "anon_all" ON ${prefix}_${t} FOR ALL USING (true) WITH CHECK (true);`
@@ -17299,6 +17461,718 @@ async function saveReceivePayment() {
   }
   if (document.getElementById('inv-panel-3') && document.getElementById('inv-panel-3').style.display !== 'none') {
     if (typeof renderPaymentHistory === 'function') renderPaymentHistory();
+  }
+}
+
+// ============================================================================
+// INTER-COMPANY SHIPMENT (Top Mushroom → Mush Hub style flow)
+// ============================================================================
+// Records: a sales invoice in the active (sender) company, an inventory
+// increment in the receiver, and matched intercompany_transactions rows
+// on both sides. All-or-mostly-atomic — partner-side failures are flagged
+// but won't roll back the active-side records.
+
+let icsLines = [];          // [{ product, qty, unit, unitPrice }]
+let icsReceiverCo = null;   // currently selected partner company object
+
+async function openInterCoShipmentModal() {
+  // Build receiver picker (verified sister companies only)
+  const list = getCompaniesList();
+  const activeId = getActiveCompanyId();
+  const partners = list.filter(c => c.id !== activeId && c.verified !== false);
+  if (partners.length === 0) {
+    showToast('No verified sister companies — add one in Settings → Companies first', 'error');
+    return;
+  }
+
+  document.getElementById('ics-from').value = getActiveCompanyName();
+  document.getElementById('ics-from-name').textContent = getActiveCompanyName();
+  document.getElementById('ics-from-name-2').textContent = getActiveCompanyName();
+  document.getElementById('ics-to').innerHTML =
+    partners.map(c => `<option value="${c.id}">${c.name} (${c.currency||'MYR'})</option>`).join('');
+  document.getElementById('ics-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('ics-ref').value = '';
+  document.getElementById('ics-notes').value = '';
+  document.getElementById('ics-inv-no').value = 'IC-' + new Date().getFullYear() + '-' + String(DB.nextIds.invoices).padStart(4,'0');
+  document.getElementById('ics-auto-create').checked = true;
+
+  icsLines = [];
+  // Seed with one empty line
+  addIcsLine();
+
+  onIcsReceiverChange();  // sets currency + refreshes line UI
+  openModal('modal-inter-co-shipment');
+}
+
+function onIcsReceiverChange() {
+  const id = document.getElementById('ics-to').value;
+  icsReceiverCo = getCompaniesList().find(c => c.id === id) || null;
+  const cur = (icsReceiverCo && icsReceiverCo.currency) || 'SGD';
+  document.getElementById('ics-currency').value = cur;
+  // Re-render lines so unit-price hints adapt to currency
+  renderIcsLines();
+}
+
+function addIcsLine() {
+  icsLines.push({ product: '', qty: 0, unit: '', unitPrice: 0 });
+  renderIcsLines();
+}
+
+function removeIcsLine(idx) {
+  icsLines.splice(idx, 1);
+  if (icsLines.length === 0) addIcsLine();
+  renderIcsLines();
+}
+
+function setIcsLineProduct(idx, productName) {
+  const line = icsLines[idx];
+  if (!line) return;
+  line.product = productName;
+  // Auto-fill unit and SGD price if available from product master
+  const p = (DB.products || []).find(x => x.name === productName);
+  if (p) {
+    line.unit = p.unit || line.unit || '';
+    // Prefer SGD price if receiver is SGD; otherwise default `price`
+    const cur = (icsReceiverCo && icsReceiverCo.currency) || 'SGD';
+    if (cur === 'SGD' && p.priceSgd) {
+      line.unitPrice = parseFloat(p.priceSgd) || 0;
+    } else if (!line.unitPrice && p.price) {
+      line.unitPrice = parseFloat(p.price) || 0;
+    }
+  }
+  renderIcsLines();
+}
+
+function setIcsLineQty(idx, val)   { if (icsLines[idx]) { icsLines[idx].qty   = parseFloat(val) || 0; updateIcsTotal(); } }
+function setIcsLineUnit(idx, val)  { if (icsLines[idx]) { icsLines[idx].unit  = (val || '').trim(); } }
+function setIcsLinePrice(idx, val) { if (icsLines[idx]) { icsLines[idx].unitPrice = parseFloat(val) || 0; updateIcsTotal(); renderIcsLineTotal(idx); } }
+
+function renderIcsLineTotal(idx) {
+  const line = icsLines[idx]; if (!line) return;
+  const cell = document.getElementById('ics-line-total-' + idx);
+  if (cell) cell.textContent = (line.qty * line.unitPrice).toFixed(2);
+}
+
+function updateIcsTotal() {
+  const cur = (icsReceiverCo && icsReceiverCo.currency) || 'SGD';
+  const total = icsLines.reduce((s,l) => s + (l.qty * l.unitPrice), 0);
+  const el = document.getElementById('ics-total-cell');
+  if (el) el.textContent = `${cur} ${total.toFixed(2)}`;
+}
+
+function renderIcsLines() {
+  const tbody = document.getElementById('ics-lines-body');
+  if (!tbody) return;
+  const products = (DB.products || []).filter(p => p.status !== 'inactive');
+  const escAttr = s => String(s||'').replace(/"/g,'&quot;').replace(/&/g,'&amp;');
+  tbody.innerHTML = icsLines.map((l, idx) => {
+    const opts = ['<option value="">— Select —</option>']
+      .concat(products.map(p => `<option value="${escAttr(p.name)}"${p.name===l.product?' selected':''}>${escAttr(p.name)}</option>`))
+      .join('');
+    const lineTotal = (l.qty * l.unitPrice).toFixed(2);
+    return `<tr>
+      <td style="padding:6px 8px;border-bottom:1px solid var(--border);">
+        <select onchange="setIcsLineProduct(${idx}, this.value)" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:inherit;">${opts}</select>
+      </td>
+      <td style="padding:6px 8px;border-bottom:1px solid var(--border);">
+        <input type="number" min="0" step="0.01" value="${l.qty || ''}" oninput="setIcsLineQty(${idx}, this.value)" style="width:100%;text-align:right;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:'DM Mono',monospace;">
+      </td>
+      <td style="padding:6px 8px;border-bottom:1px solid var(--border);">
+        <input type="text" value="${escAttr(l.unit || '')}" placeholder="kg, pack..." oninput="setIcsLineUnit(${idx}, this.value)" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:inherit;">
+      </td>
+      <td style="padding:6px 8px;border-bottom:1px solid var(--border);">
+        <input type="number" min="0" step="0.01" value="${l.unitPrice || ''}" oninput="setIcsLinePrice(${idx}, this.value)" style="width:100%;text-align:right;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:'DM Mono',monospace;">
+      </td>
+      <td id="ics-line-total-${idx}" style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--text2);">${lineTotal}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:center;">
+        <button type="button" onclick="removeIcsLine(${idx})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;" title="Remove line">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+  updateIcsTotal();
+}
+
+async function saveInterCoShipment() {
+  const date = document.getElementById('ics-date').value;
+  const ref  = document.getElementById('ics-ref').value.trim();
+  const invNo = document.getElementById('ics-inv-no').value.trim();
+  const notes = document.getElementById('ics-notes').value.trim();
+  const autoCreate = document.getElementById('ics-auto-create').checked;
+  const receiverId = document.getElementById('ics-to').value;
+
+  if (!date)        { showToast('Enter a shipment date', 'error'); return; }
+  if (!receiverId)  { showToast('Pick a receiver', 'error'); return; }
+
+  const partner = getCompaniesList().find(c => c.id === receiverId);
+  if (!partner)               { showToast('Receiver not found', 'error'); return; }
+  if (partner.verified === false) { showToast(`${partner.name} is not verified yet`, 'error'); return; }
+
+  const validLines = icsLines.filter(l => l.product && l.qty > 0);
+  if (validLines.length === 0) { showToast('Add at least one product line with qty > 0', 'error'); return; }
+  if (validLines.some(l => l.unitPrice < 0)) { showToast('Unit price cannot be negative', 'error'); return; }
+
+  const sellerName    = getActiveCompanyName();
+  const sellerId      = getActiveCompanyId();
+  const sellerPrefix  = getActiveCompanyPrefix();
+  const partnerCurrency = partner.currency || 'SGD';
+  const total = validLines.reduce((s,l) => s + (l.qty * l.unitPrice), 0);
+
+  if (total <= 0) { showToast('Total must be > 0', 'error'); return; }
+
+  // Disable the button to prevent double-submit
+  const btn = document.getElementById('ics-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Recording...'; }
+
+  try {
+    const intercompanyId = newIntercompanyId();
+
+    // ───────────────────────────────────────────────────────────────
+    // (1) ACTIVE COMPANY SIDE — auto-create partner-as-customer if missing,
+    //     then create the inter-co sales invoice
+    // ───────────────────────────────────────────────────────────────
+    if (!DB.customers) DB.customers = [];
+    let custRow = DB.customers.find(c => c.name === partner.name);
+    if (!custRow) {
+      custRow = {
+        id: DB.nextIds.customers++,
+        name: partner.name,
+        contact: '',
+        phone: '',
+        email: '',
+        address: '',
+        terms: 'Inter-company',
+        currency: partnerCurrency,
+        priceList: {},
+        notes: 'Auto-created: sister company for inter-company shipments'
+      };
+      DB.customers.push(custRow);
+      if (typeof sbPersist === 'function') sbPersist('customers', custRow);
+    }
+
+    // (1a) Build invoice in active company's books. Inter-co invoice — no tax/SST,
+    //      currency = partner's currency, status = Pending.
+    const invLines = validLines.map(l => ({
+      product: l.product,
+      qty: l.qty,
+      unitPrice: l.unitPrice,
+      subtotal: l.qty * l.unitPrice,
+      unit: l.unit || ''
+    }));
+    const finalInvNo = invNo || ('IC-' + new Date().getFullYear() + '-' + String(DB.nextIds.invoices).padStart(4,'0'));
+    const inv = {
+      id: DB.nextIds.invoices++,
+      no: finalInvNo,
+      date,
+      due: date,
+      customer: partner.name,
+      address: '',
+      lines: invLines,
+      total,
+      tax: 0,
+      sst: 0,
+      status: 'Pending',
+      account: '',
+      currency: partnerCurrency,
+      notes: notes ? `[Inter-Co · ${ref || '—'}] ${notes}` : `[Inter-Co · ${ref || '—'}]`,
+      is_intercompany: true,
+      intercompany_id: intercompanyId,
+      intercompany_partner_id: partner.id,
+      intercompany_partner_name: partner.name
+    };
+    if (!DB.invoices) DB.invoices = [];
+    DB.invoices.unshift(inv);
+    if (typeof sbPersist === 'function') sbPersist('invoices', inv);
+
+    // (1b) Active-side intercompany_transactions row: +partnerCurrency total
+    if (!DB.intercompanyTransactions) DB.intercompanyTransactions = [];
+    if (!DB.nextIds.intercompanyTransactions) DB.nextIds.intercompanyTransactions = 1;
+    const sellerIcTxn = {
+      id: DB.nextIds.intercompanyTransactions++,
+      date,
+      intercompany_id: intercompanyId,
+      partner_id: partner.id,
+      partner_name: partner.name,
+      partner_prefix: partner.prefix || '',
+      amount: total,                  // +SGD total (partner owes us)
+      partner_amount: total,          // same units (invoice in partner currency)
+      currency: partnerCurrency,
+      partner_currency: partnerCurrency,
+      exchange_rate: 1,
+      account: '',
+      kind: 'inter_co_sale',
+      linked_invoice_id: inv.id,
+      linked_invoice_no: inv.no,
+      linked_payment_id: null,
+      customer: partner.name,
+      notes: `Shipment ${ref || ''} (${validLines.length} line${validLines.length===1?'':'s'})`,
+      created_by: (DB.currentUser && DB.currentUser.name) || ''
+    };
+    DB.intercompanyTransactions.unshift(sellerIcTxn);
+    if (typeof sbPersist === 'function') sbPersist('intercompanyTransactions', sellerIcTxn);
+
+    // ───────────────────────────────────────────────────────────────
+    // (2) PARTNER COMPANY SIDE — increment inventory + write IC txn
+    // ───────────────────────────────────────────────────────────────
+    // Load partner's existing inventory once
+    let partnerInventory = [];
+    try {
+      const tbl = sbTableFor(partner.prefix, 'inventory');
+      const rows = await SB.get(`${tbl}?select=*`);
+      partnerInventory = Array.isArray(rows) ? rows : [];
+    } catch(e) {
+      console.warn(`Could not load ${partner.name} inventory:`, e.message);
+    }
+
+    // Allocate next available inventory ID once, then increment locally
+    let nextInvId = await nextIdFor(partner.prefix, 'inventory');
+    const missing = [];
+    const updated = [];
+    const created = [];
+
+    for (const line of validLines) {
+      const existing = partnerInventory.find(r =>
+        r && typeof r.name === 'string' && r.name.trim().toLowerCase() === line.product.trim().toLowerCase()
+      );
+      if (existing) {
+        const newRow = { ...existing, stock: (parseFloat(existing.stock) || 0) + line.qty };
+        try {
+          await sbPersistFor(partner.prefix, 'inventory', newRow);
+          updated.push(line.product);
+        } catch(e) {
+          console.warn(`Update inventory failed for "${line.product}":`, e.message);
+          missing.push(line.product);
+        }
+      } else if (autoCreate) {
+        // Auto-create — pull metadata from active company's product if available
+        const p = (DB.products || []).find(x => x.name === line.product);
+        const newRow = {
+          id: nextInvId++,
+          name: line.product,
+          cat: (p && p.cat) || 'Inter-Co',
+          unit: line.unit || (p && p.unit) || '',
+          stock: line.qty,
+          reorder: 0,
+          cost: line.unitPrice,
+          supplier: sellerName
+        };
+        try {
+          await sbPersistFor(partner.prefix, 'inventory', newRow);
+          created.push(line.product);
+        } catch(e) {
+          console.warn(`Create inventory failed for "${line.product}":`, e.message);
+          missing.push(line.product);
+        }
+      } else {
+        missing.push(line.product);
+      }
+    }
+
+    // (2b) Partner-side intercompany_transactions row
+    let partnerTxnId;
+    try {
+      partnerTxnId = await nextIntercompanyTxnId(partner.prefix);
+    } catch(e) {
+      partnerTxnId = null;
+    }
+    if (partnerTxnId != null) {
+      const partnerIcTxn = {
+        id: partnerTxnId,
+        date,
+        intercompany_id: intercompanyId,
+        partner_id: sellerId,
+        partner_name: sellerName,
+        partner_prefix: sellerPrefix,
+        amount: -total,
+        partner_amount: -total,
+        currency: partnerCurrency,
+        partner_currency: partnerCurrency,
+        exchange_rate: 1,
+        account: '',
+        kind: 'inter_co_sale',
+        linked_invoice_id: null,
+        linked_invoice_no: inv.no,
+        linked_payment_id: null,
+        supplier: sellerName,
+        notes: `Shipment ${ref || ''} received from ${sellerName} (${validLines.length} line${validLines.length===1?'':'s'})`,
+        created_by: (DB.currentUser && DB.currentUser.name) || ''
+      };
+      try {
+        await sbPersistFor(partner.prefix, 'intercompanyTransactions', partnerIcTxn);
+      } catch(e) {
+        showToast(`Partner-side IC entry failed: ${e.message}`, 'error');
+      }
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // Done
+    // ───────────────────────────────────────────────────────────────
+    closeModal('modal-inter-co-shipment');
+    let msg = `Shipment recorded: ${partnerCurrency} ${total.toFixed(2)} → ${partner.name}`;
+    if (created.length) msg += ` · auto-created ${created.length} product${created.length===1?'':'s'}`;
+    if (missing.length) msg += ` · ⚠ ${missing.length} product${missing.length===1?'':'s'} not added to receiver`;
+    showToast(msg);
+    if (missing.length) {
+      console.warn('Inter-co shipment — products NOT added to receiver inventory:', missing);
+    }
+    renderInvoices();
+  } catch(err) {
+    console.error('saveInterCoShipment failed:', err);
+    showToast('Inter-co shipment failed: ' + err.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Record Shipment'; }
+  }
+}
+
+// ============================================================================
+// INTER-COMPANY SETTLEMENT (e.g. Mush Hub → Top Mushroom via Moolahgo)
+// ============================================================================
+// Records a money transfer that closes off inter-company AR/AP. Active
+// company is one side; partner is the other. Cash flows can be in
+// different currencies (e.g. SGD out / MYR in via a money changer).
+// The inter-co balance impact is in the "inter-co denomination" — the
+// currency the underlying invoices were booked in (read off the existing
+// inter-co transactions for that partner).
+
+let icsSetState = {
+  partner: null,        // partner company object
+  direction: 'out',     // 'out' = active pays partner; 'in' = partner pays active
+  partnerAccounts: [],  // sister-side accounts (loaded on partner change)
+  partnerBalance: 0,    // active's signed inter-co balance with partner (in inter-co currency)
+  intercoCurrency: 'SGD'// currency the inter-co balance is denominated in
+};
+
+function getInterCoBalanceFor(partnerId) {
+  // Net balance from active company's POV with this partner.
+  // Positive = partner owes us. Negative = we owe partner.
+  // Returns { amount, currency } using the dominant currency of the rows.
+  const rows = (DB.intercompanyTransactions || []).filter(r =>
+    !r.deleted_at && r.partner_id === partnerId
+  );
+  if (!rows.length) return { amount: 0, currency: getActiveCompanyCurrency() };
+  // Sum signed amounts grouped by currency. In our setup all rows for a partner
+  // should share a single inter-co currency (SGD), but be defensive.
+  const byCur = {};
+  rows.forEach(r => {
+    const cur = r.currency || 'MYR';
+    byCur[cur] = (byCur[cur] || 0) + (parseFloat(r.amount) || 0);
+  });
+  // Pick the currency with the largest |sum| as dominant; if multiple, just
+  // return the first. The Balance view (Segment 5) will show all explicitly.
+  const entries = Object.entries(byCur).sort((a,b) => Math.abs(b[1]) - Math.abs(a[1]));
+  return { amount: entries[0][1], currency: entries[0][0] };
+}
+
+async function openInterCoSettlementModal() {
+  const list = getCompaniesList();
+  const activeId = getActiveCompanyId();
+  const partners = list.filter(c => c.id !== activeId && c.verified !== false);
+  if (partners.length === 0) {
+    showToast('No verified sister companies — add one first', 'error');
+    return;
+  }
+
+  // Build partner picker — show inter-co balance next to each
+  const sel = document.getElementById('ics-set-partner');
+  sel.innerHTML = partners.map(c => {
+    const bal = getInterCoBalanceFor(c.id);
+    const balStr = bal.amount === 0
+      ? '—'
+      : `${bal.amount > 0 ? '+' : ''}${fmtCurr(bal.amount, bal.currency)}`;
+    return `<option value="${c.id}">${c.name} · balance ${balStr}</option>`;
+  }).join('');
+
+  document.getElementById('ics-set-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('ics-set-ref').value = '';
+  document.getElementById('ics-set-notes').value = '';
+  document.getElementById('ics-set-sender-amount').value = '';
+  document.getElementById('ics-set-receiver-amount').value = '';
+
+  await onIcsSettlementPartnerChange();
+  openModal('modal-inter-co-settlement');
+}
+
+async function onIcsSettlementPartnerChange() {
+  const partnerId = document.getElementById('ics-set-partner').value;
+  const partner = getCompaniesList().find(c => c.id === partnerId);
+  if (!partner) return;
+
+  icsSetState.partner = partner;
+  icsSetState.partnerBalance = 0;
+  icsSetState.intercoCurrency = 'SGD';
+
+  // Compute & display balance
+  const bal = getInterCoBalanceFor(partnerId);
+  icsSetState.partnerBalance  = bal.amount;
+  icsSetState.intercoCurrency = bal.currency;
+
+  const balEl = document.getElementById('ics-set-balance');
+  if (bal.amount === 0) {
+    balEl.innerHTML = `<span style="color:var(--text3);">No outstanding inter-co balance</span>`;
+  } else if (bal.amount > 0) {
+    balEl.innerHTML = `<span style="color:var(--green);">${partner.name} owes you <b>${fmtCurr(bal.amount, bal.currency)}</b></span>`;
+  } else {
+    balEl.innerHTML = `<span style="color:var(--red);">You owe ${partner.name} <b>${fmtCurr(Math.abs(bal.amount), bal.currency)}</b></span>`;
+  }
+
+  // Auto-pick direction from balance sign
+  const defaultDir = (bal.amount < 0) ? 'out' : (bal.amount > 0) ? 'in' : 'out';
+  setIcsSettlementDirection(defaultDir);
+
+  // Load partner's accounts (cached)
+  await loadAllCompaniesAccounts();
+  icsSetState.partnerAccounts = allCompanyAccounts[partner.id] || [];
+
+  refreshIcsSettlementAccountSelects();
+  // Pre-fill the settlement amount with the outstanding balance (absolute value)
+  if (Math.abs(bal.amount) > 0.009) {
+    const amt = Math.abs(bal.amount).toFixed(2);
+    if (icsSetState.direction === 'out') {
+      document.getElementById('ics-set-sender-amount').value = amt;
+    } else {
+      document.getElementById('ics-set-receiver-amount').value = amt;
+    }
+  }
+  onIcsSettlementAmountsChange();
+}
+
+function setIcsSettlementDirection(dir) {
+  icsSetState.direction = dir;
+  const outBtn = document.getElementById('ics-set-dir-out');
+  const inBtn  = document.getElementById('ics-set-dir-in');
+  const activeStyle  = 'flex:1;padding:8px 12px;border:none;font-size:12px;background:var(--green);color:#fff;font-weight:600;';
+  const passiveStyle = 'flex:1;padding:8px 12px;border:none;font-size:12px;background:transparent;color:var(--text2);';
+  if (dir === 'out') { outBtn.style.cssText = activeStyle; inBtn.style.cssText = passiveStyle; }
+  else               { outBtn.style.cssText = passiveStyle; inBtn.style.cssText = activeStyle; }
+  refreshIcsSettlementAccountSelects();
+  onIcsSettlementAmountsChange();
+}
+
+function refreshIcsSettlementAccountSelects() {
+  const partner = icsSetState.partner;
+  if (!partner) return;
+  const dir = icsSetState.direction;
+  const activeName = getActiveCompanyName();
+  const activeCur  = getActiveCompanyCurrency();
+  const partnerCur = partner.currency || 'MYR';
+
+  // Sender = whichever side is paying out
+  const senderIsActive = (dir === 'out');
+  const senderName = senderIsActive ? activeName : partner.name;
+  const recvName   = senderIsActive ? partner.name : activeName;
+  const senderCur  = senderIsActive ? activeCur : partnerCur;
+  const recvCur    = senderIsActive ? partnerCur : activeCur;
+  const senderAccts = senderIsActive ? (DB.accounts || []) : icsSetState.partnerAccounts;
+  const recvAccts   = senderIsActive ? icsSetState.partnerAccounts : (DB.accounts || []);
+
+  document.getElementById('ics-set-sender-name').textContent = senderName + ` (${senderCur})`;
+  document.getElementById('ics-set-receiver-name').textContent = recvName + ` (${recvCur})`;
+  document.getElementById('ics-set-sender-cur').textContent = `(${senderCur})`;
+  document.getElementById('ics-set-receiver-cur').textContent = `(${recvCur})`;
+
+  const escAttr = s => String(s||'').replace(/"/g,'&quot;');
+  document.getElementById('ics-set-sender-acct').innerHTML =
+    senderAccts.length === 0
+      ? '<option value="">— No accounts —</option>'
+      : senderAccts.map(a => `<option value="${escAttr(a.name)}">${a.name}</option>`).join('');
+  document.getElementById('ics-set-receiver-acct').innerHTML =
+    recvAccts.length === 0
+      ? '<option value="">— No accounts —</option>'
+      : recvAccts.map(a => `<option value="${escAttr(a.name)}">${a.name}</option>`).join('');
+}
+
+function onIcsSettlementAmountsChange() {
+  const partner = icsSetState.partner; if (!partner) return;
+  const dir = icsSetState.direction;
+  const activeCur  = getActiveCompanyCurrency();
+  const partnerCur = partner.currency || 'MYR';
+  const senderCur  = (dir === 'out') ? activeCur : partnerCur;
+  const recvCur    = (dir === 'out') ? partnerCur : activeCur;
+
+  const sent = parseFloat(document.getElementById('ics-set-sender-amount').value) || 0;
+  const recv = parseFloat(document.getElementById('ics-set-receiver-amount').value) || 0;
+
+  // Implied rate: receiver per sender
+  let rateLine = 'Implied rate: —';
+  if (sent > 0 && recv > 0) {
+    const rate = recv / sent;
+    rateLine = senderCur === recvCur
+      ? `Same-currency settlement (${senderCur})`
+      : `Implied rate: 1 ${senderCur} = ${rate.toFixed(4)} ${recvCur}`;
+  }
+  document.getElementById('ics-set-rate-info').textContent = rateLine;
+
+  // Inter-co balance impact — denominated in the inter-co currency (icsSetState.intercoCurrency)
+  // We need the SGD-equivalent of this settlement. Heuristic:
+  //  (a) If sender currency === inter-co currency, impact = sent
+  //  (b) Else if receiver currency === inter-co currency, impact = recv
+  //  (c) Else: undefined (cross-currency through a third currency — rare for our setup; show warning)
+  const icCur = icsSetState.intercoCurrency;
+  let impact = 0;
+  let impactDetail = '';
+  if (senderCur === icCur && sent > 0) {
+    impact = sent;
+    impactDetail = `Settlement is in ${icCur} — closes inter-co balance directly.`;
+  } else if (recvCur === icCur && recv > 0) {
+    impact = recv;
+    impactDetail = `Receiver leg is in ${icCur} — closes inter-co balance by that amount.`;
+  } else if (sent > 0) {
+    impactDetail = `⚠ Neither leg is in the inter-co currency (${icCur}). Impact cannot be computed automatically.`;
+  }
+
+  // Sign of impact: 'out' direction reduces our payable (we paid down); 'in' reduces our receivable (they paid us)
+  const signed = (dir === 'out') ? +impact : -impact;
+  const el = document.getElementById('ics-set-impact-amount');
+  if (impact === 0) {
+    el.textContent = '—';
+    el.style.color = 'var(--text3)';
+  } else {
+    el.textContent = `${signed > 0 ? '+' : ''}${fmtCurr(signed, icCur)}`;
+    el.style.color = signed > 0 ? 'var(--green)' : 'var(--red)';
+  }
+  document.getElementById('ics-set-impact-detail').textContent = impactDetail;
+
+  // Stash for save
+  icsSetState._impact = signed;
+  icsSetState._sent   = sent;
+  icsSetState._recv   = recv;
+}
+
+async function saveInterCoSettlement() {
+  const partner = icsSetState.partner;
+  if (!partner) { showToast('Pick a partner', 'error'); return; }
+
+  const dir   = icsSetState.direction;
+  const date  = document.getElementById('ics-set-date').value;
+  const ref   = document.getElementById('ics-set-ref').value.trim();
+  const notes = document.getElementById('ics-set-notes').value.trim();
+  const senderAcct  = document.getElementById('ics-set-sender-acct').value;
+  const recvAcct    = document.getElementById('ics-set-receiver-acct').value;
+  const sent        = parseFloat(document.getElementById('ics-set-sender-amount').value)   || 0;
+  const recv        = parseFloat(document.getElementById('ics-set-receiver-amount').value) || 0;
+
+  if (!date)        { showToast('Enter a date', 'error'); return; }
+  if (!senderAcct)  { showToast('Pick the sender account', 'error'); return; }
+  if (!recvAcct)    { showToast('Pick the receiver account', 'error'); return; }
+  if (sent <= 0)    { showToast('Enter the amount sent', 'error'); return; }
+  if (recv <= 0)    { showToast('Enter the amount received', 'error'); return; }
+
+  const activeId   = getActiveCompanyId();
+  const activeName = getActiveCompanyName();
+  const activeCur  = getActiveCompanyCurrency();
+  const partnerCur = partner.currency || 'MYR';
+  const senderIsActive = (dir === 'out');
+  const senderCur  = senderIsActive ? activeCur : partnerCur;
+  const recvCur    = senderIsActive ? partnerCur : activeCur;
+  const icCur      = icsSetState.intercoCurrency;
+
+  // Resolve inter-co impact magnitude (in inter-co currency)
+  let impactMag = 0;
+  if (senderCur === icCur)      impactMag = sent;
+  else if (recvCur === icCur)   impactMag = recv;
+  else {
+    if (!confirm(`Neither leg is in the inter-co currency (${icCur}). The inter-co balance impact will be left at 0 — you can record a manual adjustment later. Continue?`)) return;
+    impactMag = 0;
+  }
+
+  const intercompanyId = newIntercompanyId();
+  const rate = (sent > 0) ? (recv / sent) : 1;
+  const btn = document.getElementById('ics-set-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Recording...'; }
+
+  try {
+    if (!DB.intercompanyTransactions) DB.intercompanyTransactions = [];
+    if (!DB.nextIds.intercompanyTransactions) DB.nextIds.intercompanyTransactions = 1;
+
+    // ─── ACTIVE-SIDE ROW ────────────────────────────────────────────────
+    // Inter-co balance impact: 'out' (we paid down our payable) → +impactMag
+    //                         'in'  (they paid down their receivable to us) → -impactMag
+    const activeImpact = senderIsActive ? +impactMag : -impactMag;
+    const activeCash   = senderIsActive ? -sent : +recv;
+    const activeCashCur = senderIsActive ? senderCur : recvCur;
+    const activeCashAcct = senderIsActive ? senderAcct : recvAcct;
+
+    const activeRow = {
+      id: DB.nextIds.intercompanyTransactions++,
+      date,
+      intercompany_id: intercompanyId,
+      partner_id: partner.id,
+      partner_name: partner.name,
+      partner_prefix: partner.prefix || '',
+      amount: activeImpact,
+      partner_amount: -activeImpact, // partner sees the opposite balance impact
+      currency: icCur,
+      partner_currency: icCur,
+      exchange_rate: rate,
+      account: activeCashAcct,
+      cash_amount: activeCash,
+      cash_currency: activeCashCur,
+      kind: 'settlement',
+      linked_invoice_id: null,
+      linked_invoice_no: '',
+      linked_payment_id: null,
+      customer: '',
+      supplier: '',
+      notes: notes
+        ? `Settlement ${ref ? `[${ref}] ` : ''}${notes}`
+        : `Settlement ${ref ? `[${ref}] ` : ''}${senderIsActive ? '→' : '←'} ${partner.name}`,
+      created_by: (DB.currentUser && DB.currentUser.name) || ''
+    };
+    DB.intercompanyTransactions.unshift(activeRow);
+    if (typeof sbPersist === 'function') sbPersist('intercompanyTransactions', activeRow);
+
+    // ─── PARTNER-SIDE ROW ───────────────────────────────────────────────
+    const partnerImpact = -activeImpact;
+    const partnerCash   = senderIsActive ? +recv : -sent;
+    const partnerCashCur = senderIsActive ? recvCur : senderCur;
+    const partnerCashAcct = senderIsActive ? recvAcct : senderAcct;
+
+    let partnerRowId;
+    try { partnerRowId = await nextIntercompanyTxnId(partner.prefix); }
+    catch (e) { partnerRowId = null; }
+
+    if (partnerRowId != null) {
+      const partnerRow = {
+        id: partnerRowId,
+        date,
+        intercompany_id: intercompanyId,
+        partner_id: activeId,
+        partner_name: activeName,
+        partner_prefix: getActiveCompanyPrefix(),
+        amount: partnerImpact,
+        partner_amount: -partnerImpact,
+        currency: icCur,
+        partner_currency: icCur,
+        exchange_rate: rate,
+        account: partnerCashAcct,
+        cash_amount: partnerCash,
+        cash_currency: partnerCashCur,
+        kind: 'settlement',
+        linked_invoice_id: null,
+        linked_invoice_no: '',
+        linked_payment_id: null,
+        customer: '',
+        supplier: '',
+        notes: notes
+          ? `Settlement ${ref ? `[${ref}] ` : ''}${notes}`
+          : `Settlement ${ref ? `[${ref}] ` : ''}${senderIsActive ? '←' : '→'} ${activeName}`,
+        created_by: (DB.currentUser && DB.currentUser.name) || ''
+      };
+      try {
+        await sbPersistFor(partner.prefix, 'intercompanyTransactions', partnerRow);
+      } catch(e) {
+        showToast(`Partner-side write failed: ${e.message}`, 'error');
+      }
+    }
+
+    closeModal('modal-inter-co-settlement');
+    const arrow = senderIsActive ? '→' : '←';
+    showToast(`Settlement recorded: ${fmtCurr(sent, senderCur)} ${arrow} ${fmtCurr(recv, recvCur)}`);
+
+  } catch(err) {
+    console.error('saveInterCoSettlement failed:', err);
+    showToast('Settlement failed: ' + err.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Record Settlement'; }
   }
 }
 
