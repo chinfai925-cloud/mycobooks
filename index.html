@@ -2786,6 +2786,21 @@ tr:hover td { background:var(--bg); }
         </table>
       </div>
 
+      <!-- FX Booking Rate (only shown when invoice currency ≠ active company currency) -->
+      <div id="ics-fx-panel" style="display:none;margin-bottom:10px;padding:12px 14px;background:#eff6ff;border:1px solid #93c5fd;border-radius:var(--radius-sm);">
+        <div style="font-size:11px;font-weight:600;color:#1e40af;margin-bottom:8px;letter-spacing:0.04em;">📊 FX BOOKING RATE</div>
+        <div class="form-grid form-grid-2" style="gap:10px 14px;align-items:end;">
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:11px;">Booking Rate <span id="ics-fx-rate-lbl" style="font-weight:400;color:var(--text3);">—</span></label>
+            <input type="number" id="ics-fx-rate" min="0" step="0.0001" placeholder="0.0000" oninput="onIcsFxRateChange()" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:'DM Mono',monospace;">
+          </div>
+          <div style="margin:0;font-size:12px;color:#1e40af;">
+            Booked value: <strong id="ics-fx-booked" style="font-family:'DM Mono',monospace;">—</strong>
+            <div style="font-size:11px;color:#3b82f6;margin-top:2px;">This is what will be reflected in your home-currency books.</div>
+          </div>
+        </div>
+      </div>
+
       <div class="form-group" style="margin-bottom:8px;"><label>Notes <span style="font-weight:400;color:var(--text3);">(optional)</span></label>
         <input type="text" id="ics-notes" placeholder="Internal notes about this shipment...">
       </div>
@@ -2866,6 +2881,10 @@ tr:hover td { background:var(--bg); }
       <div id="ics-set-impact" style="padding:10px 14px;background:var(--bg);border-radius:var(--radius-sm);font-size:12px;margin-bottom:12px;">
         <div>Inter-co balance impact: <strong id="ics-set-impact-amount" style="font-family:'DM Mono',monospace;">—</strong></div>
         <div id="ics-set-impact-detail" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
+        <div id="ics-set-fx-row" style="display:none;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);font-size:12px;">
+          Realized FX gain/loss: <strong id="ics-set-fx-amount" style="font-family:'DM Mono',monospace;">—</strong>
+          <div id="ics-set-fx-detail" style="font-size:11px;color:var(--text3);margin-top:2px;"></div>
+        </div>
       </div>
 
       <div class="form-group" style="margin-bottom:8px;"><label>Notes <span style="font-weight:400;color:var(--text3);">(optional)</span></label>
@@ -4287,7 +4306,7 @@ const COLS = {
   users:        ['id','username','name','role','initials','active','email','auth_id'],
   expenses:     ['id','date','desc','cat','amount','supplier','status','paid','account','notes','dueDate','recurring','recurringId','deleted_at','deleted_by','deleted_reason'],
   sales:        ['id','date','customer','product','qty','price','total','type','account','notes','harvestId'],
-  invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','currency','notes','product','qty','unit','discount','soId','soOrderNo','is_intercompany','intercompany_id','intercompany_partner_id','intercompany_partner_name','deleted_at','deleted_by','deleted_reason'],
+  invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','currency','notes','product','qty','unit','discount','soId','soOrderNo','is_intercompany','intercompany_id','intercompany_partner_id','intercompany_partner_name','booking_rate','booking_value_local','deleted_at','deleted_by','deleted_reason'],
   inventory:    ['id','name','cat','unit','stock','reorder','cost','supplier'],
   staff:        ['id','name','role','dept','payType','salary','ic','phone','joinDate','empType','epf','socso','eis','bank','bankAcc','notes','address','emergencyName','emergencyPhone','emergencyRel','allowances'],
   customers:    ['id','name','contact','phone','email','address','terms','currency','priceList','notes'],
@@ -4315,7 +4334,7 @@ const COLS = {
   payments:     ['id','invoiceId','invoiceNo','customer','date','amount','currency','account','reference','notes','type','intercompany_id','received_currency','received_amount','exchange_rate','received_company_id','received_company_name','received_account','deleted_at','deleted_by','deleted_reason'],
   creditNotes:  ['id','no','date','invoiceId','invoiceNo','customer','lines','total','currency','reason','status','notes','createdOn','deleted_at','deleted_by','deleted_reason'],
   debitNotes:   ['id','no','date','kind','partyType','partyName','invoiceId','invoiceNo','lines','total','currency','reason','status','notes','createdOn','deleted_at','deleted_by','deleted_reason'],
-  intercompanyTransactions: ['id','date','intercompany_id','partner_id','partner_name','partner_prefix','amount','partner_amount','currency','partner_currency','exchange_rate','account','cash_amount','cash_currency','kind','linked_invoice_id','linked_invoice_no','linked_payment_id','customer','supplier','notes','created_by','deleted_at','deleted_by','deleted_reason'],
+  intercompanyTransactions: ['id','date','intercompany_id','partner_id','partner_name','partner_prefix','amount','partner_amount','currency','partner_currency','exchange_rate','account','cash_amount','cash_currency','kind','linked_invoice_id','linked_invoice_no','linked_payment_id','customer','supplier','notes','created_by','booking_rate','booking_value_local','fx_realized','fx_realized_currency','deleted_at','deleted_by','deleted_reason'],
 };
 
 // ---- SOFT DELETE HELPERS ----
@@ -10514,8 +10533,19 @@ async function renderInterCoView() {
             const owesUs = val > 0;
             const color = owesUs ? 'var(--green)' : 'var(--red)';
             const label = owesUs ? `${p.name} owes you` : `You owe ${p.name}`;
+            // Home-currency equivalent (if cur ≠ active currency and we have a booking rate)
+            const activeCur = getActiveCompanyCurrency();
+            let equivLine = '';
+            if (cur !== activeCur) {
+              const avgRate = getInterCoAvgBookingRate(p.id);
+              if (avgRate) {
+                const equiv = val * avgRate;
+                equivLine = `<div style="font-size:11px;color:var(--text3);margin-top:1px;font-family:'DM Mono',monospace;">≈ ${equiv>0?'+':''}${fmtCurr(equiv, activeCur)} <span style="font-family:inherit;">@ avg ${avgRate.toFixed(4)}</span></div>`;
+              }
+            }
             return `<div style="font-size:22px;font-weight:600;color:${color};font-family:'DM Mono',monospace;">${val>0?'+':''}${fmtCurr(val, cur)}</div>
-                    <div style="font-size:11px;color:${color};margin-top:2px;">${label}</div>`;
+                    <div style="font-size:11px;color:${color};margin-top:2px;">${label}</div>
+                    ${equivLine}`;
           }).join('<div style="height:6px;"></div>');
 
       const unsettledTotal = partnerInvoices.reduce((s,i) => {
@@ -10592,6 +10622,7 @@ async function renderInterCoView() {
         <th class="text-right">Cash Movement</th>
         <th class="text-right">Balance Impact</th>
         <th class="text-right">Implied Rate</th>
+        <th class="text-right">Realized FX G/L</th>
         <th>Notes</th>
       </tr></thead>
       <tbody>${settlements.map(r => {
@@ -10606,6 +10637,13 @@ async function renderInterCoView() {
         // Implied rate: |impact| / |cash|  (units: cash per inter-co)
         const rate = (cashAbs > 0 && Math.abs(impact) > 0) ? (cashAbs / Math.abs(impact)) : null;
         const rateStr = (rate && cashCur !== r.currency) ? `1 ${r.currency} = ${rate.toFixed(4)} ${cashCur}` : (cashCur === r.currency ? '—' : '?');
+        const fxRaw = r.fx_realized;
+        const hasFx = (fxRaw !== null && fxRaw !== undefined && fxRaw !== '');
+        const fxNum = hasFx ? parseFloat(fxRaw) : null;
+        const fxCur = r.fx_realized_currency || getActiveCompanyCurrency();
+        const fxStr = hasFx
+          ? `<span style="color:${fxNum>=0?'var(--green)':'var(--red)'};font-weight:500;">${fxNum>=0?'+':''}${fmtCurr(fxNum, fxCur)}</span>`
+          : '<span style="color:var(--text3);">—</span>';
         return `<tr>
           <td style="color:var(--text2);">${fmtDate(r.date)}</td>
           <td>${r.partner_name||''}</td>
@@ -10613,7 +10651,8 @@ async function renderInterCoView() {
           <td class="text-right mono">${cashAbs > 0 ? fmtCurr(cashAbs, cashCur) : '—'}${r.account?`<div style="font-size:10px;color:var(--text3);font-family:inherit;font-weight:400;margin-top:2px;">${r.account}</div>`:''}</td>
           <td class="text-right mono" style="color:${impact>0?'var(--green)':'var(--red)'};font-weight:500;">${impact>0?'+':''}${fmtCurr(impact, r.currency||'MYR')}</td>
           <td class="text-right mono" style="font-size:11px;color:var(--text2);">${rateStr}</td>
-          <td style="font-size:12px;color:var(--text2);max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(r.notes||'').replace(/"/g,'&quot;')}">${r.notes||''}</td>
+          <td class="text-right mono">${fxStr}</td>
+          <td style="font-size:12px;color:var(--text2);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(r.notes||'').replace(/"/g,'&quot;')}">${r.notes||''}</td>
         </tr>`;
       }).join('')}</tbody></table>`;
   }
@@ -16181,7 +16220,7 @@ function generateSetupSql(prefix) {
     users: `id int8 primary key, username text, password text, name text, role text, initials text, active bool`,
     expenses: `id int8 primary key, date text, "desc" text, cat text, amount numeric, supplier text, status text, paid text, account text, notes text, "dueDate" text, recurring bool, "recurringId" int8`,
     sales: `id int8 primary key, date text, customer text, product text, qty numeric, price numeric, total numeric, type text, account text, notes text, "harvestId" int8`,
-    invoices: `id int8 primary key, no text, date text, due text, customer text, address text, lines text, total numeric, tax numeric, sst numeric, status text, account text, currency text, notes text, product text, qty numeric, unit text, discount text, "soId" int8, "soOrderNo" text, is_intercompany bool, intercompany_id text, intercompany_partner_id text, intercompany_partner_name text`,
+    invoices: `id int8 primary key, no text, date text, due text, customer text, address text, lines text, total numeric, tax numeric, sst numeric, status text, account text, currency text, notes text, product text, qty numeric, unit text, discount text, "soId" int8, "soOrderNo" text, is_intercompany bool, intercompany_id text, intercompany_partner_id text, intercompany_partner_name text, booking_rate numeric, booking_value_local numeric`,
     inventory: `id int8 primary key, name text, cat text, unit text, stock numeric, reorder numeric, cost numeric, supplier text`,
     staff: `id int8 primary key, name text, role text, dept text, "payType" text, salary numeric, ic text, phone text, "joinDate" text, "empType" text, epf bool, socso bool, eis bool, bank text, "bankAcc" text, notes text`,
     customers: `id int8 primary key, name text, contact text, phone text, email text, address text, terms text, currency text, "priceList" text, notes text`,
@@ -16209,7 +16248,7 @@ function generateSetupSql(prefix) {
     payments: `id int8 primary key, "invoiceId" int8, "invoiceNo" text, customer text, date text, amount numeric, currency text, account text, reference text, notes text, type text, intercompany_id text, received_currency text, received_amount numeric, exchange_rate numeric, received_company_id text, received_company_name text, received_account text`,
     credit_notes: `id int8 primary key, no text, date text, "invoiceId" int8, "invoiceNo" text, customer text, lines text, total numeric, currency text, reason text, status text, notes text, "createdOn" text`,
     debit_notes: `id int8 primary key, no text, date text, kind text, "partyType" text, "partyName" text, "invoiceId" int8, "invoiceNo" text, lines text, total numeric, currency text, reason text, status text, notes text, "createdOn" text`,
-    intercompany_transactions: `id int8 primary key, date text, intercompany_id text, partner_id text, partner_name text, partner_prefix text, amount numeric, partner_amount numeric, currency text, partner_currency text, exchange_rate numeric, account text, cash_amount numeric, cash_currency text, kind text, linked_invoice_id int8, linked_invoice_no text, linked_payment_id int8, customer text, supplier text, notes text, created_by text, deleted_at text, deleted_by text, deleted_reason text`,
+    intercompany_transactions: `id int8 primary key, date text, intercompany_id text, partner_id text, partner_name text, partner_prefix text, amount numeric, partner_amount numeric, currency text, partner_currency text, exchange_rate numeric, account text, cash_amount numeric, cash_currency text, kind text, linked_invoice_id int8, linked_invoice_no text, linked_payment_id int8, customer text, supplier text, notes text, created_by text, booking_rate numeric, booking_value_local numeric, fx_realized numeric, fx_realized_currency text, deleted_at text, deleted_by text, deleted_reason text`,
   };
   const stmts = Object.entries(schemas).map(([t, cols]) =>
     `CREATE TABLE IF NOT EXISTS ${prefix}_${t} (${cols});\nALTER TABLE ${prefix}_${t} ENABLE ROW LEVEL SECURITY;\nDROP POLICY IF EXISTS "anon_all" ON ${prefix}_${t};\nCREATE POLICY "anon_all" ON ${prefix}_${t} FOR ALL USING (true) WITH CHECK (true);`
@@ -17698,6 +17737,37 @@ function onIcsReceiverChange() {
   document.getElementById('ics-currency').value = cur;
   // Re-render lines so unit-price hints adapt to currency
   renderIcsLines();
+
+  // Decide whether the FX booking rate panel applies (cross-currency only)
+  const activeCur = getActiveCompanyCurrency();
+  const fxPanel = document.getElementById('ics-fx-panel');
+  if (cur !== activeCur && fxPanel) {
+    fxPanel.style.display = 'block';
+    document.getElementById('ics-fx-rate-lbl').textContent = `(${activeCur} per ${cur})`;
+    // Pre-fill from last-used rate stored locally for this currency pair
+    const key = `mycobooks_last_fx_${cur}_${activeCur}`;
+    const last = localStorage.getItem(key);
+    const input = document.getElementById('ics-fx-rate');
+    if (last && !input.value) input.value = last;
+    onIcsFxRateChange();
+  } else if (fxPanel) {
+    fxPanel.style.display = 'none';
+  }
+}
+
+// Recompute booked value when rate or total changes
+function onIcsFxRateChange() {
+  const cur = (icsReceiverCo && icsReceiverCo.currency) || 'SGD';
+  const activeCur = getActiveCompanyCurrency();
+  const total = icsLines.reduce((s,l) => s + (l.qty * l.unitPrice), 0);
+  const rate  = parseFloat(document.getElementById('ics-fx-rate').value) || 0;
+  const booked = total * rate;
+  const el = document.getElementById('ics-fx-booked');
+  if (el) {
+    el.textContent = (rate > 0 && total > 0)
+      ? `${activeCur} ${booked.toFixed(2)}  (${total.toFixed(2)} ${cur} × ${rate.toFixed(4)})`
+      : '—';
+  }
 }
 
 function addIcsLine() {
@@ -17745,6 +17815,9 @@ function updateIcsTotal() {
   const total = icsLines.reduce((s,l) => s + (l.qty * l.unitPrice), 0);
   const el = document.getElementById('ics-total-cell');
   if (el) el.textContent = `${cur} ${total.toFixed(2)}`;
+  // Also refresh the FX booked-value preview if the panel is visible
+  const fxPanel = document.getElementById('ics-fx-panel');
+  if (fxPanel && fxPanel.style.display !== 'none') onIcsFxRateChange();
 }
 
 function renderIcsLines() {
@@ -17855,6 +17928,25 @@ async function saveInterCoShipment() {
       unit: l.unit || ''
     }));
     const finalInvNo = invNo || ('IC-' + new Date().getFullYear() + '-' + String(DB.nextIds.invoices).padStart(4,'0'));
+
+    // Capture FX booking rate (only meaningful when invoice currency ≠ active currency)
+    const activeCurrency = getActiveCompanyCurrency();
+    const fxApplies = (partnerCurrency !== activeCurrency);
+    let bookingRate = 1;
+    let bookingValueLocal = total;
+    if (fxApplies) {
+      const r = parseFloat(document.getElementById('ics-fx-rate').value) || 0;
+      if (r <= 0) {
+        showToast(`Enter a booking rate (${activeCurrency} per ${partnerCurrency})`, 'error');
+        if (btn) { btn.disabled = false; btn.textContent = 'Record Shipment'; }
+        return;
+      }
+      bookingRate = r;
+      bookingValueLocal = +(total * r).toFixed(2);
+      // Remember this rate so the next shipment pre-fills it
+      try { localStorage.setItem(`mycobooks_last_fx_${partnerCurrency}_${activeCurrency}`, String(r)); } catch(e) {}
+    }
+
     const inv = {
       id: DB.nextIds.invoices++,
       no: finalInvNo,
@@ -17873,7 +17965,9 @@ async function saveInterCoShipment() {
       is_intercompany: true,
       intercompany_id: intercompanyId,
       intercompany_partner_id: partner.id,
-      intercompany_partner_name: partner.name
+      intercompany_partner_name: partner.name,
+      booking_rate: bookingRate,
+      booking_value_local: bookingValueLocal
     };
     if (!DB.invoices) DB.invoices = [];
     DB.invoices.unshift(inv);
@@ -17901,7 +17995,9 @@ async function saveInterCoShipment() {
       linked_payment_id: null,
       customer: partner.name,
       notes: `Shipment ${ref || ''} (${validLines.length} line${validLines.length===1?'':'s'})`,
-      created_by: (DB.currentUser && DB.currentUser.name) || ''
+      created_by: (DB.currentUser && DB.currentUser.name) || '',
+      booking_rate: bookingRate,
+      booking_value_local: bookingValueLocal
     };
     DB.intercompanyTransactions.unshift(sellerIcTxn);
     if (typeof sbPersist === 'function') sbPersist('intercompanyTransactions', sellerIcTxn);
@@ -18060,6 +18156,34 @@ function getInterCoBalanceFor(partnerId) {
   // return the first. The Balance view (Segment 5) will show all explicitly.
   const entries = Object.entries(byCur).sort((a,b) => Math.abs(b[1]) - Math.abs(a[1]));
   return { amount: entries[0][1], currency: entries[0][0] };
+}
+
+// Weighted-average booking rate of the active company's outstanding inter-co
+// AR with this partner, computed from sale events that haven't been fully
+// settled yet. Used to estimate the home-currency value of the AR and to
+// compute realized FX g/l at settlement time.
+//
+// Approach: aggregate the sale_value × booking_rate of all sales, subtract
+// settled-down portions chronologically (FIFO). Practical short-cut for our
+// weekly settlement flow: take the simple weighted average of all sale events
+// that have a booking_rate, weighted by sale amount. Settlements don't
+// participate in the weighted average because they don't carry a sale rate.
+function getInterCoAvgBookingRate(partnerId) {
+  const sales = (DB.intercompanyTransactions || []).filter(r =>
+    !r.deleted_at && r.partner_id === partnerId &&
+    r.kind === 'inter_co_sale' &&
+    parseFloat(r.booking_rate) > 0
+  );
+  if (sales.length === 0) return null;
+  let amtSum = 0;
+  let valSum = 0;
+  sales.forEach(s => {
+    const amt = Math.abs(parseFloat(s.amount) || 0);
+    const rate = parseFloat(s.booking_rate) || 0;
+    amtSum += amt;
+    valSum += amt * rate;
+  });
+  return amtSum > 0 ? (valSum / amtSum) : null;
 }
 
 async function openInterCoSettlementModal() {
@@ -18231,6 +18355,73 @@ function onIcsSettlementAmountsChange() {
   }
   document.getElementById('ics-set-impact-detail').textContent = impactDetail;
 
+  // ─── REALIZED FX GAIN/LOSS ────────────────────────────────────────────
+  // Realized FX g/l happens when the inter-co currency ≠ the active company's
+  // home currency, AND there's a booking rate on the underlying sales we're
+  // settling. We use the weighted-average booking rate of unsettled inter-co
+  // sales to estimate the booked home-currency value of the portion being
+  // settled, then compare it to the actual cash leg in home currency.
+  const fxRow = document.getElementById('ics-set-fx-row');
+  const fxAmtEl = document.getElementById('ics-set-fx-amount');
+  const fxDetEl = document.getElementById('ics-set-fx-detail');
+  const activeCurFx = getActiveCompanyCurrency();
+  let fxRealized = 0;
+  let fxRealizedCurrency = activeCurFx;
+  let fxDetail = '';
+  let fxApplies = false;
+
+  if (icCur && icCur !== activeCurFx && impact > 0) {
+    // Active company has FX exposure on this inter-co balance.
+    const avgRate = getInterCoAvgBookingRate(partner.id);
+    if (avgRate) {
+      // The portion being settled, in inter-co currency, equals impactMag.
+      const bookedValueLocal = impactMag * avgRate;
+      // The actual cash settlement leg, in home currency.
+      // For 'out' (we sent), our home-currency cash leg is `sent` if senderCur===active, else `recv` if recvCur===active.
+      // For 'in' (we received), our home-currency cash leg is `recv` if recvCur===active, else `sent`.
+      let actualLocal = 0;
+      if (senderCur === activeCurFx)      actualLocal = sent;
+      else if (recvCur === activeCurFx)   actualLocal = recv;
+      // else: cash leg is in a third currency — can't compute realized FX without another rate.
+
+      if (actualLocal > 0) {
+        fxApplies = true;
+        // Sign convention:
+        //  'in' direction (partner paid us): we expected to receive bookedValueLocal, we got actualLocal.
+        //                                    gain = actualLocal − bookedValueLocal
+        //  'out' direction (we paid them):   we expected to pay bookedValueLocal, we paid actualLocal.
+        //                                    gain = bookedValueLocal − actualLocal
+        fxRealized = (dir === 'in') ? (actualLocal - bookedValueLocal) : (bookedValueLocal - actualLocal);
+        fxRealized = +fxRealized.toFixed(2);
+        const settlementRate = (impactMag > 0) ? (actualLocal / impactMag) : 0;
+        fxDetail = `Booked @ avg ${avgRate.toFixed(4)} (${fmtCurr(bookedValueLocal, activeCurFx)}) vs settled @ ${settlementRate.toFixed(4)} (${fmtCurr(actualLocal, activeCurFx)})`;
+      }
+    } else {
+      fxDetail = 'No booking rate on prior shipments — FX g/l not computable.';
+    }
+  }
+
+  if (fxRow) {
+    if (fxApplies || fxDetail) {
+      fxRow.style.display = 'block';
+      if (fxAmtEl) {
+        if (fxApplies) {
+          fxAmtEl.textContent = `${fxRealized>=0?'+':''}${fmtCurr(fxRealized, activeCurFx)}`;
+          fxAmtEl.style.color = fxRealized >= 0 ? 'var(--green)' : 'var(--red)';
+        } else {
+          fxAmtEl.textContent = '—';
+          fxAmtEl.style.color = 'var(--text3)';
+        }
+      }
+      if (fxDetEl) fxDetEl.textContent = fxDetail;
+    } else {
+      fxRow.style.display = 'none';
+    }
+  }
+  icsSetState._fxRealized = fxRealized;
+  icsSetState._fxRealizedCurrency = fxRealizedCurrency;
+  icsSetState._fxApplies = fxApplies;
+
   // Stash for save
   icsSetState._impact = signed;
   icsSetState._sent   = sent;
@@ -18315,9 +18506,10 @@ async function saveInterCoSettlement() {
       notes: notes
         ? `Settlement ${ref ? `[${ref}] ` : ''}${notes}`
         : `Settlement ${ref ? `[${ref}] ` : ''}${senderIsActive ? '→' : '←'} ${partner.name}`,
-      created_by: (DB.currentUser && DB.currentUser.name) || ''
+      created_by: (DB.currentUser && DB.currentUser.name) || '',
+      fx_realized: icsSetState._fxApplies ? icsSetState._fxRealized : null,
+      fx_realized_currency: icsSetState._fxApplies ? icsSetState._fxRealizedCurrency : null
     };
-    DB.intercompanyTransactions.unshift(activeRow);
     if (typeof sbPersist === 'function') sbPersist('intercompanyTransactions', activeRow);
 
     // ─── PARTNER-SIDE ROW ───────────────────────────────────────────────
