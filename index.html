@@ -2623,12 +2623,34 @@ tr:hover td { background:var(--bg); }
         </div>
         <div class="form-group"><label>Payment Date</label><input type="date" id="rp-date"></div>
         <div class="form-group"><label>Deposit Into</label>
-          <select id="rp-account" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
+          <select id="rp-account" onchange="onRpAccountChange()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
         </div>
-        <div class="form-group"><label>Amount Received</label>
+        <div class="form-group"><label>Amount Received <span id="rp-amount-cur" style="font-weight:400;color:var(--text3);">(MYR)</span></label>
           <input type="number" id="rp-amount" placeholder="0.00" min="0" step="0.01" oninput="onRpAmountChange()">
         </div>
         <div class="form-group"><label>Reference <span style="font-weight:400;color:var(--text3);">optional</span></label><input type="text" id="rp-ref" placeholder="e.g. cheque no, bank ref"></div>
+      </div>
+
+      <!-- Cross-company FX panel for bulk payment (hidden when same-company account selected) -->
+      <div id="rp-fx-panel" style="display:none;margin:0 0 14px 0;padding:12px 14px;background:#fff7ed;border:1px solid #fdba74;border-radius:var(--radius-sm);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;font-weight:600;color:#9a3412;">
+          <span>⇄ Cross-company payment</span>
+          <span id="rp-fx-partner-name" style="font-weight:400;color:#7c2d12;"></span>
+        </div>
+        <div class="form-grid form-grid-2" style="gap:10px 14px;">
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:11px;">Amount Received <span id="rp-fx-cur-lbl" style="font-weight:400;color:var(--text3);">(MYR)</span></label>
+            <input type="number" id="rp-fx-amount" placeholder="0.00" min="0" step="0.01" oninput="onRpFxChange()">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:11px;">Rate <span id="rp-fx-rate-lbl" style="font-weight:400;color:var(--text3);">(MYR per SGD)</span></label>
+            <input type="number" id="rp-fx-rate" placeholder="0.0000" min="0" step="0.0001" oninput="onRpFxChange()">
+          </div>
+        </div>
+        <div style="margin-top:10px;padding:8px 12px;background:#fff;border-radius:4px;font-size:12px;color:#9a3412;">
+          → Available to allocate: <strong id="rp-fx-applied" style="font-family:'DM Mono',monospace;">—</strong>
+          <span style="font-size:11px;color:#7c2d12;margin-left:8px;">(this is what the rows below will allocate against)</span>
+        </div>
       </div>
 
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
@@ -2990,7 +3012,7 @@ tr:hover td { background:var(--bg); }
 </div>
 <!-- Mark Paid Modal -->
 <div class="modal-backdrop" id="modal-mark-paid">
-  <div class="modal" style="width:460px;">
+  <div class="modal" style="width:520px;">
     <div class="modal-head">
       <span class="modal-title">Record Payment</span>
       <button class="modal-close" onclick="closeModal('modal-mark-paid')">×</button>
@@ -3000,18 +3022,42 @@ tr:hover td { background:var(--bg); }
       <div id="pay-inv-summary" style="background:var(--bg);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;font-size:13px;"></div>
       <div class="form-grid form-grid-2">
         <div class="form-group"><label>Payment Date</label><input type="date" id="pay-inv-date"></div>
-        <div class="form-group"><label>Amount Received</label><input type="number" id="pay-inv-amount" placeholder="0.00" min="0" step="0.01" oninput="updatePayBalance()"></div>
-        <div class="form-group"><label>Received Into</label>
-          <select id="pay-inv-account" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
+        <div class="form-group"><label>Amount Applied <span id="pay-inv-amount-cur" style="font-weight:400;color:var(--text3);">(MYR)</span></label><input type="number" id="pay-inv-amount" placeholder="0.00" min="0" step="0.01" oninput="updatePayBalance()"></div>
+        <div class="form-group" style="grid-column:1/-1"><label>Received Into</label>
+          <select id="pay-inv-account" onchange="onPayInvAccountChange()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
         </div>
+      </div>
+
+      <!-- Cross-company FX panel (hidden when same-company account selected) -->
+      <div id="pay-inv-fx-panel" style="display:none;margin-top:12px;padding:12px 14px;background:#fff7ed;border:1px solid #fdba74;border-radius:var(--radius-sm);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;font-weight:600;color:#9a3412;">
+          <span>⇄ Cross-company payment</span>
+          <span id="pay-inv-fx-partner-name" style="font-weight:400;color:#7c2d12;"></span>
+        </div>
+        <div class="form-grid form-grid-2">
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:11px;">Amount Received <span id="pay-inv-fx-cur-lbl" style="font-weight:400;color:var(--text3);">(MYR)</span></label>
+            <input type="number" id="pay-inv-fx-amount" placeholder="0.00" min="0" step="0.01" oninput="onPayInvFxChange()">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:11px;">Rate <span id="pay-inv-fx-rate-lbl" style="font-weight:400;color:var(--text3);">(MYR per SGD)</span></label>
+            <input type="number" id="pay-inv-fx-rate" placeholder="0.0000" min="0" step="0.0001" oninput="onPayInvFxChange()">
+          </div>
+        </div>
+        <div id="pay-inv-fx-applied-row" style="margin-top:10px;padding:8px 12px;background:#fff;border-radius:4px;font-size:12px;color:#9a3412;">
+          → Applied to invoice: <strong id="pay-inv-fx-applied" style="font-family:'DM Mono',monospace;">—</strong>
+        </div>
+      </div>
+
+      <div class="form-grid form-grid-2" style="margin-top:12px;">
         <div class="form-group"><label>Payment Reference <span style="font-weight:400;color:var(--text3);">(optional)</span></label>
           <input type="text" id="pay-inv-ref" placeholder="Cheque no., transfer ref...">
         </div>
-        <div class="form-group" style="grid-column:1/-1"><label>Notes <span style="font-weight:400;color:var(--text3);">(optional)</span></label>
+        <div class="form-group"><label>Notes <span style="font-weight:400;color:var(--text3);">(optional)</span></label>
           <input type="text" id="pay-inv-notes" placeholder="e.g. PDC cheque, partial payment...">
         </div>
       </div>
-      <div id="pay-balance-info" style="font-size:12px;padding:8px 12px;border-radius:var(--radius-sm);margin-bottom:14px;"></div>
+      <div id="pay-balance-info" style="font-size:12px;padding:8px 12px;border-radius:var(--radius-sm);margin:14px 0;"></div>
       <div class="form-actions">
         <button class="btn btn-outline" onclick="closeModal('modal-mark-paid')">Cancel</button>
         <button class="btn btn-primary" onclick="confirmMarkPaid()">Record Payment</button>
@@ -3560,7 +3606,8 @@ const SB_TABLES = [
   'products','accounts','suppliers','payrollRuns','wageAdvances','transfers',
   'cashflowItems','loans','claims','recurringExpenses','batches','harvests',
   'packings','packingRates','packingTeams','salesOrders','lorries','refuels','maintenance',
-  'trips','routeRates','payments','creditNotes','debitNotes','scheduledTrips'
+  'trips','routeRates','payments','creditNotes','debitNotes','scheduledTrips',
+  'intercompanyTransactions'
 ];
 
 function sbTable(key) {
@@ -3568,6 +3615,13 @@ function sbTable(key) {
   const base = key.replace(/([A-Z])/g, '_$1').toLowerCase();
   // Prepend active company prefix (empty string for the default company)
   const prefix = (typeof getActiveCompanyPrefix === 'function') ? getActiveCompanyPrefix() : '';
+  return prefix ? `${prefix}_${base}` : base;
+}
+
+// Like sbTable, but uses an explicit company prefix instead of the active one.
+// Used for cross-company writes (e.g. inter-company payments).
+function sbTableFor(prefix, key) {
+  const base = key.replace(/([A-Z])/g, '_$1').toLowerCase();
   return prefix ? `${prefix}_${base}` : base;
 }
 
@@ -3725,6 +3779,77 @@ async function sbDelete(tableKey, id) {
 }
 
 // ============================================================
+// CROSS-COMPANY WRITES (Inter-Company Settlement)
+// ============================================================
+// Variants of sbSave / sbDelete / sbPersist that target a specific company
+// prefix instead of the active one. Used when a payment in one company
+// needs to also create rows in a sister company's tables (e.g. SGD invoice
+// paid in MYR into the MYR company's bank).
+
+async function sbSaveFor(prefix, tableKey, record) {
+  const tbl = sbTableFor(prefix, tableKey);
+  // Serialize JSON columns
+  const row = { ...record };
+  ['lines','customers','orders','expLines','items','dispatch','members','generated','statutory','discount','invoiceIds'].forEach(col => {
+    if (row[col] && typeof row[col] === 'object') {
+      row[col] = JSON.stringify(row[col]);
+    }
+  });
+  try {
+    const existing = await SB.get(`${tbl}?id=eq.${record.id}&select=id`);
+    if (existing && existing.length > 0) {
+      await SB.patch(`${tbl}?id=eq.${record.id}`, row);
+    } else {
+      await SB.post(tbl, row);
+    }
+  } catch(e) {
+    console.warn(`sbSaveFor ${tbl}:`, e.message);
+    throw e;
+  }
+}
+
+async function sbDeleteFor(prefix, tableKey, id) {
+  const tbl = sbTableFor(prefix, tableKey);
+  try {
+    await SB.delete(`${tbl}?id=eq.${id}`);
+  } catch(e) {
+    console.warn(`sbDeleteFor ${tbl}:`, e.message);
+  }
+}
+
+// Persist to a sister company. Audit logging is intentionally skipped here
+// because the auditSnapshots cache only covers the active company's data.
+async function sbPersistFor(prefix, tableKey, record) {
+  if (!navigator.onLine) return;
+  return sbSaveFor(prefix, tableKey, record);
+}
+
+// ============================================================
+// INTER-COMPANY ID GENERATION
+// ============================================================
+// Allocate the next id for a sister company's `intercompany_transactions`
+// table. We can't rely on DB.nextIds (that's the active company's counter),
+// so we ask Supabase for the current max id in that company's prefix.
+async function nextIntercompanyTxnId(prefix) {
+  try {
+    const tbl = sbTableFor(prefix, 'intercompanyTransactions');
+    const rows = await SB.get(`${tbl}?select=id&order=id.desc&limit=1`);
+    const maxId = (Array.isArray(rows) && rows.length > 0) ? (parseInt(rows[0].id) || 0) : 0;
+    return maxId + 1;
+  } catch(e) {
+    console.warn('nextIntercompanyTxnId failed, falling back to timestamp id:', e.message);
+    // Fallback: use a millisecond timestamp (unique enough; won't collide with autoincrement ids
+    // because real id sequences are tiny by comparison)
+    return Date.now();
+  }
+}
+
+// Generate a stable id linking the two sides of a cross-company event.
+function newIntercompanyId() {
+  return 'IC-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+}
+
+// ============================================================
 // AUDIT LOG (Phase 3)
 // ============================================================
 // Kill switch — flip to false if anything breaks. Audit logging will be silently disabled
@@ -3737,7 +3862,9 @@ const AUDIT_TABLES = new Set([
   'invoices','payments','expenses','payrollRuns','creditNotes','debitNotes','wageAdvances',
   'salesOrders','trips','harvests','packings','batches',
   // Additional financial tables
-  'accounts','transfers','claims','loans'
+  'accounts','transfers','claims','loans',
+  // Inter-company
+  'intercompanyTransactions'
 ]);
 
 // Per-record snapshots taken at load time + after each save.
@@ -3992,16 +4119,18 @@ const COLS = {
   maintenance:  ['id','date','lorryId','desc','type','status','odometer','nextKm','vendor','cost','account','nextDate','notes'],
   trips:        ['id','date','lorryId','driver','routeId','route','wage','mileage','expLines','diesel','toll','other','wageAccount','notes','totalCost','deleted_at','deleted_by','deleted_reason'],
   routeRates:   ['id','route','rate','km','notes'],
-  payments:     ['id','invoiceId','invoiceNo','customer','date','amount','currency','account','reference','notes','type','deleted_at','deleted_by','deleted_reason'],
+  payments:     ['id','invoiceId','invoiceNo','customer','date','amount','currency','account','reference','notes','type','intercompany_id','received_currency','received_amount','exchange_rate','received_company_id','received_company_name','received_account','deleted_at','deleted_by','deleted_reason'],
   creditNotes:  ['id','no','date','invoiceId','invoiceNo','customer','lines','total','currency','reason','status','notes','createdOn','deleted_at','deleted_by','deleted_reason'],
   debitNotes:   ['id','no','date','kind','partyType','partyName','invoiceId','invoiceNo','lines','total','currency','reason','status','notes','createdOn','deleted_at','deleted_by','deleted_reason'],
+  intercompanyTransactions: ['id','date','intercompany_id','partner_id','partner_name','partner_prefix','amount','partner_amount','currency','partner_currency','exchange_rate','account','kind','linked_invoice_id','linked_invoice_no','linked_payment_id','customer','supplier','notes','created_by','deleted_at','deleted_by','deleted_reason'],
 };
 
 // ---- SOFT DELETE HELPERS ----
 // Tables that support soft delete (have deleted_at column)
 const SOFT_DELETE_TABLES = new Set([
   'invoices','payments','expenses','payrollRuns','creditNotes','debitNotes','wageAdvances',  // Tier 1
-  'salesOrders','trips','harvests','packings','batches'                                       // Tier 2
+  'salesOrders','trips','harvests','packings','batches',                                       // Tier 2
+  'intercompanyTransactions'                                                                   // Inter-company
 ]);
 
 // Returns the LIVE rows of a table (deleted items filtered out).
@@ -4252,8 +4381,9 @@ const DB = {
   payments: [],
   creditNotes: [],
   debitNotes: [],
+  intercompanyTransactions: [],
   company: { name:'', regno:'', phone:'', email:'', address:'', bank:'', bankacc:'', footer:'Thank you for your business!' },
-  nextIds: { expenses:1, sales:1, invoices:1, inventory:1, staff:1, customers:1, products:1, accounts:1, users:1, suppliers:1, payrollRuns:1, wageAdvances:1, transfers:1, cashflowItems:1, loans:1, claims:1, recurringExpenses:1, batches:1, harvests:1, packings:1, packingRates:1, packingTeams:1, salesOrders:1, lorries:1, refuels:1, maintenance:1, trips:1, routeRates:1, payments:1, creditNotes:1, debitNotes:1, scheduledTrips:1 }
+  nextIds: { expenses:1, sales:1, invoices:1, inventory:1, staff:1, customers:1, products:1, accounts:1, users:1, suppliers:1, payrollRuns:1, wageAdvances:1, transfers:1, cashflowItems:1, loans:1, claims:1, recurringExpenses:1, batches:1, harvests:1, packings:1, packingRates:1, packingTeams:1, salesOrders:1, lorries:1, refuels:1, maintenance:1, trips:1, routeRates:1, payments:1, creditNotes:1, debitNotes:1, scheduledTrips:1, intercompanyTransactions:1 }
 };
 
 // ============================================================
@@ -10837,7 +10967,7 @@ function createSalesFromInvoice(inv, account) {
   });
 }
 
-function markInvoicePaid(id) {
+async function markInvoicePaid(id) {
   const inv = live('invoices').find(i => i.id === id);
   if (!inv) return;
   const currency = inv.currency || 'MYR';
@@ -10850,7 +10980,28 @@ function markInvoicePaid(id) {
   document.getElementById('pay-inv-amount').value = balance.toFixed(2);
   document.getElementById('pay-inv-ref').value = '';
   document.getElementById('pay-inv-notes').value = '';
-  document.getElementById('pay-inv-account').innerHTML = DB.accounts.map(a => `<option value="${a.name}">${a.name}</option>`).join('');
+
+  // Update the currency label next to "Amount Applied"
+  const curLbl = document.getElementById('pay-inv-amount-cur');
+  if (curLbl) curLbl.textContent = `(${currency})`;
+
+  // Load accounts from all sister companies (active company's accounts come from DB.accounts)
+  await loadAllCompaniesAccounts();
+  const sel = document.getElementById('pay-inv-account');
+  sel.innerHTML = buildAccountPickerOptions();
+  // Default to the first option (which is in the active company because of sort order)
+  if (sel.options.length > 0) sel.selectedIndex = 0;
+
+  // Reset FX panel state
+  const fxPanel = document.getElementById('pay-inv-fx-panel');
+  if (fxPanel) fxPanel.style.display = 'none';
+  ['pay-inv-fx-amount','pay-inv-fx-rate'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const amtInput = document.getElementById('pay-inv-amount');
+  if (amtInput) { amtInput.readOnly = false; amtInput.style.background = ''; }
+
   document.getElementById('pay-inv-summary').innerHTML = `
     <div style="font-weight:600;">${inv.no} — ${inv.customer}</div>
     <div style="display:flex;gap:20px;margin-top:6px;font-size:12px;color:var(--text2);">
@@ -10858,6 +11009,10 @@ function markInvoicePaid(id) {
       <span>Paid: <strong style="color:var(--green);">${currSym} ${paid.toFixed(2)}</strong></span>
       <span>Balance: <strong style="color:${balance>0?'var(--red)':'var(--green)'};">${currSym} ${balance.toFixed(2)}</strong></span>
     </div>`;
+
+  // Trigger account-change once so the FX panel shows immediately if first
+  // option happens to be a sister-company account (rare; default sorting puts active first)
+  onPayInvAccountChange();
   updatePayBalance();
   openModal('modal-mark-paid');
 }
@@ -10873,7 +11028,7 @@ function updatePayBalance() {
   const newBal  = (inv.total||0) - paid - amount;
   const el = document.getElementById('pay-balance-info');
   if (!el) return;
-  if (newBal <= 0) {
+  if (newBal <= 0.009) {
     el.style.background = 'var(--green-light)';
     el.style.color = 'var(--green)';
     el.textContent = '✓ Invoice will be fully paid';
@@ -10884,44 +11039,271 @@ function updatePayBalance() {
   }
 }
 
-function confirmMarkPaid() {
-  const id      = parseInt(document.getElementById('pay-inv-id').value);
-  const amount  = parseFloat(document.getElementById('pay-inv-amount').value) || 0;
-  const account = document.getElementById('pay-inv-account').value;
-  const date    = document.getElementById('pay-inv-date').value;
-  const ref     = document.getElementById('pay-inv-ref').value.trim();
-  const notes   = document.getElementById('pay-inv-notes').value.trim();
-  const inv     = live('invoices').find(i => i.id === id);
-  if (!inv || amount <= 0) { showToast('Enter a valid amount', 'error'); return; }
+// ============================================================
+// CROSS-COMPANY FX PANEL HANDLERS (single-invoice modal)
+// ============================================================
 
-  // Record payment
-  const payment = {
-    id: DB.nextIds.payments++,
-    invoiceId: id,
-    invoiceNo: inv.no,
-    customer: inv.customer,
-    date, amount, currency: inv.currency || 'MYR',
-    account, reference: ref, notes,
-    type: 'payment'
-  };
-  if (!DB.payments) DB.payments = [];
-  DB.payments.unshift(payment);
+// When the "Received Into" account changes, decide whether the FX panel
+// is needed (foreign-company account) and reconfigure the form accordingly.
+function onPayInvAccountChange() {
+  const sel = document.getElementById('pay-inv-account');
+  if (!sel || !sel.value) return;
+  const id = parseInt(document.getElementById('pay-inv-id').value);
+  const inv = live('invoices').find(i => i.id === id);
+  if (!inv) return;
+  const invoiceCurrency = inv.currency || 'MYR';
 
-  // Check if fully paid
-  const totalPaid = live('payments').filter(p => p.invoiceId === id).reduce((s,p) => s + (p.amount||0), 0);
-  if (totalPaid >= inv.total) {
-    inv.status = 'Paid';
-    inv.account = account;
-    inv.paidDate = date;
-    } else {
-    inv.status = 'Partial';
+  const { companyId } = parseAccountPickerValue(sel.value);
+  const activeId = getActiveCompanyId();
+  const isCross  = (companyId !== activeId);
+
+  const fxPanel  = document.getElementById('pay-inv-fx-panel');
+  const amtInput = document.getElementById('pay-inv-amount');
+
+  if (!isCross) {
+    if (fxPanel) fxPanel.style.display = 'none';
+    if (amtInput) {
+      amtInput.readOnly = false;
+      amtInput.style.background = '';
+    }
+    updatePayBalance();
+    return;
   }
 
-  closeModal('modal-mark-paid');
-  showToast(`Payment of ${inv.currency === 'SGD' ? 'SGD' : 'RM'} ${amount.toFixed(2)} recorded`);
+  // Cross-company: configure FX panel
+  const partnerCo = getCompaniesList().find(c => c.id === companyId);
+  if (!partnerCo) return;
+  const partnerCurrency = partnerCo.currency || 'MYR';
 
-  // Ask to print receipt
-  if (confirm('Print payment receipt?')) printReceipt(payment, inv);
+  // If the partner-company account happens to be in the same currency as the
+  // invoice, no FX is needed — but it's still cross-company, so just lock rate to 1.
+  const sameCurrency = (partnerCurrency === invoiceCurrency);
+
+  document.getElementById('pay-inv-fx-partner-name').textContent =
+    `· cash will be received by ${partnerCo.name}`;
+  document.getElementById('pay-inv-fx-cur-lbl').textContent = `(${partnerCurrency})`;
+  document.getElementById('pay-inv-fx-rate-lbl').textContent =
+    sameCurrency
+      ? `(${partnerCurrency} per ${invoiceCurrency} · same currency)`
+      : `(${partnerCurrency} per ${invoiceCurrency})`;
+
+  // Default values
+  const rateInput = document.getElementById('pay-inv-fx-rate');
+  const fxAmtInput = document.getElementById('pay-inv-fx-amount');
+  if (sameCurrency) {
+    rateInput.value = '1';
+    rateInput.readOnly = true;
+  } else {
+    if (!rateInput.value || parseFloat(rateInput.value) === 1) rateInput.value = '';
+    rateInput.readOnly = false;
+  }
+  // Pre-fill received amount as (current applied amount × rate) so it's a sane starting point
+  const currentApplied = parseFloat(amtInput.value) || 0;
+  const r = parseFloat(rateInput.value) || 0;
+  if (currentApplied > 0 && r > 0 && !fxAmtInput.value) {
+    fxAmtInput.value = (currentApplied * r).toFixed(2);
+  }
+
+  if (fxPanel) fxPanel.style.display = 'block';
+  // Make the "Amount Applied" field read-only — it's now driven by the FX inputs
+  if (amtInput) {
+    amtInput.readOnly = true;
+    amtInput.style.background = 'var(--bg)';
+  }
+  onPayInvFxChange();
+}
+
+// Recompute applied amount whenever the FX inputs change
+function onPayInvFxChange() {
+  const id = parseInt(document.getElementById('pay-inv-id').value);
+  const inv = live('invoices').find(i => i.id === id);
+  if (!inv) return;
+  const invoiceCurrency = inv.currency || 'MYR';
+
+  const received = parseFloat(document.getElementById('pay-inv-fx-amount').value) || 0;
+  const rate     = parseFloat(document.getElementById('pay-inv-fx-rate').value) || 0;
+  const applied  = (rate > 0) ? (received / rate) : 0;
+
+  document.getElementById('pay-inv-amount').value = applied ? applied.toFixed(2) : '';
+  document.getElementById('pay-inv-fx-applied').textContent =
+    applied ? `${invoiceCurrency} ${applied.toFixed(2)}` : '—';
+  updatePayBalance();
+}
+
+async function confirmMarkPaid() {
+  const id          = parseInt(document.getElementById('pay-inv-id').value);
+  const amount      = parseFloat(document.getElementById('pay-inv-amount').value) || 0;
+  const accountVal  = document.getElementById('pay-inv-account').value;
+  const date        = document.getElementById('pay-inv-date').value;
+  const ref         = document.getElementById('pay-inv-ref').value.trim();
+  const notes       = document.getElementById('pay-inv-notes').value.trim();
+  const inv         = live('invoices').find(i => i.id === id);
+  if (!inv || amount <= 0) { showToast('Enter a valid amount', 'error'); return; }
+  if (!accountVal)         { showToast('Select an account', 'error'); return; }
+
+  const { companyId, accountName } = parseAccountPickerValue(accountVal);
+  const activeId = getActiveCompanyId();
+  const isCross  = (companyId !== activeId);
+
+  // Common payment fields
+  const invoiceCurrency = inv.currency || 'MYR';
+  let payment;
+
+  if (!isCross) {
+    // ─── Same-company payment (legacy behaviour) ─────────────────────────
+    payment = {
+      id: DB.nextIds.payments++,
+      invoiceId: id,
+      invoiceNo: inv.no,
+      customer: inv.customer,
+      date, amount, currency: invoiceCurrency,
+      account: accountName, reference: ref, notes,
+      type: 'payment'
+    };
+    if (!DB.payments) DB.payments = [];
+    DB.payments.unshift(payment);
+    if (typeof sbPersist === 'function') sbPersist('payments', payment);
+
+  } else {
+    // ─── Cross-company payment ───────────────────────────────────────────
+    const partnerCo = getCompaniesList().find(c => c.id === companyId);
+    if (!partnerCo) { showToast('Selected account belongs to an unknown company', 'error'); return; }
+    if (partnerCo.verified === false) {
+      showToast(`${partnerCo.name} has setup pending — verify it first`, 'error');
+      return;
+    }
+
+    const receivedAmount = parseFloat(document.getElementById('pay-inv-fx-amount').value) || 0;
+    const rate           = parseFloat(document.getElementById('pay-inv-fx-rate').value) || 0;
+    const partnerCurrency = partnerCo.currency || 'MYR';
+
+    if (receivedAmount <= 0) { showToast(`Enter the ${partnerCurrency} amount received`, 'error'); return; }
+    if (rate <= 0)           { showToast('Enter a valid exchange rate', 'error'); return; }
+
+    const intercompanyId = newIntercompanyId();
+    const activeName     = getActiveCompanyName();
+    const activePrefix   = getActiveCompanyPrefix();
+
+    // (a) SGD-side payment row in the active company. The `account` field
+    // is set to a synthetic "Inter-Co (PartnerName)" so reports don't
+    // attribute this cash to a real bank in the active company.
+    payment = {
+      id: DB.nextIds.payments++,
+      invoiceId: id,
+      invoiceNo: inv.no,
+      customer: inv.customer,
+      date,
+      amount,
+      currency: invoiceCurrency,
+      account: `Inter-Co (${partnerCo.name})`,
+      reference: ref,
+      notes,
+      type: 'payment',
+      intercompany_id: intercompanyId,
+      received_currency: partnerCurrency,
+      received_amount: receivedAmount,
+      exchange_rate: rate,
+      received_company_id: partnerCo.id,
+      received_company_name: partnerCo.name,
+      received_account: accountName
+    };
+    if (!DB.payments) DB.payments = [];
+    DB.payments.unshift(payment);
+
+    // (b) Inter-company txn row in the active company (we are owed)
+    if (!DB.intercompanyTransactions) DB.intercompanyTransactions = [];
+    if (!DB.nextIds.intercompanyTransactions) DB.nextIds.intercompanyTransactions = 1;
+    const activeIcTxn = {
+      id: DB.nextIds.intercompanyTransactions++,
+      date,
+      intercompany_id: intercompanyId,
+      partner_id: partnerCo.id,
+      partner_name: partnerCo.name,
+      partner_prefix: partnerCo.prefix || '',
+      amount: amount,                 // +SGD 1000 (partner owes us more)
+      partner_amount: receivedAmount, // +MYR 3450 (gross record of cash they're holding)
+      currency: invoiceCurrency,
+      partner_currency: partnerCurrency,
+      exchange_rate: rate,
+      account: '',                    // no local bank involved
+      kind: 'customer_payment',
+      linked_invoice_id: id,
+      linked_invoice_no: inv.no,
+      linked_payment_id: payment.id,
+      customer: inv.customer,
+      notes: `Customer paid invoice ${inv.no} via ${partnerCo.name}'s ${accountName}`,
+      created_by: (DB.currentUser && DB.currentUser.name) || ''
+    };
+    DB.intercompanyTransactions.unshift(activeIcTxn);
+
+    // (c) Inter-company txn row in the partner company (they owe us)
+    let partnerIcTxnId;
+    try {
+      partnerIcTxnId = await nextIntercompanyTxnId(partnerCo.prefix);
+    } catch(e) {
+      showToast('Could not allocate ID in ' + partnerCo.name + ': ' + e.message, 'error');
+      // Roll back the local rows we just pushed
+      DB.payments.shift();
+      DB.intercompanyTransactions.shift();
+      DB.nextIds.payments--;
+      DB.nextIds.intercompanyTransactions--;
+      return;
+    }
+    const partnerIcTxn = {
+      id: partnerIcTxnId,
+      date,
+      intercompany_id: intercompanyId,
+      partner_id: activeId,
+      partner_name: activeName,
+      partner_prefix: activePrefix,
+      amount: -receivedAmount,  // -MYR 3450 (signed: we owe partner more)
+      partner_amount: -amount,  // -SGD 1000
+      currency: partnerCurrency,
+      partner_currency: invoiceCurrency,
+      exchange_rate: rate,
+      account: accountName,     // local bank that received the cash
+      kind: 'customer_payment',
+      linked_invoice_id: null,
+      linked_invoice_no: inv.no,
+      linked_payment_id: null,
+      customer: inv.customer,
+      notes: `Received on behalf of ${activeName} for invoice ${inv.no}`,
+      created_by: (DB.currentUser && DB.currentUser.name) || ''
+    };
+
+    // Persist all three. Active-company rows go through sbPersist (audited).
+    // Partner row uses sbPersistFor (cross-prefix) and is awaited so we know it landed.
+    if (typeof sbPersist === 'function') {
+      sbPersist('payments', payment);
+      sbPersist('intercompanyTransactions', activeIcTxn);
+    }
+    try {
+      await sbPersistFor(partnerCo.prefix, 'intercompanyTransactions', partnerIcTxn);
+    } catch(e) {
+      showToast(`Partner-side write failed: ${e.message}. Partial state — re-record after fixing.`, 'error');
+      // Don't roll back: the active-side records are already saved. User can
+      // see the inter-company balance is wrong and act on it.
+    }
+  }
+
+  // Update invoice status (same logic for both branches)
+  const totalPaid = live('payments').filter(p => p.invoiceId === id).reduce((s,p) => s + (p.amount||0), 0);
+  if (totalPaid >= (inv.total||0) - 0.009) {
+    inv.status = 'Paid';
+    inv.account = payment.account;
+    inv.paidDate = date;
+  } else {
+    inv.status = 'Partial';
+  }
+  if (typeof sbPersist === 'function') sbPersist('invoices', inv);
+
+  closeModal('modal-mark-paid');
+  const symAmt = (invoiceCurrency === 'SGD' ? 'SGD' : invoiceCurrency === 'MYR' ? 'RM' : invoiceCurrency);
+  const xtra   = isCross ? ' (cross-company)' : '';
+  showToast(`Payment of ${symAmt} ${amount.toFixed(2)} recorded${xtra}`);
+
+  // Ask to print receipt (skip for cross-company — bank receipt is in partner co)
+  if (!isCross && confirm('Print payment receipt?')) printReceipt(payment, inv);
   renderInvoices();
 }
 
@@ -15181,6 +15563,81 @@ function getActiveCompanyPrefix() {
   return co ? (co.prefix || '') : '';
 }
 
+function getActiveCompanyName() {
+  const id = getActiveCompanyId();
+  const co = getCompaniesList().find(c => c.id === id);
+  return co ? co.name : 'Default';
+}
+
+function getActiveCompanyCurrency() {
+  const id = getActiveCompanyId();
+  const co = getCompaniesList().find(c => c.id === id);
+  return (co && co.currency) || 'MYR';
+}
+
+// ============================================================
+// CROSS-COMPANY ACCOUNTS PICKER
+// ============================================================
+// In-session cache of accounts from sister companies (the active
+// company's accounts come straight from DB.accounts).
+const allCompanyAccounts = {};
+
+async function loadAllCompaniesAccounts() {
+  const list = getCompaniesList();
+  const activeId = getActiveCompanyId();
+  const others = list.filter(c => c.id !== activeId && c.verified !== false);
+  await Promise.all(others.map(async c => {
+    try {
+      const tbl = sbTableFor(c.prefix, 'accounts');
+      const rows = await SB.get(`${tbl}?select=*&order=name.asc`);
+      allCompanyAccounts[c.id] = Array.isArray(rows) ? rows : [];
+    } catch(e) {
+      console.warn(`Could not load accounts for ${c.name}:`, e.message);
+      allCompanyAccounts[c.id] = [];
+    }
+  }));
+}
+
+// Build optgroup-grouped <option>s for an account picker that spans all
+// companies. Active company appears first. Each option's value is encoded
+// as "<companyId>::<accountName>" so the save logic can split it.
+function buildAccountPickerOptions() {
+  const list = getCompaniesList();
+  const activeId = getActiveCompanyId();
+  // Sort so the active company is first
+  const sorted = [...list].sort((a,b) => (a.id === activeId ? -1 : b.id === activeId ? 1 : a.name.localeCompare(b.name)));
+  const escAttr = s => String(s||'').replace(/"/g,'&quot;').replace(/&/g,'&amp;');
+  const escTxt  = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  let html = '';
+  sorted.forEach(c => {
+    const isActive = c.id === activeId;
+    const accounts = isActive
+      ? (DB.accounts || [])
+      : (allCompanyAccounts[c.id] || []);
+    if (!accounts.length) return;
+    const cur = c.currency || 'MYR';
+    const label = `${c.name} · ${cur}${isActive ? ' (current)' : ''}`;
+    html += `<optgroup label="${escAttr(label)}">`;
+    accounts.forEach(a => {
+      const value = `${c.id}::${a.name}`;
+      html += `<option value="${escAttr(value)}">${escTxt(a.name)}</option>`;
+    });
+    html += `</optgroup>`;
+  });
+  return html;
+}
+
+// Parse a picker value back into { companyId, accountName }. Falls back
+// to the active company if the value doesn't carry an encoded prefix
+// (legacy/same-company values).
+function parseAccountPickerValue(value) {
+  if (typeof value === 'string' && value.includes('::')) {
+    const idx = value.indexOf('::');
+    return { companyId: value.slice(0, idx), accountName: value.slice(idx + 2) };
+  }
+  return { companyId: getActiveCompanyId(), accountName: value || '' };
+}
+
 function setActiveCompanyId(id) {
   localStorage.setItem('mycobooks_active_co', id);
 }
@@ -15400,9 +15857,10 @@ function generateSetupSql(prefix) {
     maintenance: `id int8 primary key, date text, "lorryId" int8, "desc" text, type text, status text, odometer numeric, "nextKm" numeric, vendor text, cost numeric, account text, "nextDate" text, notes text`,
     trips: `id int8 primary key, date text, "lorryId" int8, driver text, "routeId" int8, route text, wage numeric, mileage numeric, "expLines" text, diesel numeric, toll numeric, other numeric, "wageAccount" text, notes text, "totalCost" numeric`,
     route_rates: `id int8 primary key, route text, rate numeric, km numeric, notes text`,
-    payments: `id int8 primary key, "invoiceId" int8, "invoiceNo" text, customer text, date text, amount numeric, currency text, account text, reference text, notes text, type text`,
+    payments: `id int8 primary key, "invoiceId" int8, "invoiceNo" text, customer text, date text, amount numeric, currency text, account text, reference text, notes text, type text, intercompany_id text, received_currency text, received_amount numeric, exchange_rate numeric, received_company_id text, received_company_name text, received_account text`,
     credit_notes: `id int8 primary key, no text, date text, "invoiceId" int8, "invoiceNo" text, customer text, lines text, total numeric, currency text, reason text, status text, notes text, "createdOn" text`,
     debit_notes: `id int8 primary key, no text, date text, kind text, "partyType" text, "partyName" text, "invoiceId" int8, "invoiceNo" text, lines text, total numeric, currency text, reason text, status text, notes text, "createdOn" text`,
+    intercompany_transactions: `id int8 primary key, date text, intercompany_id text, partner_id text, partner_name text, partner_prefix text, amount numeric, partner_amount numeric, currency text, partner_currency text, exchange_rate numeric, account text, kind text, linked_invoice_id int8, linked_invoice_no text, linked_payment_id int8, customer text, supplier text, notes text, created_by text, deleted_at text, deleted_by text, deleted_reason text`,
   };
   const stmts = Object.entries(schemas).map(([t, cols]) =>
     `CREATE TABLE IF NOT EXISTS ${prefix}_${t} (${cols});\nALTER TABLE ${prefix}_${t} ENABLE ROW LEVEL SECURITY;\nDROP POLICY IF EXISTS "anon_all" ON ${prefix}_${t};\nCREATE POLICY "anon_all" ON ${prefix}_${t} FOR ALL USING (true) WITH CHECK (true);`
@@ -16343,7 +16801,7 @@ let rpMode = 'auto';          // 'auto' or 'manual'
 let rpInvoices = [];          // [{id, no, date, total, balance, apply, ticked}]
 let rpCurrency = 'MYR';
 
-function openReceivePaymentModal() {
+async function openReceivePaymentModal() {
   // Reset state
   rpMode = 'auto';
   rpInvoices = [];
@@ -16366,7 +16824,11 @@ function openReceivePaymentModal() {
 
   // Pre-fill common fields
   document.getElementById('rp-date').value = new Date().toISOString().slice(0,10);
-  document.getElementById('rp-account').innerHTML = (DB.accounts||[]).map(a => `<option value="${a.name}">${a.name}</option>`).join('');
+
+  // Load accounts from sister companies, then build the cross-company picker
+  await loadAllCompaniesAccounts();
+  document.getElementById('rp-account').innerHTML = buildAccountPickerOptions();
+
   document.getElementById('rp-amount').value = '';
   document.getElementById('rp-ref').value = '';
   document.getElementById('rp-notes').value = '';
@@ -16377,12 +16839,24 @@ function openReceivePaymentModal() {
   const tickAll = document.getElementById('rp-tick-all');
   if (tickAll) tickAll.checked = false;
 
+  // Reset FX panel state
+  const fxPanel = document.getElementById('rp-fx-panel');
+  if (fxPanel) fxPanel.style.display = 'none';
+  ['rp-fx-amount','rp-fx-rate'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const amtInput = document.getElementById('rp-amount');
+  if (amtInput) { amtInput.readOnly = false; amtInput.style.background = ''; }
+
   // If coming from Customer Statement tab with a customer already selected, preselect it
   const stmtCust = (document.getElementById('stmt-customer-filter')||{}).value;
   if (stmtCust && customersWithBalance.has(stmtCust)) {
     sel.value = stmtCust;
     onRpCustomerChange();
   }
+
+  // Trigger account-change once so FX panel reflects the initially-selected account
+  onRpAccountChange();
 
   openModal('modal-receive-payment');
 }
@@ -16441,11 +16915,90 @@ function onRpCustomerChange() {
   const totalOutstanding = rpInvoices.reduce((s,r) => s + r.balance, 0);
   meta.innerHTML = `${rpInvoices.length} outstanding invoice${rpInvoices.length===1?'':'s'} · Total balance: <b>${fmtCurr(totalOutstanding, rpCurrency)}</b>`;
 
+  // Update currency labels to reflect this customer's currency
+  const amtCur = document.getElementById('rp-amount-cur');
+  if (amtCur) amtCur.textContent = `(${rpCurrency})`;
+  // Refresh FX panel labels in case it's currently visible (rate label depends on invoice currency)
+  onRpAccountChange();
+
   renderRpInvoices();
   applyRpAllocation();
 }
 
 function onRpAmountChange() {
+  applyRpAllocation();
+}
+
+// ============================================================
+// CROSS-COMPANY FX PANEL HANDLERS (bulk modal)
+// ============================================================
+
+function onRpAccountChange() {
+  const sel = document.getElementById('rp-account');
+  if (!sel || !sel.value) return;
+  const { companyId } = parseAccountPickerValue(sel.value);
+  const activeId = getActiveCompanyId();
+  const isCross  = (companyId !== activeId);
+
+  const fxPanel  = document.getElementById('rp-fx-panel');
+  const amtInput = document.getElementById('rp-amount');
+  const amtCur   = document.getElementById('rp-amount-cur');
+
+  if (!isCross) {
+    if (fxPanel) fxPanel.style.display = 'none';
+    if (amtInput) {
+      amtInput.readOnly = false;
+      amtInput.style.background = '';
+    }
+    // Restore label to customer/invoice currency
+    if (amtCur) amtCur.textContent = `(${rpCurrency || 'MYR'})`;
+    applyRpAllocation();
+    return;
+  }
+
+  // Cross-company
+  const partnerCo = getCompaniesList().find(c => c.id === companyId);
+  if (!partnerCo) return;
+  const partnerCurrency = partnerCo.currency || 'MYR';
+  const invoiceCurrency = rpCurrency || 'MYR';
+  const sameCurrency    = (partnerCurrency === invoiceCurrency);
+
+  document.getElementById('rp-fx-partner-name').textContent =
+    `· cash will be received by ${partnerCo.name}`;
+  document.getElementById('rp-fx-cur-lbl').textContent = `(${partnerCurrency})`;
+  document.getElementById('rp-fx-rate-lbl').textContent =
+    sameCurrency
+      ? `(${partnerCurrency} per ${invoiceCurrency} · same currency)`
+      : `(${partnerCurrency} per ${invoiceCurrency})`;
+
+  const rateInput = document.getElementById('rp-fx-rate');
+  if (sameCurrency) {
+    rateInput.value = '1';
+    rateInput.readOnly = true;
+  } else {
+    if (!rateInput.value || parseFloat(rateInput.value) === 1) rateInput.value = '';
+    rateInput.readOnly = false;
+  }
+
+  if (fxPanel) fxPanel.style.display = 'block';
+  // The "Amount Received" field on the main row now represents the SGD-equivalent
+  // (what the rows allocate against). Lock it — driven by FX inputs.
+  if (amtInput) {
+    amtInput.readOnly = true;
+    amtInput.style.background = 'var(--bg)';
+  }
+  if (amtCur) amtCur.textContent = `(${invoiceCurrency} · auto)`;
+  onRpFxChange();
+}
+
+function onRpFxChange() {
+  const invoiceCurrency = rpCurrency || 'MYR';
+  const received = parseFloat(document.getElementById('rp-fx-amount').value) || 0;
+  const rate     = parseFloat(document.getElementById('rp-fx-rate').value) || 0;
+  const applied  = (rate > 0) ? (received / rate) : 0;
+  document.getElementById('rp-amount').value = applied ? applied.toFixed(2) : '';
+  document.getElementById('rp-fx-applied').textContent =
+    applied ? `${invoiceCurrency} ${applied.toFixed(2)}` : '—';
   applyRpAllocation();
 }
 
@@ -16542,17 +17095,17 @@ function buildRpRowHtml(r) {
   </tr>`;
 }
 
-function saveReceivePayment() {
-  const customer = document.getElementById('rp-customer').value;
-  const date     = document.getElementById('rp-date').value;
-  const account  = document.getElementById('rp-account').value;
-  const totalAmt = parseFloat(document.getElementById('rp-amount').value) || 0;
-  const ref      = document.getElementById('rp-ref').value.trim();
-  const notes    = document.getElementById('rp-notes').value.trim();
+async function saveReceivePayment() {
+  const customer    = document.getElementById('rp-customer').value;
+  const date        = document.getElementById('rp-date').value;
+  const accountVal  = document.getElementById('rp-account').value;
+  const totalAmt    = parseFloat(document.getElementById('rp-amount').value) || 0;  // in invoice currency
+  const ref         = document.getElementById('rp-ref').value.trim();
+  const notes       = document.getElementById('rp-notes').value.trim();
 
   if (!customer)       { showToast('Select a customer', 'error'); return; }
   if (!date)           { showToast('Enter a payment date', 'error'); return; }
-  if (!account)        { showToast('Select a deposit account', 'error'); return; }
+  if (!accountVal)     { showToast('Select a deposit account', 'error'); return; }
   if (totalAmt <= 0)   { showToast('Enter the amount received', 'error'); return; }
 
   const applied = rpInvoices.filter(r => r.ticked && (r.apply||0) > 0.009);
@@ -16560,16 +17113,13 @@ function saveReceivePayment() {
 
   const totalAllocated = applied.reduce((s,r) => s + r.apply, 0);
 
-  // Guard against over-allocation
   if (totalAllocated > totalAmt + 0.01) {
     showToast('Allocated more than received — reduce amounts or increase the total', 'error');
     return;
   }
-  // Unallocated warning (not blocking)
   if (totalAmt - totalAllocated > 0.01) {
     if (!confirm(`${fmtCurr(totalAmt - totalAllocated, rpCurrency)} of this payment is unallocated. It won't be linked to any invoice and won't reduce any balance.\n\nContinue anyway?`)) return;
   }
-  // Per-invoice over-payment guard (paranoia — setRpApply already clamps)
   for (const r of applied) {
     if (r.apply > r.balance + 0.01) {
       showToast(`Invoice ${r.no}: applied amount exceeds its balance`, 'error');
@@ -16577,15 +17127,45 @@ function saveReceivePayment() {
     }
   }
 
-  // Create one payment record per allocated invoice, all sharing the same reference
+  // ─── Decode account & detect cross-company ────────────────────────────
+  const { companyId, accountName } = parseAccountPickerValue(accountVal);
+  const activeId = getActiveCompanyId();
+  const isCross  = (companyId !== activeId);
+
+  let partnerCo = null;
+  let receivedAmount = 0;
+  let rate = 1;
+  let intercompanyId = '';
+
+  if (isCross) {
+    partnerCo = getCompaniesList().find(c => c.id === companyId);
+    if (!partnerCo) { showToast('Selected account belongs to an unknown company', 'error'); return; }
+    if (partnerCo.verified === false) {
+      showToast(`${partnerCo.name} has setup pending — verify it first`, 'error');
+      return;
+    }
+    receivedAmount = parseFloat(document.getElementById('rp-fx-amount').value) || 0;
+    rate           = parseFloat(document.getElementById('rp-fx-rate').value)   || 0;
+    if (receivedAmount <= 0) { showToast(`Enter the ${partnerCo.currency||'MYR'} amount received`, 'error'); return; }
+    if (rate <= 0)           { showToast('Enter a valid exchange rate', 'error'); return; }
+    intercompanyId = newIntercompanyId();
+  }
+
+  // ─── Create payment records (one per allocated invoice) ───────────────
   if (!DB.payments) DB.payments = [];
   const bulkRef = ref || ('BULK-' + Date.now());
   const createdPayments = [];
   const updatedInvoices = [];
+  const totalReceivedFx = receivedAmount; // for distribution
 
   applied.forEach(r => {
     const inv = live('invoices').find(i => i.id === r.id);
     if (!inv) return;
+
+    // Distribute the received FX amount proportionally across allocated invoices
+    const proportion = totalAllocated > 0 ? r.apply / totalAllocated : 0;
+    const rcvShare   = isCross ? +(totalReceivedFx * proportion).toFixed(2) : 0;
+
     const payment = {
       id: DB.nextIds.payments++,
       invoiceId: r.id,
@@ -16594,11 +17174,20 @@ function saveReceivePayment() {
       date,
       amount: r.apply,
       currency: inv.currency || 'MYR',
-      account,
+      account: isCross ? `Inter-Co (${partnerCo.name})` : accountName,
       reference: bulkRef,
       notes: notes ? `[Bulk payment] ${notes}` : '[Bulk payment]',
       type: 'payment'
     };
+    if (isCross) {
+      payment.intercompany_id        = intercompanyId;
+      payment.received_currency      = partnerCo.currency || 'MYR';
+      payment.received_amount        = rcvShare;
+      payment.exchange_rate          = rate;
+      payment.received_company_id    = partnerCo.id;
+      payment.received_company_name  = partnerCo.name;
+      payment.received_account       = accountName;
+    }
     DB.payments.unshift(payment);
     createdPayments.push(payment);
 
@@ -16607,27 +17196,98 @@ function saveReceivePayment() {
     const credits      = (typeof getTotalCreditsForInvoice === 'function') ? getTotalCreditsForInvoice(r.id) : 0;
     if (totalPaidNow + credits >= (inv.total||0) - 0.009) {
       inv.status = 'Paid';
-      inv.account = account;
+      inv.account = payment.account;
       inv.paidDate = date;
     } else {
       inv.status = 'Partial';
     }
     updatedInvoices.push(inv);
 
-    // Persist this payment and the invoice update to Supabase
     if (typeof sbPersist === 'function') {
       sbPersist('payments', payment);
       sbPersist('invoices', inv);
     }
   });
 
-  closeModal('modal-receive-payment');
-  showToast(`${fmtCurr(totalAllocated, rpCurrency)} applied across ${applied.length} invoice${applied.length===1?'':'s'}`);
+  // ─── Cross-company: write the two intercompany_transactions rows ──────
+  if (isCross) {
+    if (!DB.intercompanyTransactions) DB.intercompanyTransactions = [];
+    if (!DB.nextIds.intercompanyTransactions) DB.nextIds.intercompanyTransactions = 1;
+    const activeName   = getActiveCompanyName();
+    const activePrefix = getActiveCompanyPrefix();
+    const partnerCurrency = partnerCo.currency || 'MYR';
 
-  // Offer combined receipt
-  if (confirm(`Print combined payment receipt for ${applied.length} invoice${applied.length===1?'':'s'}?`)) {
+    // Active-side: a single aggregate row covering the whole bulk allocation
+    const activeIcTxn = {
+      id: DB.nextIds.intercompanyTransactions++,
+      date,
+      intercompany_id: intercompanyId,
+      partner_id: partnerCo.id,
+      partner_name: partnerCo.name,
+      partner_prefix: partnerCo.prefix || '',
+      amount: totalAllocated,         // +SGD total (partner owes us more)
+      partner_amount: receivedAmount, // +MYR cash held by partner
+      currency: rpCurrency,
+      partner_currency: partnerCurrency,
+      exchange_rate: rate,
+      account: '',
+      kind: 'customer_payment',
+      linked_invoice_id: applied.length === 1 ? applied[0].id : null,
+      linked_invoice_no: applied.map(r => r.no).join(', '),
+      linked_payment_id: createdPayments[0] ? createdPayments[0].id : null,
+      customer,
+      notes: `Bulk payment from ${customer} via ${partnerCo.name}'s ${accountName} (${applied.length} invoice${applied.length===1?'':'s'})`,
+      created_by: (DB.currentUser && DB.currentUser.name) || ''
+    };
+    DB.intercompanyTransactions.unshift(activeIcTxn);
+    if (typeof sbPersist === 'function') sbPersist('intercompanyTransactions', activeIcTxn);
+
+    // Partner-side row
+    let partnerIcTxnId;
+    try {
+      partnerIcTxnId = await nextIntercompanyTxnId(partnerCo.prefix);
+    } catch(e) {
+      showToast('Could not allocate ID in ' + partnerCo.name + ': ' + e.message, 'error');
+      // Active-side records are already saved; user will see broken inter-co balance
+    }
+    if (partnerIcTxnId != null) {
+      const partnerIcTxn = {
+        id: partnerIcTxnId,
+        date,
+        intercompany_id: intercompanyId,
+        partner_id: activeId,
+        partner_name: activeName,
+        partner_prefix: activePrefix,
+        amount: -receivedAmount,
+        partner_amount: -totalAllocated,
+        currency: partnerCurrency,
+        partner_currency: rpCurrency,
+        exchange_rate: rate,
+        account: accountName,
+        kind: 'customer_payment',
+        linked_invoice_id: null,
+        linked_invoice_no: applied.map(r => r.no).join(', '),
+        linked_payment_id: null,
+        customer,
+        notes: `Received on behalf of ${activeName} from ${customer} (${applied.length} invoice${applied.length===1?'':'s'})`,
+        created_by: (DB.currentUser && DB.currentUser.name) || ''
+      };
+      try {
+        await sbPersistFor(partnerCo.prefix, 'intercompanyTransactions', partnerIcTxn);
+      } catch(e) {
+        showToast(`Partner-side write failed: ${e.message}`, 'error');
+      }
+    }
+  }
+
+  closeModal('modal-receive-payment');
+  const xtra = isCross ? ' (cross-company)' : '';
+  showToast(`${fmtCurr(totalAllocated, rpCurrency)} applied across ${applied.length} invoice${applied.length===1?'':'s'}${xtra}`);
+
+  // Offer combined receipt (skip for cross-company — receipt is a partner-co bank thing)
+  if (!isCross && confirm(`Print combined payment receipt for ${applied.length} invoice${applied.length===1?'':'s'}?`)) {
     printBulkReceipt({
-      customer, date, account, amount: totalAmt, allocated: totalAllocated, reference: bulkRef, notes,
+      customer, date, account: accountName, amount: totalAmt, allocated: totalAllocated, reference: bulkRef, notes,
       currency: rpCurrency, payments: createdPayments, invoices: updatedInvoices, rows: applied
     });
   }
