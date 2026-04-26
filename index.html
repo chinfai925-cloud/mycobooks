@@ -630,6 +630,7 @@ tr:hover td { background:var(--bg); }
         <button id="inv-tab-1" onclick="switchInvTab(1)" class="btn btn-outline" style="border-bottom:2px solid var(--green);color:var(--green);border-radius:var(--radius-sm) var(--radius-sm) 0 0;">🧾 Invoices</button>
         <button id="inv-tab-2" onclick="switchInvTab(2)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">👤 Customer Statement</button>
         <button id="inv-tab-3" onclick="switchInvTab(3)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">💳 Payment History</button>
+        <button id="inv-tab-4" onclick="switchInvTab(4)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">⇄ Inter-Company</button>
       </div>
 
       <!-- Tab 1: Invoices -->
@@ -701,6 +702,36 @@ tr:hover td { background:var(--bg); }
           </div>
         </div>
         <div id="inv-pay-hist"></div>
+      </div>
+
+      <!-- Tab 4: Inter-Company -->
+      <div id="inv-panel-4" style="display:none;">
+        <!-- Balance summary cards -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div style="font-size:13px;font-weight:600;color:var(--text2);">Partner Balances</div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-outline btn-sm" onclick="openInterCoShipmentModal()" style="font-size:12px;">⇄ New Shipment</button>
+            <button class="btn btn-outline btn-sm" onclick="openInterCoSettlementModal()" style="font-size:12px;">⇆ New Settlement</button>
+          </div>
+        </div>
+        <div id="inter-co-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:24px;"></div>
+
+        <!-- Unsettled inter-co invoices -->
+        <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:8px;">Unsettled Inter-Co Invoices</div>
+        <div class="card" style="margin-bottom:24px;">
+          <div class="table-wrap" id="inter-co-invoices"></div>
+        </div>
+
+        <!-- Settlement history -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <div style="font-size:13px;font-weight:600;color:var(--text2);">Settlement History</div>
+          <select class="select-filter" id="inter-co-history-partner" onchange="renderInterCoView()" style="font-size:11px;">
+            <option value="">All partners</option>
+          </select>
+        </div>
+        <div class="card">
+          <div class="table-wrap" id="inter-co-history"></div>
+        </div>
       </div>
     </div>
 
@@ -10421,15 +10452,171 @@ function autoFillInvPrice() {}
 let invTab = 1;
 function switchInvTab(n) {
   invTab = n;
-  [1,2,3].forEach(i => {
-    document.getElementById('inv-panel-'+i).style.display = i===n ? '' : 'none';
+  [1,2,3,4].forEach(i => {
+    const panel = document.getElementById('inv-panel-'+i);
+    if (panel) panel.style.display = i===n ? '' : 'none';
     const btn = document.getElementById('inv-tab-'+i);
-    btn.style.borderBottomColor = i===n ? 'var(--green)' : 'transparent';
-    btn.style.color = i===n ? 'var(--green)' : 'var(--text)';
+    if (btn) {
+      btn.style.borderBottomColor = i===n ? 'var(--green)' : 'transparent';
+      btn.style.color = i===n ? 'var(--green)' : 'var(--text)';
+    }
   });
   if (n===1) renderInvoices();
   if (n===2) { populateStmtCustomers(); renderCustomerStatement(); }
   if (n===3) { populatePayHistCustomers(); renderPaymentHistory(); }
+  if (n===4) renderInterCoView();
+}
+
+// ============================================================================
+// INTER-COMPANY VIEW
+// ============================================================================
+// Reads the active company's intercompany_transactions + invoices to render:
+//   1. Per-partner balance cards (with "Settle Now" CTA)
+//   2. List of unsettled inter-co invoices
+//   3. Settlement history (filterable by partner)
+
+async function renderInterCoView() {
+  const cardsEl = document.getElementById('inter-co-cards');
+  const invsEl  = document.getElementById('inter-co-invoices');
+  const histEl  = document.getElementById('inter-co-history');
+  const histFilter = document.getElementById('inter-co-history-partner');
+  if (!cardsEl) return;
+
+  const partners = getCompaniesList().filter(c => c.id !== getActiveCompanyId() && c.verified !== false);
+  const txns = (DB.intercompanyTransactions || []).filter(r => !r.deleted_at);
+
+  // ─── (1) PARTNER BALANCE CARDS ────────────────────────────────────────
+  if (partners.length === 0) {
+    cardsEl.innerHTML = `<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text3);font-size:12px;border:1px dashed var(--border);border-radius:var(--radius-sm);">No verified sister companies. Add one in Settings → Companies.</div>`;
+  } else {
+    cardsEl.innerHTML = partners.map(p => {
+      const partnerTxns = txns.filter(r => r.partner_id === p.id);
+      const partnerInvoices = (live('invoices') || []).filter(i =>
+        i.is_intercompany && i.intercompany_partner_id === p.id && i.status !== 'Paid'
+      );
+
+      // Balance per currency (defensive — almost always single-currency)
+      const byCur = {};
+      partnerTxns.forEach(r => {
+        const cur = r.currency || 'MYR';
+        byCur[cur] = (byCur[cur] || 0) + (parseFloat(r.amount) || 0);
+      });
+      const entries = Object.entries(byCur).filter(([,v]) => Math.abs(v) > 0.009);
+
+      const lastSettlement = partnerTxns
+        .filter(r => r.kind === 'settlement')
+        .sort((a,b) => (b.date||'').localeCompare(a.date||''))[0];
+
+      const balanceHtml = entries.length === 0
+        ? `<div style="font-size:22px;font-weight:300;color:var(--text3);font-family:'DM Mono',monospace;">—</div>
+           <div style="font-size:11px;color:var(--text3);margin-top:2px;">No outstanding balance</div>`
+        : entries.map(([cur, val]) => {
+            const owesUs = val > 0;
+            const color = owesUs ? 'var(--green)' : 'var(--red)';
+            const label = owesUs ? `${p.name} owes you` : `You owe ${p.name}`;
+            return `<div style="font-size:22px;font-weight:600;color:${color};font-family:'DM Mono',monospace;">${val>0?'+':''}${fmtCurr(val, cur)}</div>
+                    <div style="font-size:11px;color:${color};margin-top:2px;">${label}</div>`;
+          }).join('<div style="height:6px;"></div>');
+
+      const unsettledTotal = partnerInvoices.reduce((s,i) => {
+        const paid = (live('payments')||[]).filter(p => p.invoiceId === i.id).reduce((a,p) => a + (p.amount||0), 0);
+        return s + Math.max((i.total||0) - paid, 0);
+      }, 0);
+      const unsettledCur = partnerInvoices[0] ? (partnerInvoices[0].currency || 'MYR') : ((entries[0] && entries[0][0]) || 'SGD');
+
+      return `<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+          <div>
+            <div style="font-weight:600;font-size:14px;">${p.name}</div>
+            <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;margin-top:2px;">${p.currency||'MYR'} · prefix ${p.prefix||'(default)'}</div>
+          </div>
+        </div>
+        ${balanceHtml}
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--text2);display:flex;flex-direction:column;gap:4px;">
+          <div>📄 ${partnerInvoices.length} unsettled invoice${partnerInvoices.length===1?'':'s'}${partnerInvoices.length>0?` · ${fmtCurr(unsettledTotal, unsettledCur)}`:''}</div>
+          <div>🕓 Last settlement: ${lastSettlement ? fmtDate(lastSettlement.date) : '—'}</div>
+        </div>
+        ${entries.length > 0 || partnerInvoices.length > 0 ? `<button class="btn btn-primary btn-sm" style="width:100%;margin-top:12px;font-size:12px;" onclick="openInterCoSettlementModal()">⇆ Settle Now</button>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  // ─── (2) UNSETTLED INTER-CO INVOICES ──────────────────────────────────
+  const unsettled = (live('invoices') || []).filter(i => i.is_intercompany && i.status !== 'Paid');
+  if (unsettled.length === 0) {
+    invsEl.innerHTML = `<div class="empty-state" style="padding:24px;"><p style="font-size:12px;color:var(--text3);">No unsettled inter-co invoices.</p></div>`;
+  } else {
+    invsEl.innerHTML = `<table>
+      <thead><tr>
+        <th>Invoice No.</th><th>Date</th><th>Partner</th><th>Items</th>
+        <th>Status</th>
+        <th class="text-right">Amount</th>
+        <th class="text-right">Outstanding</th>
+      </tr></thead>
+      <tbody>${unsettled.sort((a,b) => (b.date||'').localeCompare(a.date||'')).map(i => {
+        const paid = (live('payments')||[]).filter(p => p.invoiceId === i.id).reduce((a,p) => a + (p.amount||0), 0);
+        const outstanding = Math.max((i.total||0) - paid, 0);
+        const itemCount = i.lines ? i.lines.length : 0;
+        const itemsLabel = itemCount === 1 ? `${i.lines[0].product}` : `${itemCount} item${itemCount===1?'':'s'}`;
+        return `<tr>
+          <td style="font-family:'DM Mono',monospace;font-size:12px;">${i.no}</td>
+          <td style="color:var(--text2);">${fmtDate(i.date)}</td>
+          <td>${i.intercompany_partner_name || i.customer}</td>
+          <td style="font-size:12px;color:var(--text2);">${itemsLabel}</td>
+          <td><span class="badge ${statusMap[i.status]||'badge-gray'}">${i.status}</span></td>
+          <td class="text-right mono">${fmtCurr(i.total, i.currency)}</td>
+          <td class="text-right mono" style="font-weight:500;color:${outstanding>0?'var(--red)':'var(--green)'};">${fmtCurr(outstanding, i.currency)}</td>
+        </tr>`;
+      }).join('')}</tbody></table>`;
+  }
+
+  // ─── (3) SETTLEMENT HISTORY ───────────────────────────────────────────
+  // Update partner filter dropdown
+  if (histFilter) {
+    const cur = histFilter.value;
+    histFilter.innerHTML = '<option value="">All partners</option>' +
+      partners.map(p => `<option value="${p.id}"${p.id===cur?' selected':''}>${p.name}</option>`).join('');
+  }
+  const partnerFilter = (histFilter && histFilter.value) || '';
+  const settlements = txns
+    .filter(r => r.kind === 'settlement')
+    .filter(r => !partnerFilter || r.partner_id === partnerFilter)
+    .sort((a,b) => (b.date||'').localeCompare(a.date||''));
+
+  if (settlements.length === 0) {
+    histEl.innerHTML = `<div class="empty-state" style="padding:24px;"><p style="font-size:12px;color:var(--text3);">No settlements yet.</p></div>`;
+  } else {
+    histEl.innerHTML = `<table>
+      <thead><tr>
+        <th>Date</th><th>Partner</th><th>Direction</th>
+        <th class="text-right">Cash Movement</th>
+        <th class="text-right">Balance Impact</th>
+        <th class="text-right">Implied Rate</th>
+        <th>Notes</th>
+      </tr></thead>
+      <tbody>${settlements.map(r => {
+        const cash = parseFloat(r.cash_amount) || 0;
+        const cashCur = r.cash_currency || r.currency || 'MYR';
+        // Balance impact in inter-co currency. Sign: + means we paid down our payable (out-flow),
+        //                                          − means partner paid down their receivable to us
+        const impact = parseFloat(r.amount) || 0;
+        const direction = cash < 0 ? '→ Sent' : (cash > 0 ? '← Received' : '—');
+        const dirColor  = cash < 0 ? 'var(--red)' : 'var(--green)';
+        const cashAbs = Math.abs(cash);
+        // Implied rate: |impact| / |cash|  (units: cash per inter-co)
+        const rate = (cashAbs > 0 && Math.abs(impact) > 0) ? (cashAbs / Math.abs(impact)) : null;
+        const rateStr = (rate && cashCur !== r.currency) ? `1 ${r.currency} = ${rate.toFixed(4)} ${cashCur}` : (cashCur === r.currency ? '—' : '?');
+        return `<tr>
+          <td style="color:var(--text2);">${fmtDate(r.date)}</td>
+          <td>${r.partner_name||''}</td>
+          <td style="color:${dirColor};font-weight:500;">${direction}</td>
+          <td class="text-right mono">${cashAbs > 0 ? fmtCurr(cashAbs, cashCur) : '—'}${r.account?`<div style="font-size:10px;color:var(--text3);font-family:inherit;font-weight:400;margin-top:2px;">${r.account}</div>`:''}</td>
+          <td class="text-right mono" style="color:${impact>0?'var(--green)':'var(--red)'};font-weight:500;">${impact>0?'+':''}${fmtCurr(impact, r.currency||'MYR')}</td>
+          <td class="text-right mono" style="font-size:11px;color:var(--text2);">${rateStr}</td>
+          <td style="font-size:12px;color:var(--text2);max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(r.notes||'').replace(/"/g,'&quot;')}">${r.notes||''}</td>
+        </tr>`;
+      }).join('')}</tbody></table>`;
+  }
 }
 
 function populateStmtCustomers() {
@@ -17824,6 +18011,10 @@ async function saveInterCoShipment() {
       console.warn('Inter-co shipment — products NOT added to receiver inventory:', missing);
     }
     renderInvoices();
+    if (typeof renderInterCoView === 'function') {
+      const p4 = document.getElementById('inv-panel-4');
+      if (p4 && p4.style.display !== 'none') renderInterCoView();
+    }
   } catch(err) {
     console.error('saveInterCoShipment failed:', err);
     showToast('Inter-co shipment failed: ' + err.message, 'error');
@@ -18176,6 +18367,12 @@ async function saveInterCoSettlement() {
     closeModal('modal-inter-co-settlement');
     const arrow = senderIsActive ? '→' : '←';
     showToast(`Settlement recorded: ${fmtCurr(sent, senderCur)} ${arrow} ${fmtCurr(recv, recvCur)}`);
+
+    // Refresh active tab
+    if (typeof renderInterCoView === 'function') {
+      const p4 = document.getElementById('inv-panel-4');
+      if (p4 && p4.style.display !== 'none') renderInterCoView();
+    }
 
   } catch(err) {
     console.error('saveInterCoSettlement failed:', err);
