@@ -10582,6 +10582,7 @@ async function renderInterCoView() {
 
   // ─── (2) UNSETTLED INTER-CO INVOICES ──────────────────────────────────
   const unsettled = (live('invoices') || []).filter(i => i.is_intercompany && i.status !== 'Paid');
+  const statusMap = {Paid:'badge-green',Pending:'badge-amber',Overdue:'badge-red',Draft:'badge-gray',Partial:'badge-blue'};
   if (unsettled.length === 0) {
     invsEl.innerHTML = `<div class="empty-state" style="padding:24px;"><p style="font-size:12px;color:var(--text3);">No unsettled inter-co invoices.</p></div>`;
   } else {
@@ -18401,8 +18402,8 @@ function onIcsSettlementAmountsChange() {
     // Active company has FX exposure on this inter-co balance.
     const avgRate = getInterCoAvgBookingRate(partner.id);
     if (avgRate) {
-      // The portion being settled, in inter-co currency, equals impactMag.
-      const bookedValueLocal = impactMag * avgRate;
+      // The portion being settled, in inter-co currency, equals impact.
+      const bookedValueLocal = impact * avgRate;
       // The actual cash settlement leg, in home currency.
       // For 'out' (we sent), our home-currency cash leg is `sent` if senderCur===active, else `recv` if recvCur===active.
       // For 'in' (we received), our home-currency cash leg is `recv` if recvCur===active, else `sent`.
@@ -18420,7 +18421,7 @@ function onIcsSettlementAmountsChange() {
         //                                    gain = bookedValueLocal − actualLocal
         fxRealized = (dir === 'in') ? (actualLocal - bookedValueLocal) : (bookedValueLocal - actualLocal);
         fxRealized = +fxRealized.toFixed(2);
-        const settlementRate = (impactMag > 0) ? (actualLocal / impactMag) : 0;
+        const settlementRate = (impact > 0) ? (actualLocal / impact) : 0;
         fxDetail = `Booked @ avg ${avgRate.toFixed(4)} (${fmtCurr(bookedValueLocal, activeCurFx)}) vs settled @ ${settlementRate.toFixed(4)} (${fmtCurr(actualLocal, activeCurFx)})`;
       }
     } else {
