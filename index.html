@@ -13211,7 +13211,25 @@ function renderReport() {
   exps.forEach(e => { byCategory[e.cat] = (byCategory[e.cat] || 0) + e.amount; });
   const rawExp   = Object.values(byCategory).reduce((s,v) => s+v, 0);
   const totalExp = Math.max(rawExp - purchaseDnReduction, 0);
-  const grossProfit = totalSales - totalExp;
+
+  // ─── REALIZED FX GAIN/LOSS (Inter-Company settlements this month) ─────
+  // Pulls from intercompany_transactions: fx_realized is the home-currency
+  // gain (positive) or loss (negative) crystallized when an inter-co AR/AP
+  // is settled at a rate that differs from its booking rate. Only active-side
+  // rows carry fx_realized (set during Settlement). We sum them per-currency
+  // but in practice this should always be in the active company's home cur.
+  const settlementsThisMonth = (DB.intercompanyTransactions || []).filter(r =>
+    !r.deleted_at &&
+    r.kind === 'settlement' &&
+    (r.date || '').startsWith(month) &&
+    r.fx_realized !== null && r.fx_realized !== undefined && r.fx_realized !== ''
+  );
+  const fxRealizedTotal = settlementsThisMonth.reduce((s,r) => s + (parseFloat(r.fx_realized) || 0), 0);
+  const fxRealizedCur   = settlementsThisMonth[0]
+    ? (settlementsThisMonth[0].fx_realized_currency || getActiveCompanyCurrency())
+    : getActiveCompanyCurrency();
+
+  const grossProfit = totalSales - totalExp + fxRealizedTotal;
   const margin = totalSales > 0 ? ((grossProfit / totalSales) * 100).toFixed(1) : 0;
 
   const byProduct = {};
@@ -13230,6 +13248,9 @@ function renderReport() {
     <div class="metrics-grid">
       <div class="metric-card"><div class="metric-label">Total Revenue</div><div class="metric-value text-green">${fmt(totalSales)}</div>${(cnReduction||salesDnAddition)?`<div class="metric-change neutral" style="font-size:10px;">${fmt(rawSales)} raw${salesDnAddition?` +${fmt(salesDnAddition)} DN`:''}${cnReduction?` −${fmt(cnReduction)} CN`:''}</div>`:''}</div>
       <div class="metric-card"><div class="metric-label">Total Expenses</div><div class="metric-value text-red">${fmt(totalExp)}</div>${purchaseDnReduction?`<div class="metric-change neutral" style="font-size:10px;">${fmt(rawExp)} raw −${fmt(purchaseDnReduction)} supplier DN</div>`:''}</div>
+      ${Math.abs(fxRealizedTotal) > 0.009 ? `
+      <div class="metric-card"><div class="metric-label">Realized FX ${fxRealizedTotal>=0?'Gain':'Loss'}</div><div class="metric-value" style="color:${fxRealizedTotal>=0?'var(--green)':'var(--red)'}">${fxRealizedTotal>=0?'+':''}${fmt(fxRealizedTotal)}</div><div class="metric-change neutral" style="font-size:10px;">${settlementsThisMonth.length} inter-co settlement${settlementsThisMonth.length===1?'':'s'}</div></div>
+      ` : ''}
       <div class="metric-card"><div class="metric-label">Net Profit</div><div class="metric-value" style="color:${grossProfit>=0?'var(--green)':'var(--red)'}">${fmt(grossProfit)}</div></div>
       <div class="metric-card"><div class="metric-label">Profit Margin</div><div class="metric-value" style="color:${grossProfit>=0?'var(--green)':'var(--red)'}">${margin}%</div></div>
     </div>
@@ -13277,12 +13298,58 @@ function renderReport() {
           <tbody>
             <tr><td style="padding:8px 0;font-weight:500">Total Sales Revenue</td><td class="text-right mono text-green" style="padding:8px 0;">${fmt(totalSales)}</td></tr>
             ${Object.entries(byCategory).map(([c,v]) => `<tr><td style="padding:6px 0 6px 16px;color:var(--text2)">${c}</td><td class="text-right mono text-red" style="padding:6px 0">(${fmt(v)})</td></tr>`).join('')}
+            ${Math.abs(fxRealizedTotal) > 0.009 ? `
+            <tr><td style="padding:8px 0;font-weight:500;border-top:1px dashed var(--border);">Realized FX ${fxRealizedTotal>=0?'Gain':'Loss'} <span style="font-weight:400;color:var(--text3);font-size:11px;">(inter-co settlements)</span></td><td class="text-right mono" style="padding:8px 0;border-top:1px dashed var(--border);color:${fxRealizedTotal>=0?'var(--green)':'var(--red)'};">${fxRealizedTotal>=0?'+':''}${fmt(fxRealizedTotal)}</td></tr>
+            ` : ''}
             <tr style="border-top:2px solid var(--border)"><td style="padding:10px 0;font-weight:600;font-size:15px">Net Profit</td><td class="text-right mono" style="padding:10px 0;font-weight:600;font-size:15px;color:${grossProfit>=0?'var(--green)':'var(--red)'}">${fmt(grossProfit)}</td></tr>
             <tr><td style="padding:6px 0;color:var(--text2)">Profit Margin</td><td class="text-right mono" style="padding:6px 0;color:${grossProfit>=0?'var(--green)':'var(--red)'}">${margin}%</td></tr>
           </tbody>
         </table>
       </div>
     </div>
+
+    ${settlementsThisMonth.length > 0 ? `
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Realized FX ${fxRealizedTotal>=0?'Gain':'Loss'} Breakdown</span>
+        <span style="font-size:11px;color:var(--text3);font-weight:400;">${settlementsThisMonth.length} inter-company settlement${settlementsThisMonth.length===1?'':'s'} this month</span>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <table>
+          <thead><tr>
+            <th>Date</th><th>Partner</th>
+            <th class="text-right">Cash Movement</th>
+            <th class="text-right">Booked Value</th>
+            <th class="text-right">Settled Value</th>
+            <th class="text-right">FX G/L</th>
+          </tr></thead>
+          <tbody>${settlementsThisMonth.sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(r => {
+            const cash = parseFloat(r.cash_amount) || 0;
+            const cashCur = r.cash_currency || r.currency || 'MYR';
+            const fx = parseFloat(r.fx_realized) || 0;
+            const fxCur = r.fx_realized_currency || getActiveCompanyCurrency();
+            // Booked & settled values reconstructed from cash leg + fx_realized
+            // settled = |cash leg in home cur| ; booked = settled − fx (for 'in') or settled + fx (for 'out')
+            // Simpler: booked = settled − fx
+            const settledLocal = (cashCur === fxCur) ? Math.abs(cash) : 0;  // only confident if cash leg is in home cur
+            const bookedLocal  = settledLocal > 0 ? (settledLocal - fx) : 0;
+            return `<tr>
+              <td style="color:var(--text2);">${fmtDate(r.date)}</td>
+              <td>${r.partner_name||''}</td>
+              <td class="text-right mono">${cash !== 0 ? fmtCurr(Math.abs(cash), cashCur) : '—'}</td>
+              <td class="text-right mono" style="color:var(--text2);">${bookedLocal>0 ? fmtCurr(bookedLocal, fxCur) : '—'}</td>
+              <td class="text-right mono">${settledLocal>0 ? fmtCurr(settledLocal, fxCur) : '—'}</td>
+              <td class="text-right mono" style="color:${fx>=0?'var(--green)':'var(--red)'};font-weight:500;">${fx>=0?'+':''}${fmtCurr(fx, fxCur)}</td>
+            </tr>`;
+          }).join('')}</tbody>
+          <tfoot><tr style="background:var(--bg);font-weight:600;">
+            <td colspan="5" style="padding:10px 12px;text-align:right;">Total Realized FX ${fxRealizedTotal>=0?'Gain':'Loss'}</td>
+            <td class="text-right mono" style="padding:10px 12px;color:${fxRealizedTotal>=0?'var(--green)':'var(--red)'};">${fxRealizedTotal>=0?'+':''}${fmtCurr(fxRealizedTotal, fxRealizedCur)}</td>
+          </tr></tfoot>
+        </table>
+      </div>
+    </div>
+    ` : ''}
 
     <div class="card">
       <div class="card-head"><span class="card-title">Account Balances</span></div>
