@@ -17640,13 +17640,22 @@ async function saveInterCoShipment() {
         phone: '',
         email: '',
         address: '',
-        terms: 'Inter-company',
+        terms: 0,
         currency: partnerCurrency,
         priceList: {},
         notes: 'Auto-created: sister company for inter-company shipments'
       };
       DB.customers.push(custRow);
-      if (typeof sbPersist === 'function') sbPersist('customers', custRow);
+      try {
+        if (typeof sbSave === 'function') {
+          await sbSave('customers', custRow);
+        }
+      } catch(e) {
+        // Roll back local push and abort cleanly so retries are safe
+        DB.customers.pop();
+        DB.nextIds.customers--;
+        throw new Error('Could not auto-create partner as customer: ' + e.message);
+      }
     }
 
     // (1a) Build invoice in active company's books. Inter-co invoice — no tax/SST,
