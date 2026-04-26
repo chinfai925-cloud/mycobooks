@@ -4062,6 +4062,261 @@ function newIntercompanyId() {
 }
 
 // ============================================================
+// INTER-CO SIDE EFFECTS — shared by Inter-Co Shipment, regular
+// invoice flow (when customer is a sister company), and the
+// "Promote to Inter-Co" retro-fix button.
+// ============================================================
+// Given an already-saved invoice that's been flagged inter-co,
+// generate: (a) the active-side intercompany_transactions row,
+// (b) the partner inventory increment, (c) the partner-side
+// intercompany_transactions row.
+//
+// Returns a result summary { ok, created, updated, missing, errors }.
+async function applyInterCoSideEffects(inv, opts) {
+  opts = opts || {};
+  const autoCreate = opts.autoCreate !== false; // default true
+  const result = { ok: true, created: [], updated: [], missing: [], errors: [] };
+
+  if (!inv || !inv.is_intercompany || !inv.intercompany_partner_id) {
+    result.ok = false;
+    result.errors.push('Invoice is not flagged as inter-company');
+    return result;
+  }
+
+  const partner = getCompaniesList().find(c => c.id === inv.intercompany_partner_id);
+  if (!partner) {
+    result.ok = false;
+    result.errors.push(`Partner company ${inv.intercompany_partner_id} not found`);
+    return result;
+  }
+  if (partner.verified === false) {
+    result.ok = false;
+    result.errors.push(`${partner.name} setup is pending — verify first`);
+    return result;
+  }
+
+  const partnerCurrency = partner.currency || 'MYR';
+  const sellerName   = getActiveCompanyName();
+  const sellerId     = getActiveCompanyId();
+  const sellerPrefix = getActiveCompanyPrefix();
+  const total        = inv.total || 0;
+  const lines        = Array.isArray(inv.lines) ? inv.lines : [];
+  const intercompanyId = inv.intercompany_id || newIntercompanyId();
+  if (!inv.intercompany_id) inv.intercompany_id = intercompanyId;
+
+  // (1) Active-side intercompany_transactions row — only create if not already present
+  if (!DB.intercompanyTransactions) DB.intercompanyTransactions = [];
+  if (!DB.nextIds.intercompanyTransactions) DB.nextIds.intercompanyTransactions = 1;
+  const existingActiveTxn = DB.intercompanyTransactions.find(r =>
+    !r.deleted_at && r.kind === 'inter_co_sale' && r.linked_invoice_id === inv.id
+  );
+  if (!existingActiveTxn) {
+    const sellerIcTxn = {
+      id: DB.nextIds.intercompanyTransactions++,
+      date: inv.date,
+      intercompany_id: intercompanyId,
+      partner_id: partner.id,
+      partner_name: partner.name,
+      partner_prefix: partner.prefix || '',
+      amount: total,
+      partner_amount: total,
+      currency: partnerCurrency,
+      partner_currency: partnerCurrency,
+      exchange_rate: 1,
+      account: '',
+      kind: 'inter_co_sale',
+      linked_invoice_id: inv.id,
+      linked_invoice_no: inv.no,
+      linked_payment_id: null,
+      customer: partner.name,
+      notes: `From invoice ${inv.no || ''} (${lines.length} line${lines.length===1?'':'s'})`,
+      created_by: (DB.currentUser && DB.currentUser.name) || '',
+      booking_rate: inv.booking_rate || 1,
+      booking_value_local: inv.booking_value_local || total
+    };
+    DB.intercompanyTransactions.unshift(sellerIcTxn);
+    if (typeof sbPersist === 'function') sbPersist('intercompanyTransactions', sellerIcTxn);
+  }
+
+  // (2) Partner inventory + partner-side IC txn — only when partner is configured
+  if (!partner.prefix && partner.id !== 'default') {
+    // No prefix means we can't reach this partner's tables. Skip silently.
+    return result;
+  }
+
+  // (2a) Load partner's existing inventory
+  let partnerInventory = [];
+  try {
+    const tbl = sbTableFor(partner.prefix, 'inventory');
+    const rows = await SB.get(`${tbl}?select=*`);
+    partnerInventory = Array.isArray(rows) ? rows : [];
+  } catch(e) {
+    result.errors.push(`Could not load ${partner.name} inventory: ${e.message}`);
+  }
+
+  let nextInvId = await nextIdFor(partner.prefix, 'inventory');
+  for (const line of lines) {
+    if (!line.product || !(line.qty > 0)) continue;
+    const existing = partnerInventory.find(r =>
+      r && typeof r.name === 'string' && r.name.trim().toLowerCase() === line.product.trim().toLowerCase()
+    );
+    if (existing) {
+      const newRow = { ...existing, stock: (parseFloat(existing.stock) || 0) + line.qty };
+      try {
+        await sbPersistFor(partner.prefix, 'inventory', newRow);
+        result.updated.push(line.product);
+      } catch(e) {
+        result.errors.push(`Update inventory "${line.product}": ${e.message}`);
+        result.missing.push(line.product);
+      }
+    } else if (autoCreate) {
+      const p = (DB.products || []).find(x => x.name === line.product);
+      const newRow = {
+        id: nextInvId++,
+        name: line.product,
+        cat: (p && p.cat) || 'Inter-Co',
+        unit: line.unit || (p && p.unit) || '',
+        stock: line.qty,
+        reorder: 0,
+        cost: line.unitPrice || (p && p.cost) || 0,
+        supplier: sellerName
+      };
+      try {
+        await sbPersistFor(partner.prefix, 'inventory', newRow);
+        result.created.push(line.product);
+      } catch(e) {
+        result.errors.push(`Create inventory "${line.product}": ${e.message}`);
+        result.missing.push(line.product);
+      }
+    } else {
+      result.missing.push(line.product);
+    }
+  }
+
+  // (2b) Partner-side IC txn — only create if not already present
+  let alreadyHasPartnerTxn = false;
+  try {
+    const tbl = sbTableFor(partner.prefix, 'intercompanyTransactions');
+    const existing = await SB.get(`${tbl}?intercompany_id=eq.${encodeURIComponent(intercompanyId)}&select=id`);
+    alreadyHasPartnerTxn = Array.isArray(existing) && existing.length > 0;
+  } catch(e) { /* ignore */ }
+
+  if (!alreadyHasPartnerTxn) {
+    let partnerTxnId;
+    try { partnerTxnId = await nextIntercompanyTxnId(partner.prefix); } catch(e) { partnerTxnId = null; }
+    if (partnerTxnId != null) {
+      const partnerIcTxn = {
+        id: partnerTxnId,
+        date: inv.date,
+        intercompany_id: intercompanyId,
+        partner_id: sellerId,
+        partner_name: sellerName,
+        partner_prefix: sellerPrefix,
+        amount: -total,
+        partner_amount: -total,
+        currency: partnerCurrency,
+        partner_currency: partnerCurrency,
+        exchange_rate: 1,
+        account: '',
+        kind: 'inter_co_sale',
+        linked_invoice_id: null,
+        linked_invoice_no: inv.no,
+        linked_payment_id: null,
+        supplier: sellerName,
+        notes: `From ${sellerName} invoice ${inv.no || ''} (${lines.length} line${lines.length===1?'':'s'})`,
+        created_by: (DB.currentUser && DB.currentUser.name) || ''
+      };
+      try {
+        await sbPersistFor(partner.prefix, 'intercompanyTransactions', partnerIcTxn);
+      } catch(e) {
+        result.errors.push(`Partner-side IC entry: ${e.message}`);
+      }
+    }
+  }
+
+  return result;
+}
+
+// Helper: detect whether a customer name matches a sister company.
+// Returns the company object or null. Compared case-insensitive after
+// trimming, since user-typed names tend to vary in casing.
+function findSisterCompanyByCustomerName(name) {
+  if (!name) return null;
+  const norm = String(name).trim().toLowerCase();
+  const activeId = getActiveCompanyId();
+  return getCompaniesList().find(c =>
+    c.id !== activeId &&
+    c.verified !== false &&
+    typeof c.name === 'string' &&
+    c.name.trim().toLowerCase() === norm
+  ) || null;
+}
+
+// Retroactively promote an existing invoice to inter-company:
+// flag the invoice and run the same side effects that a fresh
+// inter-co invoice would. Triggered by the "⇄ Link Inter-Co" button
+// shown on invoice rows whose customer is a sister company but
+// which weren't created via the inter-co flow.
+async function promoteToInterCo(invoiceId) {
+  const inv = (DB.invoices || []).find(i => i.id === invoiceId);
+  if (!inv) { showToast('Invoice not found', 'error'); return; }
+  if (inv.is_intercompany) { showToast('Already linked', 'error'); return; }
+
+  const sister = findSisterCompanyByCustomerName(inv.customer);
+  if (!sister) { showToast(`${inv.customer} is not a sister company`, 'error'); return; }
+
+  // Confirm before doing partner-side writes
+  let prompt = `Link invoice ${inv.no} (${fmtCurr(inv.total, inv.currency || 'MYR')} → ${sister.name}) as inter-company?\n\n` +
+               `This will:\n` +
+               `• Flag the invoice as inter-company\n` +
+               `• Create matching inter-company transaction rows on both sides\n` +
+               `• Increment ${sister.name}'s inventory for each line item\n\n`;
+  // If FX applies and we don't have a booking rate, ask for it
+  const activeCur = getActiveCompanyCurrency();
+  const partnerCur = sister.currency || 'MYR';
+  const fxApplies = (partnerCur !== activeCur);
+  let bookingRate = inv.booking_rate || 0;
+  if (fxApplies && !bookingRate) {
+    const lastRate = parseFloat(localStorage.getItem(`mycobooks_last_fx_${partnerCur}_${activeCur}`)) || 0;
+    const ans = window.prompt(prompt + `Booking rate (${activeCur} per ${partnerCur}):`, lastRate ? String(lastRate) : '');
+    if (ans === null) return;
+    bookingRate = parseFloat(ans) || 0;
+    if (bookingRate <= 0) { showToast('Invalid booking rate', 'error'); return; }
+    try { localStorage.setItem(`mycobooks_last_fx_${partnerCur}_${activeCur}`, String(bookingRate)); } catch(e) {}
+  } else {
+    if (!confirm(prompt + 'Continue?')) return;
+    if (!bookingRate) bookingRate = 1;
+  }
+
+  // Mutate the invoice
+  inv.is_intercompany = true;
+  inv.intercompany_partner_id = sister.id;
+  inv.intercompany_partner_name = sister.name;
+  inv.intercompany_id = inv.intercompany_id || newIntercompanyId();
+  inv.booking_rate = bookingRate;
+  inv.booking_value_local = +(((inv.total || 0) * bookingRate).toFixed(2));
+  if (typeof sbPersist === 'function') sbPersist('invoices', inv);
+
+  // Run partner-side writes
+  showToast(`Linking ${inv.no} to ${sister.name}...`);
+  try {
+    const res = await applyInterCoSideEffects(inv);
+    if (res.ok) {
+      let msg = `Linked: ${inv.no} ⇄ ${sister.name}`;
+      if (res.created.length) msg += ` · auto-created ${res.created.length} product${res.created.length===1?'':'s'}`;
+      if (res.missing.length) msg += ` · ⚠ ${res.missing.length} product${res.missing.length===1?'':'s'} skipped`;
+      showToast(msg);
+    } else {
+      showToast(`Promote failed: ${res.errors.join('; ')}`, 'error');
+    }
+  } catch(e) {
+    showToast(`Promote error: ${e.message}`, 'error');
+  }
+  renderInvoices();
+  refreshInterCoIfVisible();
+}
+
+// ============================================================
 // AUDIT LOG (Phase 3)
 // ============================================================
 // Kill switch — flip to false if anything breaks. Audit logging will be silently disabled
@@ -10967,12 +11222,13 @@ function renderInvoices() {
           if (credits > 0) return `<div style="font-size:10px;color:var(--red);margin-top:2px;font-family:'DM Mono',monospace;">− ${fmtCurr(credits, i.currency)} credit</div>`;
           return '';
         })()}</td>
-        <td style="display:flex;gap:4px;padding-top:10px;">
+        <td style="display:flex;gap:4px;padding-top:10px;flex-wrap:wrap;">
           <button class="btn btn-outline btn-sm" onclick="printInvoice(${i.id})" title="Print Invoice">🖨 Inv</button>
           <button class="btn btn-outline btn-sm" onclick="printDO(${i.id})" title="Print Delivery Order">📦 DO</button>
           ${can('canEdit') ? `<button class="btn btn-outline btn-sm" onclick="editInvoice(${i.id})">Edit</button>` : ''}
           ${can('canEdit') && (i.status==='Pending'||i.status==='Overdue'||i.status==='Partial'||i.status==='Draft')?`<button class="btn btn-sm" style="background:var(--green-light);color:var(--green);font-size:11px;border:none;" onclick="markInvoicePaid(${i.id})">+ Payment</button>`:''}
           ${can('canEdit') && i.status==='Paid'?`<button class="btn btn-outline btn-sm" onclick="viewPayments(${i.id})" style="font-size:11px;">Payments</button>`:''}
+          ${can('canEdit') && !i.is_intercompany && findSisterCompanyByCustomerName(i.customer) ? `<button class="btn btn-sm" style="background:#fff7ed;color:#9a3412;font-size:11px;border:1px solid #fdba74;" onclick="promoteToInterCo(${i.id})" title="Link this to the sister company's books">⇄ Link Inter-Co</button>` : ''}
           ${can('canDelete') ? `<button class="btn btn-danger btn-sm" onclick="deleteInvoice(${i.id})">Del</button>` : ''}
         </td>
       </tr>`).join('')}</tbody>
@@ -11293,6 +11549,10 @@ function saveInvoice() {
   const calc = calcInvGrandTotal();
   const { grand, discAmt, discType, discValue } = calc;
   const currency = window._invCustCurrency || 'MYR';
+
+  // Detect sister-company customer → auto-flag invoice as inter-company
+  const sister = findSisterCompanyByCustomerName(customer);
+
   const data = {
     no: document.getElementById('inv-no').value || ('INV-' + DB.nextIds.invoices),
     date: document.getElementById('inv-date').value,
@@ -11306,19 +11566,65 @@ function saveInvoice() {
     status: document.getElementById('inv-status').value,
     notes: document.getElementById('inv-notes').value
   };
+  // Inter-co flagging when customer is a sister company
+  if (sister) {
+    data.is_intercompany = true;
+    data.intercompany_partner_id = sister.id;
+    data.intercompany_partner_name = sister.name;
+    // Booking rate = the active co's last-used rate for this currency pair, if any
+    const activeCur = getActiveCompanyCurrency();
+    if ((sister.currency || activeCur) !== activeCur) {
+      const lastRate = parseFloat(localStorage.getItem(`mycobooks_last_fx_${sister.currency}_${activeCur}`)) || 0;
+      if (lastRate > 0) {
+        data.booking_rate = lastRate;
+        data.booking_value_local = +(grand * lastRate).toFixed(2);
+      }
+    } else {
+      data.booking_rate = 1;
+      data.booking_value_local = grand;
+    }
+  }
+  let savedInv;
   if (editingInvoiceId) {
     const idx = DB.invoices.findIndex(i => i.id === editingInvoiceId);
-    const wasNotPaid = DB.invoices[idx].status !== 'Paid';
     DB.invoices[idx] = { ...DB.invoices[idx], ...data };
-    if (typeof sbPersist === 'function') sbPersist('invoices', DB.invoices[idx]);
+    savedInv = DB.invoices[idx];
+    if (typeof sbPersist === 'function') sbPersist('invoices', savedInv);
     showToast('Invoice updated');
     editingInvoiceId = null;
   } else {
-    const newInv = { id: DB.nextIds.invoices++, ...data };
-    DB.invoices.unshift(newInv);
-    if (typeof sbPersist === 'function') sbPersist('invoices', newInv);
+    savedInv = { id: DB.nextIds.invoices++, ...data };
+    DB.invoices.unshift(savedInv);
+    if (typeof sbPersist === 'function') sbPersist('invoices', savedInv);
     showToast('Invoice created');
   }
+
+  // If inter-co (and not previously processed), apply side effects: partner
+  // inventory increment + IC txn rows. Done as fire-and-forget so the modal
+  // closes immediately; toast reports outcome on completion.
+  if (sister && savedInv.is_intercompany) {
+    const partnerHasIcTxn = (DB.intercompanyTransactions || []).some(r =>
+      !r.deleted_at && r.kind === 'inter_co_sale' && r.linked_invoice_id === savedInv.id
+    );
+    if (!partnerHasIcTxn) {
+      applyInterCoSideEffects(savedInv).then(res => {
+        if (res.ok) {
+          let msg = `Inter-co linked: ${sister.name}`;
+          if (res.created.length) msg += ` · auto-created ${res.created.length} product${res.created.length===1?'':'s'} in receiver`;
+          if (res.missing.length) msg += ` · ⚠ ${res.missing.length} product${res.missing.length===1?'':'s'} skipped`;
+          showToast(msg);
+          if (typeof sbPersist === 'function') sbPersist('invoices', savedInv);
+          renderInvoices();
+          refreshInterCoIfVisible();
+        } else {
+          showToast(`Inter-co link failed: ${res.errors.join('; ')}`, 'error');
+        }
+      }).catch(err => {
+        showToast(`Inter-co link error: ${err.message}`, 'error');
+      });
+    }
+  }
+
   closeModal('modal-invoice');
   renderInvoices();
   refreshInterCoIfVisible();
