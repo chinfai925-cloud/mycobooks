@@ -10486,6 +10486,15 @@ function switchInvTab(n) {
   if (n===4) renderInterCoView();
 }
 
+// Re-render the Inter-Co tab if it's currently visible. Call this from any
+// flow that mutates invoices, payments, or intercompany_transactions so the
+// dashboard stays in sync without manual tab switching.
+function refreshInterCoIfVisible() {
+  if (typeof renderInterCoView !== 'function') return;
+  const p4 = document.getElementById('inv-panel-4');
+  if (p4 && p4.style.display !== 'none') renderInterCoView();
+}
+
 // ============================================================================
 // INTER-COMPANY VIEW
 // ============================================================================
@@ -10890,6 +10899,7 @@ function saveEditPayment() {
   showToast('Payment updated');
   renderPaymentHistory();
   renderInvoices();
+  refreshInterCoIfVisible();
 }
 
 function deletePayment(payId) {
@@ -10914,6 +10924,7 @@ function deletePayment(payId) {
   showToast('Payment moved to Trash. Restore from Settings → Trash.');
   renderPaymentHistory();
   renderInvoices();
+  refreshInterCoIfVisible();
   if (typeof sbPersist === 'function') sbPersist('payments', p);
 }
 
@@ -11309,6 +11320,7 @@ function saveInvoice() {
   }
   closeModal('modal-invoice');
   renderInvoices();
+  refreshInterCoIfVisible();
   resetInvModal();
 }
 
@@ -11693,6 +11705,7 @@ async function confirmMarkPaid() {
   // Ask to print receipt (skip for cross-company — bank receipt is in partner co)
   if (!isCross && confirm('Print payment receipt?')) printReceipt(payment, inv);
   renderInvoices();
+  refreshInterCoIfVisible();
 }
 
 function printReceipt(payment, inv) {
@@ -11754,6 +11767,7 @@ function deleteInvoice(id) {
   softDelete('invoices', id, reason.trim());
   showToast(`Invoice moved to Trash. Restore from Settings → Trash.`);
   renderInvoices();
+  refreshInterCoIfVisible();
   if (typeof sbPersist === 'function') sbPersist('invoices', inv);
 }
 
@@ -16622,6 +16636,7 @@ function saveCreditNote() {
   if (document.getElementById('page-invoices') && document.getElementById('page-invoices').classList.contains('active')) {
     renderInvoices();
   }
+  refreshInterCoIfVisible();
 }
 
 function editCreditNote(id) {
@@ -17682,6 +17697,7 @@ async function saveReceivePayment() {
 
   // Refresh views
   renderInvoices();
+  refreshInterCoIfVisible();
   if (document.getElementById('inv-panel-2') && document.getElementById('inv-panel-2').style.display !== 'none') {
     if (typeof renderCustomerStatement === 'function') renderCustomerStatement();
   }
