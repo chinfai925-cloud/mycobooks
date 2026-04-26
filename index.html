@@ -13321,8 +13321,15 @@ function populateAccountSelects() {
 }
 
 function accountBalance(acct) {
-  // Payments recorded against invoices
-  const paymentsIn = (live('payments')||[]).filter(p => p.account === acct.name).reduce((s,p) => s+p.amount, 0);
+  // Payments recorded against invoices. For cross-currency payments we use
+  // received_amount when present (it's the actual cash amount in the bank's
+  // currency), otherwise fall back to amount.
+  const paymentsIn = (live('payments')||[]).filter(p => p.account === acct.name).reduce((s,p) => {
+    const amt = (p.received_amount && parseFloat(p.received_amount) > 0)
+      ? parseFloat(p.received_amount)
+      : (parseFloat(p.amount) || 0);
+    return s + amt;
+  }, 0);
   // Paid invoices with no payment records (legacy)
   const legacyIn  = live('invoices').filter(i => i.status==='Paid' && i.account === acct.name &&
     !(live('payments')||[]).some(p => p.invoiceId === i.id)
@@ -13330,7 +13337,11 @@ function accountBalance(acct) {
   const outflow   = live('expenses').filter(e => (e.status||'paid') === 'paid' && e.account === acct.name).reduce((s,x) => s+x.amount, 0);
   const xfrIn     = DB.transfers.filter(t => t.to === acct.name).reduce((s,t) => s+t.amount, 0);
   const xfrOut    = DB.transfers.filter(t => t.from === acct.name).reduce((s,t) => s+t.amount, 0);
-  return (acct.openingBalance || 0) + paymentsIn + legacyIn - outflow + xfrIn - xfrOut;
+  // Inter-company settlement cash legs (positive = received into this account; negative = sent from)
+  const icSettlementCash = (DB.intercompanyTransactions||[])
+    .filter(r => !r.deleted_at && r.kind === 'settlement' && r.account === acct.name)
+    .reduce((s,r) => s + (parseFloat(r.cash_amount) || 0), 0);
+  return (acct.openingBalance || 0) + paymentsIn + legacyIn - outflow + xfrIn - xfrOut + icSettlementCash;
 }
 
 function renderSettings() {
@@ -18526,7 +18537,77 @@ async function saveInterCoSettlement() {
       fx_realized: icsSetState._fxApplies ? icsSetState._fxRealized : null,
       fx_realized_currency: icsSetState._fxApplies ? icsSetState._fxRealizedCurrency : null
     };
+    DB.intercompanyTransactions.unshift(activeRow);
     if (typeof sbPersist === 'function') sbPersist('intercompanyTransactions', activeRow);
+
+    // ─── APPLY TO INTER-CO INVOICES (only when active is the receiver) ──
+    // When 'in' (partner pays us), settle our outstanding inter-co AR FIFO.
+    // For each invoice consumed, write a payment row that:
+    //   - clears the invoice (amount in invoice currency)
+    //   - records the proportional cash leg in the actual receiving bank
+    //     (received_amount × cash_currency) for accountBalance to read.
+    const settlementPayments = [];
+    if (!senderIsActive && impactMag > 0) {
+      const partnerInvs = (live('invoices') || [])
+        .filter(i => i.is_intercompany && i.intercompany_partner_id === partner.id && i.status !== 'Paid')
+        .sort((a,b) => (a.date||'').localeCompare(b.date||''));
+
+      let remainingIcCur = impactMag;        // SGD still to allocate
+      let remainingCash  = Math.abs(activeCash); // MYR still to allocate (proportional to ic-currency)
+      const totalCashStart = remainingCash;
+      const totalIcStart   = remainingIcCur;
+
+      for (const inv of partnerInvs) {
+        if (remainingIcCur <= 0.009) break;
+        const paid = (live('payments')||[]).filter(p => p.invoiceId === inv.id).reduce((s,p) => s + (p.amount||0), 0);
+        const balance = Math.max((inv.total||0) - paid, 0);
+        if (balance <= 0.009) continue;
+
+        const apply = Math.min(balance, remainingIcCur);
+        // Proportional cash slice for this invoice
+        const cashShare = (totalIcStart > 0) ? +((apply / totalIcStart) * totalCashStart).toFixed(2) : 0;
+
+        const payment = {
+          id: DB.nextIds.payments++,
+          invoiceId: inv.id,
+          invoiceNo: inv.no,
+          customer: inv.customer,
+          date,
+          amount: apply,                      // SGD applied (clears AR)
+          currency: inv.currency || icCur,
+          account: activeCashAcct,            // The actual MYR bank account
+          reference: ref,
+          notes: notes
+            ? `[Inter-Co Settlement ${ref || ''}] ${notes}`
+            : `[Inter-Co Settlement ${ref || ''}]`,
+          type: 'payment',
+          intercompany_id: intercompanyId,
+          received_currency: activeCashCur,   // MYR
+          received_amount: cashShare,         // MYR portion (drives bank balance)
+          exchange_rate: (apply > 0) ? +(cashShare / apply).toFixed(4) : 1,
+          received_company_id: '',            // we're the receiver, no separate co
+          received_company_name: '',
+          received_account: activeCashAcct
+        };
+        if (!DB.payments) DB.payments = [];
+        DB.payments.unshift(payment);
+        if (typeof sbPersist === 'function') sbPersist('payments', payment);
+        settlementPayments.push(payment);
+
+        // Update invoice status
+        const newPaid = paid + apply;
+        if (newPaid >= (inv.total||0) - 0.009) {
+          inv.status = 'Paid';
+          inv.account = activeCashAcct;
+          inv.paidDate = date;
+        } else {
+          inv.status = 'Partial';
+        }
+        if (typeof sbPersist === 'function') sbPersist('invoices', inv);
+
+        remainingIcCur -= apply;
+      }
+    }
 
     // ─── PARTNER-SIDE ROW ───────────────────────────────────────────────
     const partnerImpact = -activeImpact;
@@ -18574,19 +18655,23 @@ async function saveInterCoSettlement() {
 
     closeModal('modal-inter-co-settlement');
     const arrow = senderIsActive ? '→' : '←';
-    showToast(`Settlement recorded: ${fmtCurr(sent, senderCur)} ${arrow} ${fmtCurr(recv, recvCur)}`);
-
-    // Refresh active tab
-    if (typeof renderInterCoView === 'function') {
-      const p4 = document.getElementById('inv-panel-4');
-      if (p4 && p4.style.display !== 'none') renderInterCoView();
-    }
+    const sxtra = settlementPayments.length > 0
+      ? ` · ${settlementPayments.length} invoice${settlementPayments.length===1?'':'s'} cleared`
+      : '';
+    showToast(`Settlement recorded: ${fmtCurr(sent, senderCur)} ${arrow} ${fmtCurr(recv, recvCur)}${sxtra}`);
 
   } catch(err) {
     console.error('saveInterCoSettlement failed:', err);
     showToast('Settlement failed: ' + err.message, 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Record Settlement'; }
+    // Refresh views regardless of partial success — local state was mutated
+    if (typeof renderInvoices === 'function') renderInvoices();
+    if (typeof refreshInterCoIfVisible === 'function') refreshInterCoIfVisible();
+    if (typeof renderSettings === 'function') {
+      const settingsEl = document.getElementById('page-settings');
+      if (settingsEl && settingsEl.classList.contains('active')) renderSettings();
+    }
   }
 }
 
