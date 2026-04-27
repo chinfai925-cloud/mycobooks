@@ -4895,11 +4895,16 @@ function _completeLogin(user) {
   try { populateAccountSelects(); } catch(e) { console.error('populateAccountSelects:', e); }
   try { populateStatementAccounts(); } catch(e) { console.error('populateStatementAccounts:', e); }
   try { renderDashboard(); } catch(e) { console.error('renderDashboard:', e); }
-  // Load company profile from localStorage
+  // Load company profile from localStorage — keyed to the ACTIVE company,
+  // not the legacy 'mycobooks_company' default-only key. (Reading the legacy
+  // key unconditionally would overwrite the active company's name in the
+  // sidebar list with the default company's profile name on every reload.)
   try {
-    const co = localStorage.getItem('mycobooks_company');
-    if (co) {
-      DB.company = JSON.parse(co);
+    const activeId = (typeof getActiveCompanyId === 'function') ? getActiveCompanyId() : 'default';
+    const raw = localStorage.getItem('mycobooks_company_' + activeId)
+             || (activeId === 'default' ? localStorage.getItem('mycobooks_company') : null);
+    if (raw) {
+      DB.company = JSON.parse(raw);
       if (typeof syncCompanySwitcherLabel === 'function') syncCompanySwitcherLabel();
     }
   } catch(e) {}
