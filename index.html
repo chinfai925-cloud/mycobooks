@@ -950,6 +950,16 @@ tr:hover td { background:var(--bg); }
               <select class="select-filter" id="prod-type-filter" onchange="renderProduction()">
                 <option value="">All types</option>
               </select>
+              <select class="select-filter" id="prod-sort" onchange="renderProduction()" title="Sort order">
+                <option value="bagDate-desc">Bag date — newest first</option>
+                <option value="bagDate-asc">Bag date — oldest first</option>
+                <option value="no-asc">Batch no. — ascending</option>
+                <option value="no-desc">Batch no. — descending</option>
+                <option value="bags-desc">Bags — most first</option>
+                <option value="bags-asc">Bags — fewest first</option>
+                <option value="status">Status</option>
+                <option value="type">Type (A→Z)</option>
+              </select>
               <span id="prod-count" style="margin-left:auto;font-size:13px;color:var(--text2);"></span>
             </div>
           </div>
@@ -10109,11 +10119,39 @@ function renderProduction() {
     const search  = (document.getElementById('prod-search')||{}).value?.toLowerCase()||'';
     const statusF = (document.getElementById('prod-status-filter')||{}).value||'';
     const typeF   = (document.getElementById('prod-type-filter')||{}).value||'';
+    const sortF   = (document.getElementById('prod-sort')||{}).value||'bagDate-desc';
     let data = live('batches').filter(b =>
       (!search  || b.no.toLowerCase().includes(search) || b.type.toLowerCase().includes(search) || (b.notes||'').toLowerCase().includes(search)) &&
       (!statusF || b.status===statusF) &&
       (!typeF   || b.type===typeF)
     );
+
+    // Sort
+    const statusOrder = ['Bagging','Inoculation','Colonising','Fruiting','Harvesting','Completed','Discarded'];
+    const cmpStr = (a, b) => String(a||'').localeCompare(String(b||''));
+    const cmpNum = (a, b) => (parseFloat(a)||0) - (parseFloat(b)||0);
+    // Natural-ish compare for batch numbers like T001, T002, T010 — splits letters and digits.
+    const cmpBatchNo = (a, b) => {
+      const re = /^([^0-9]*)(\d*)(.*)$/;
+      const ma = re.exec(String(a||'').toUpperCase()) || ['','','',''];
+      const mb = re.exec(String(b||'').toUpperCase()) || ['','','',''];
+      if (ma[1] !== mb[1]) return ma[1].localeCompare(mb[1]);
+      const na = parseInt(ma[2]||'0',10), nb = parseInt(mb[2]||'0',10);
+      if (na !== nb) return na - nb;
+      return ma[3].localeCompare(mb[3]);
+    };
+    switch (sortF) {
+      case 'bagDate-asc':  data.sort((a,b) => cmpStr(a.bagDate, b.bagDate)); break;
+      case 'no-asc':       data.sort((a,b) => cmpBatchNo(a.no, b.no)); break;
+      case 'no-desc':      data.sort((a,b) => cmpBatchNo(b.no, a.no)); break;
+      case 'bags-desc':    data.sort((a,b) => cmpNum(b.bags, a.bags)); break;
+      case 'bags-asc':     data.sort((a,b) => cmpNum(a.bags, b.bags)); break;
+      case 'status':       data.sort((a,b) => statusOrder.indexOf(a.status) - statusOrder.indexOf(b.status)); break;
+      case 'type':         data.sort((a,b) => cmpStr(a.type, b.type)); break;
+      case 'bagDate-desc':
+      default:             data.sort((a,b) => cmpStr(b.bagDate, a.bagDate)); break;
+    }
+
     const el2 = document.getElementById('prod-all');
     if (!el2) return;
     document.getElementById('prod-count').textContent = `${data.length} batches`;
