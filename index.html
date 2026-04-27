@@ -456,11 +456,11 @@ tr:hover td { background:var(--bg); }
             <div class="card-head"><span class="card-title">Recent Transactions</span><button class="btn btn-outline btn-sm" onclick="navigate('expenses',document.querySelector('[data-page=expenses]'))">View All</button></div>
             <div class="card-body" style="padding:0;" id="dash-recent-tx"></div>
           </div>
-          <div class="card">
+          <div class="card" id="card-fleet-schedule">
             <div class="card-head"><span class="card-title">🚛 Fleet Schedule <span style="font-size:11px;color:var(--text3);font-weight:400;">next 5 days</span></span><button class="btn btn-outline btn-sm" onclick="navigate('fleet',document.querySelector('[data-page=fleet]'));setTimeout(()=>switchFleetTab(5),50)">View All</button></div>
             <div class="card-body" style="padding:0;" id="dash-schedule"></div>
           </div>
-          <div class="card">
+          <div class="card" id="card-fleet-reminders">
             <div class="card-head"><span class="card-title">🔔 Fleet Reminders <span style="font-size:11px;color:var(--text3);font-weight:400;">next 30 days</span></span><button class="btn btn-outline btn-sm" onclick="openLorryModal()">Manage Lorries</button></div>
             <div class="card-body" style="padding:0;" id="dash-fleet-reminders"></div>
           </div>
@@ -4913,6 +4913,7 @@ function _completeLogin(user) {
     populateStatementAccounts();
     renderDashboard();
     if (typeof applyCurrencyLabels === 'function') applyCurrencyLabels();
+    if (typeof applyTradingOnlyMode === 'function') applyTradingOnlyMode();
     startAutoSave();
   });
 }
@@ -5193,6 +5194,12 @@ function navigate(page, el) {
   document.getElementById('page-' + page).classList.add('active');
   const renders = { dashboard:renderDashboard, expenses:renderExpenses, invoices:renderInvoices, orders:renderOrders, customers:renderCustomers, suppliers:renderSuppliers, products:renderProducts, inventory:renderInventory, production:renderProduction, harvest:renderHarvest, fleet:renderFleet, payroll:renderPayroll, reports:renderReport, statement:renderStatement, cashflow:renderCashflow, loans:renderLoans, claims:renderClaims, settings:renderSettings, users:renderUsers, creditnotes:renderCreditNotes, debitnotes:renderDebitNotes, trash:renderTrash, activity:renderActivity };
   // Access guards
+  if ((page === 'production' || page === 'harvest' || page === 'fleet')
+      && typeof isActiveCompanyTradingOnly === 'function'
+      && isActiveCompanyTradingOnly()) {
+    showToast(`${page.charAt(0).toUpperCase()+page.slice(1)} is disabled — ${getActiveCompanyName()} is a trading-only company`, 'error');
+    return;
+  }
   if (page === 'payroll'   && !can('seePayroll'))  { showToast('Access denied — Payroll is Admin only', 'error'); return; }
   if (page === 'reports'   && !can('seeReports'))  { showToast('Access denied — Reports is Admin & Manager only', 'error'); return; }
   if (page === 'statement' && !can('seeReports'))  { showToast('Access denied — Statements is Admin & Manager only', 'error'); return; }
@@ -16316,10 +16323,16 @@ function getCompaniesList() {
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr) && arr.length > 0) {
-        // Backfill: older entries may not have a currency field
+        // Backfill: older entries may not have a currency or tradingOnly field
         let changed = false;
         arr.forEach(c => {
           if (!c.currency) { c.currency = 'MYR'; changed = true; }
+          if (typeof c.tradingOnly === 'undefined') {
+            // Auto-detect: companies whose name matches "MUSH HUB GLOBAL" are trading-only
+            // (one-time backfill — after this the flag is sticky and editable from Settings)
+            c.tradingOnly = /mush\s*hub\s*global/i.test(c.name || '');
+            changed = true;
+          }
         });
         if (changed) localStorage.setItem('mycobooks_companies', JSON.stringify(arr));
         return arr;
@@ -16327,7 +16340,7 @@ function getCompaniesList() {
     }
   } catch(e) {}
   // Bootstrap: default company wraps existing data
-  const def = [{ id:'default', name:'Mushroom Farm Co.', prefix:'', currency:'MYR', verified:true }];
+  const def = [{ id:'default', name:'Mushroom Farm Co.', prefix:'', currency:'MYR', verified:true, tradingOnly:false }];
   localStorage.setItem('mycobooks_companies', JSON.stringify(def));
   return def;
 }
@@ -16360,6 +16373,44 @@ function getActiveCompanyCurrency() {
   const id = getActiveCompanyId();
   const co = getCompaniesList().find(c => c.id === id);
   return (co && co.currency) || 'MYR';
+}
+
+// Returns true if the active company is flagged as trading-only (no production/harvest/fleet).
+function isActiveCompanyTradingOnly() {
+  const id = getActiveCompanyId();
+  const co = getCompaniesList().find(c => c.id === id);
+  return !!(co && co.tradingOnly);
+}
+
+// Hide/show production, harvest, fleet UI based on the active company's tradingOnly flag.
+// Called on boot, on company switch, and when the toggle is flipped in Settings.
+function applyTradingOnlyMode() {
+  const trading = isActiveCompanyTradingOnly();
+  // Sidebar nav links
+  const hidePages = ['production','harvest','fleet'];
+  hidePages.forEach(p => {
+    document.querySelectorAll(`.nav-link[data-page="${p}"]`).forEach(el => {
+      el.style.display = trading ? 'none' : '';
+    });
+  });
+  // Dashboard fleet widgets
+  ['card-fleet-schedule','card-fleet-reminders'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = trading ? 'none' : '';
+  });
+  // If user is currently on a hidden page, bounce to dashboard
+  if (trading) {
+    const activePage = document.querySelector('.page.active');
+    if (activePage) {
+      const pid = activePage.id || '';
+      if (pid === 'page-production' || pid === 'page-harvest' || pid === 'page-fleet') {
+        const dashLink = document.querySelector('.nav-link[data-page="dashboard"]');
+        if (typeof navigate === 'function') navigate('dashboard', dashLink);
+      }
+    }
+  }
+  // Mark body so CSS or other code can react if needed
+  document.body.classList.toggle('trading-only', trading);
 }
 
 // ============================================================
@@ -16509,6 +16560,7 @@ async function switchCompany(newId) {
     try { renderSettings(); } catch(e) {}
     renderCompanySwitcher();
     if (typeof applyCurrencyLabels === 'function') applyCurrencyLabels();
+    if (typeof applyTradingOnlyMode === 'function') applyTradingOnlyMode();
     showToast(`Now viewing ${target.name}`, 'success');
   } catch(e) {
     console.error('Switch failed:', e);
@@ -16525,14 +16577,19 @@ function renderCompanies() {
     const isActive = c.id === active;
     const isDefault = c.id === 'default';
     const cur = c.currency || 'MYR';
+    const trading = !!c.tradingOnly;
     return `
     <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);${isActive?'background:var(--green-light);':''}">
       <div style="font-size:20px;">${isActive?'🟢':'⚪'}</div>
       <div style="flex:1;min-width:0;">
-        <div style="font-weight:500;font-size:13px;">${c.name}${isActive?' <span style="font-size:10px;color:var(--green);font-weight:600;">· ACTIVE</span>':''}</div>
+        <div style="font-weight:500;font-size:13px;">${c.name}${isActive?' <span style="font-size:10px;color:var(--green);font-weight:600;">· ACTIVE</span>':''}${trading?' <span style="font-size:10px;color:var(--text2);font-weight:500;background:var(--bg);border:1px solid var(--border);padding:1px 5px;border-radius:3px;">TRADING ONLY</span>':''}</div>
         <div style="font-size:11px;color:var(--text2);font-family:'DM Mono',monospace;">prefix: ${c.prefix||'(none — default)'} · currency: ${cur}${c.verified===false?' · <span style="color:var(--red);font-family:inherit;">setup pending</span>':''}</div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;">
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;user-select:none;" title="Hide Production, Harvest and Fleet for this company (use for trading-only sister companies)">
+          <input type="checkbox" ${trading?'checked':''} onchange="toggleTradingOnly('${c.id}', this.checked)" style="cursor:pointer;">
+          Trading only
+        </label>
         <select onchange="changeCompanyCurrency('${c.id}', this.value)" style="padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:11px;font-family:inherit;background:#fff;" title="Change currency">
           <option value="MYR"${cur==='MYR'?' selected':''}>MYR</option>
           <option value="SGD"${cur==='SGD'?' selected':''}>SGD</option>
@@ -16544,6 +16601,20 @@ function renderCompanies() {
       </div>
     </div>`;
   }).join('');
+}
+
+function toggleTradingOnly(companyId, on) {
+  const list = getCompaniesList();
+  const co = list.find(c => c.id === companyId);
+  if (!co) return;
+  co.tradingOnly = !!on;
+  saveCompaniesList(list);
+  showToast(`${co.name} marked as ${on ? 'trading only — Production, Harvest and Fleet hidden' : 'full operations'}`);
+  renderCompanies();
+  // If this is the active company, immediately apply the visibility change
+  if (companyId === getActiveCompanyId()) {
+    applyTradingOnlyMode();
+  }
 }
 
 function changeCompanyCurrency(companyId, newCurrency) {
