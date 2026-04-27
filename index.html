@@ -950,16 +950,6 @@ tr:hover td { background:var(--bg); }
               <select class="select-filter" id="prod-type-filter" onchange="renderProduction()">
                 <option value="">All types</option>
               </select>
-              <select class="select-filter" id="prod-sort" onchange="renderProduction()" title="Sort order">
-                <option value="bagDate-desc">Bag date — newest first</option>
-                <option value="bagDate-asc">Bag date — oldest first</option>
-                <option value="no-asc">Batch no. — ascending</option>
-                <option value="no-desc">Batch no. — descending</option>
-                <option value="bags-desc">Bags — most first</option>
-                <option value="bags-asc">Bags — fewest first</option>
-                <option value="status">Status</option>
-                <option value="type">Type (A→Z)</option>
-              </select>
               <span id="prod-count" style="margin-left:auto;font-size:13px;color:var(--text2);"></span>
             </div>
           </div>
@@ -10119,18 +10109,17 @@ function renderProduction() {
     const search  = (document.getElementById('prod-search')||{}).value?.toLowerCase()||'';
     const statusF = (document.getElementById('prod-status-filter')||{}).value||'';
     const typeF   = (document.getElementById('prod-type-filter')||{}).value||'';
-    const sortF   = (document.getElementById('prod-sort')||{}).value||'bagDate-desc';
     let data = live('batches').filter(b =>
       (!search  || b.no.toLowerCase().includes(search) || b.type.toLowerCase().includes(search) || (b.notes||'').toLowerCase().includes(search)) &&
       (!statusF || b.status===statusF) &&
       (!typeF   || b.type===typeF)
     );
 
-    // Sort
+    // Sort using prodAllSort state (driven by clickable column headers)
+    const { field, dir } = prodAllSort;
+    const mult = dir === 'asc' ? 1 : -1;
     const statusOrder = ['Bagging','Inoculation','Colonising','Fruiting','Harvesting','Completed','Discarded'];
-    const cmpStr = (a, b) => String(a||'').localeCompare(String(b||''));
-    const cmpNum = (a, b) => (parseFloat(a)||0) - (parseFloat(b)||0);
-    // Natural-ish compare for batch numbers like T001, T002, T010 — splits letters and digits.
+    // Natural-ish compare for batch numbers like T2, T10 — split letters/digits
     const cmpBatchNo = (a, b) => {
       const re = /^([^0-9]*)(\d*)(.*)$/;
       const ma = re.exec(String(a||'').toUpperCase()) || ['','','',''];
@@ -10140,25 +10129,171 @@ function renderProduction() {
       if (na !== nb) return na - nb;
       return ma[3].localeCompare(mb[3]);
     };
-    switch (sortF) {
-      case 'bagDate-asc':  data.sort((a,b) => cmpStr(a.bagDate, b.bagDate)); break;
-      case 'no-asc':       data.sort((a,b) => cmpBatchNo(a.no, b.no)); break;
-      case 'no-desc':      data.sort((a,b) => cmpBatchNo(b.no, a.no)); break;
-      case 'bags-desc':    data.sort((a,b) => cmpNum(b.bags, a.bags)); break;
-      case 'bags-asc':     data.sort((a,b) => cmpNum(a.bags, b.bags)); break;
-      case 'status':       data.sort((a,b) => statusOrder.indexOf(a.status) - statusOrder.indexOf(b.status)); break;
-      case 'type':         data.sort((a,b) => cmpStr(a.type, b.type)); break;
-      case 'bagDate-desc':
-      default:             data.sort((a,b) => cmpStr(b.bagDate, a.bagDate)); break;
-    }
+    data.sort((a, b) => {
+      const av = a[field], bv = b[field];
+      if (field === 'bags' || field === 'harvestKg') {
+        return ((parseFloat(av)||0) - (parseFloat(bv)||0)) * mult;
+      }
+      if (field === 'no') return cmpBatchNo(av, bv) * mult;
+      if (field === 'status') return (statusOrder.indexOf(av) - statusOrder.indexOf(bv)) * mult;
+      const sa = (av == null ? '' : String(av));
+      const sb_ = (bv == null ? '' : String(bv));
+      return sa.localeCompare(sb_) * mult;
+    });
 
     const el2 = document.getElementById('prod-all');
     if (!el2) return;
     document.getElementById('prod-count').textContent = `${data.length} batches`;
-    el2.innerHTML = data.length===0
-      ? '<div class="empty-state card"><div class="icon">🍄</div><p>No batches found</p></div>'
-      : data.map(b=>batchCard(b)).join('');
+
+    if (data.length === 0) {
+      el2.innerHTML = '<div class="empty-state card"><div class="icon">🍄</div><p>No batches found</p></div>';
+      return;
+    }
+
+    el2.innerHTML = `
+      <div class="card" style="overflow:hidden;padding:0;">
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:1400px;">
+            <thead>
+              <tr style="background:var(--bg);border-bottom:2px solid var(--border);">
+                ${prodAllHeader('Batch No.', 'no', 'left')}
+                ${prodAllHeader('Type', 'type', 'left')}
+                ${prodAllHeader('Bags', 'bags', 'right')}
+                ${prodAllHeader('Substrate', 'substrate', 'left')}
+                ${prodAllHeader('Bag Date', 'bagDate', 'left')}
+                ${prodAllHeader('Inoc Date', 'inocDate', 'left')}
+                ${prodAllHeader('Maturity', 'maturityDate', 'left')}
+                ${prodAllHeader('Status', 'status', 'left')}
+                ${prodAllHeader('Harvest Date', 'harvestDate', 'left')}
+                ${prodAllHeader('Harvest kg', 'harvestKg', 'right')}
+                <th style="padding:8px 10px;text-align:left;font-weight:500;color:var(--text2);">Notes</th>
+                <th style="padding:8px 10px;text-align:center;font-weight:500;color:var(--text2);width:36px;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.map(b => batchSpreadsheetRow(b)).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div style="padding:8px 12px;font-size:11px;color:var(--text3);background:var(--bg);border-top:1px solid var(--border);">
+          💡 Click any cell to edit. Changes save automatically. Click a column header to sort.
+        </div>
+      </div>`;
+
+    wireProdAllInlineEdits();
   }
+}
+
+// Sort state for the All Batches spreadsheet — defaults to bag-date-newest-first
+let prodAllSort = { field: 'bagDate', dir: 'desc' };
+
+function sortProdAll(field) {
+  if (prodAllSort.field === field) {
+    prodAllSort.dir = prodAllSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    prodAllSort = { field, dir: 'asc' };
+  }
+  renderProduction();
+}
+
+function prodAllHeader(label, field, align) {
+  const arrow = prodAllSort.field === field ? (prodAllSort.dir === 'asc' ? ' ↑' : ' ↓') : '';
+  const colorActive = prodAllSort.field === field ? 'var(--green)' : 'var(--text2)';
+  return `<th onclick="sortProdAll('${field}')" style="cursor:pointer;padding:8px 10px;text-align:${align||'left'};font-weight:500;color:${colorActive};white-space:nowrap;user-select:none;" title="Click to sort">${label}${arrow}</th>`;
+}
+
+function batchSpreadsheetRow(b) {
+  const inputStyle = 'width:100%;padding:6px 8px;border:none;background:transparent;font-size:12px;font-family:inherit;outline:none;';
+  const focusJs = "this.style.background='var(--green-light)'";
+  const blurJs  = "this.style.background='transparent'";
+  const types = ['Oyster Mushroom','Shiitake','King Oyster',"Lion's Mane",'Enoki','Button','Other'];
+  const statuses = ['Bagging','Inoculation','Colonising','Fruiting','Harvesting','Completed','Discarded'];
+  // Subtle row tint by status — Completed greys out, Discarded reds out
+  const rowStyle = b.status === 'Completed'
+    ? 'background:#fafbfa;color:var(--text2);'
+    : (b.status === 'Discarded' ? 'background:#fef5f5;color:var(--text2);' : '');
+  return `
+    <tr data-bid="${b.id}" style="border-bottom:1px solid var(--border);${rowStyle}">
+      <td style="padding:0;"><input type="text" value="${escAttr(b.no||'')}" data-bf="no" style="${inputStyle}font-family:'DM Mono',monospace;font-weight:600;text-transform:uppercase;" onfocus="${focusJs}" onblur="${blurJs}"></td>
+      <td style="padding:0;">
+        <select data-bf="type" style="${inputStyle}" onfocus="${focusJs}" onblur="${blurJs}">
+          ${types.map(t => `<option${t===b.type?' selected':''}>${t}</option>`).join('')}
+        </select>
+      </td>
+      <td style="padding:0;"><input type="number" min="1" value="${b.bags||''}" data-bf="bags" style="${inputStyle}text-align:right;font-family:'DM Mono',monospace;" onfocus="${focusJs}" onblur="${blurJs}"></td>
+      <td style="padding:0;"><input type="text" value="${escAttr(b.substrate||'')}" list="substrate-datalist" data-bf="substrate" style="${inputStyle}" onfocus="${focusJs}" onblur="${blurJs}"></td>
+      <td style="padding:0;"><input type="date" value="${b.bagDate||''}" data-bf="bagDate" style="${inputStyle}" onfocus="${focusJs}" onblur="${blurJs}"></td>
+      <td style="padding:0;"><input type="date" value="${b.inocDate||''}" data-bf="inocDate" style="${inputStyle}" onfocus="${focusJs}" onblur="${blurJs}"></td>
+      <td style="padding:0;"><input type="date" value="${b.maturityDate||''}" data-bf="maturityDate" style="${inputStyle}" onfocus="${focusJs}" onblur="${blurJs}"></td>
+      <td style="padding:0;">
+        <select data-bf="status" style="${inputStyle}font-weight:500;" onfocus="${focusJs}" onblur="${blurJs}">
+          ${statuses.map(s => `<option${s===b.status?' selected':''}>${s}</option>`).join('')}
+        </select>
+      </td>
+      <td style="padding:0;"><input type="date" value="${b.harvestDate||''}" data-bf="harvestDate" style="${inputStyle}" onfocus="${focusJs}" onblur="${blurJs}"></td>
+      <td style="padding:0;"><input type="number" min="0" step="0.1" value="${b.harvestKg||''}" data-bf="harvestKg" placeholder="0.0" style="${inputStyle}text-align:right;font-family:'DM Mono',monospace;color:var(--green);" onfocus="${focusJs}" onblur="${blurJs}"></td>
+      <td style="padding:0;"><input type="text" value="${escAttr(b.notes||'')}" placeholder="Optional" data-bf="notes" style="${inputStyle}" onfocus="${focusJs}" onblur="${blurJs}"></td>
+      <td style="text-align:center;padding:4px;">
+        <button class="btn btn-danger btn-sm" style="font-size:11px;padding:3px 7px;line-height:1;" onclick="deleteBatch(${b.id})" title="Move to Trash">×</button>
+      </td>
+    </tr>`;
+}
+
+function wireProdAllInlineEdits() {
+  document.querySelectorAll('#prod-all tr[data-bid] [data-bf]').forEach(inp => {
+    inp.addEventListener('blur', ev => {
+      const tr = ev.target.closest('tr');
+      const bid = parseInt(tr.dataset.bid);
+      const field = ev.target.dataset.bf;
+      const batch = (DB.batches || []).find(x => x.id === bid);
+      if (!batch) return;
+
+      let newVal = ev.target.value;
+
+      // Per-field validation / normalisation
+      if (field === 'no') {
+        newVal = (newVal || '').trim().toUpperCase();
+        if (!newVal) {
+          showToast('Batch number cannot be empty', 'error');
+          ev.target.value = batch.no;
+          return;
+        }
+        const dup = (DB.batches || []).find(b =>
+          b && !b.deleted_at && b.id !== bid && (b.no || '').toUpperCase() === newVal
+        );
+        if (dup) {
+          showToast(`Batch number "${newVal}" already used`, 'error');
+          ev.target.value = batch.no;
+          return;
+        }
+      } else if (field === 'bags') {
+        const n = parseInt(newVal);
+        if (isNaN(n) || n < 1) {
+          showToast('Bags must be at least 1', 'error');
+          ev.target.value = batch.bags;
+          return;
+        }
+        newVal = n;
+      } else if (field === 'harvestKg') {
+        const n = parseFloat(newVal);
+        newVal = (isNaN(n) || n < 0) ? 0 : n;
+      }
+
+      if (batch[field] === newVal) return;
+      batch[field] = newVal;
+      if (typeof sbPersist === 'function') sbPersist('batches', batch);
+      showToast(`${batch.no} — ${field} updated`);
+
+      // Re-render only when the change affects metrics or grouping/sort.
+      // Cosmetic field edits (substrate, notes, dates) skip the re-render to avoid flicker.
+      const affectsMetricsOrGrouping = ['no','status','bags','harvestKg','type'].includes(field);
+      if (affectsMetricsOrGrouping) renderProduction();
+    });
+    // Submit on Enter for text/number inputs
+    inp.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter' && ev.target.tagName === 'INPUT') ev.target.blur();
+    });
+  });
 }
 
 function openRecurringModal(id) {
