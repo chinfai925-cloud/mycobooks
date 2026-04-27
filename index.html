@@ -2207,7 +2207,7 @@ tr:hover td { background:var(--bg); }
       <div class="form-grid form-grid-2">
         <div class="form-group">
           <label>Batch No.</label>
-          <input type="text" id="batch-no" placeholder="e.g. T001" readonly style="background:var(--bg);font-family:'DM Mono',monospace;">
+          <input type="text" id="batch-no" placeholder="e.g. T001" style="font-family:'DM Mono',monospace;text-transform:uppercase;">
         </div>
         <div class="form-group">
           <label>Mushroom Type</label>
@@ -9795,8 +9795,17 @@ function openBatchModal(id) {
 
 function saveBatch() {
   const bags = parseInt(document.getElementById('batch-bags').value);
-  const no   = document.getElementById('batch-no').value.trim();
+  const no   = document.getElementById('batch-no').value.trim().toUpperCase();
   if (!no || isNaN(bags) || bags < 1) { showToast('Please fill in batch number and quantity', 'error'); return; }
+
+  // Duplicate-check: another batch (excluding the one being edited, and excluding trashed) with same no
+  const dup = (DB.batches || []).find(b =>
+    b && !b.deleted_at && b.id !== editingBatchId && (b.no || '').toUpperCase() === no
+  );
+  if (dup) {
+    showToast(`Batch number "${no}" is already used by another batch — pick a different one`, 'error');
+    return;
+  }
   const batch = {
     id:           editingBatchId || DB.nextIds.batches++,
     no, bags,
