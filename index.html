@@ -10901,6 +10901,7 @@ async function renderInterCoView() {
         <th class="text-right">Implied Rate</th>
         <th class="text-right">Realized FX G/L</th>
         <th>Notes</th>
+        <th style="width:36px;"></th>
       </tr></thead>
       <tbody>${settlements.map(r => {
         const cash = parseFloat(r.cash_amount) || 0;
@@ -10930,8 +10931,111 @@ async function renderInterCoView() {
           <td class="text-right mono" style="font-size:11px;color:var(--text2);">${rateStr}</td>
           <td class="text-right mono">${fxStr}</td>
           <td style="font-size:12px;color:var(--text2);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(r.notes||'').replace(/"/g,'&quot;')}">${r.notes||''}</td>
+          <td style="text-align:center;"><button class="btn btn-danger btn-sm" style="font-size:11px;padding:3px 7px;line-height:1;" title="Remove this settlement (reverses cash impact, reverts any linked invoice payments)" onclick="deleteInterCoSettlement(${r.id})">🗑</button></td>
         </tr>`;
       }).join('')}</tbody></table>`;
+  }
+}
+
+// Soft-delete an inter-company settlement and reverse its side-effects:
+//   • Mark the active-side intercompanyTransactions row deleted
+//   • Mark the partner-side row deleted (cross-company Supabase PATCH by intercompany_id)
+//   • Soft-delete any payments this settlement created on the active side
+//   • Recompute status of any invoices those payments were applied to
+// All deletes are soft — recoverable from Supabase via UPDATE if ever needed.
+async function deleteInterCoSettlement(activeRowId) {
+  const row = (DB.intercompanyTransactions || []).find(r => r.id === activeRowId);
+  if (!row) { showToast('Settlement not found', 'error'); return; }
+  if (row.kind !== 'settlement') { showToast('That row is not a settlement', 'error'); return; }
+  if (row.deleted_at) { showToast('Already removed', 'error'); return; }
+
+  // Find linked settlement payments (created by this settlement on the active side).
+  // Match on intercompany_id + 'Inter-Co Settlement' note prefix to avoid touching
+  // unrelated payments that might share the same intercompany_id.
+  const linkedPayments = (DB.payments || []).filter(p =>
+    !p.deleted_at &&
+    p.intercompany_id === row.intercompany_id &&
+    typeof p.notes === 'string' &&
+    p.notes.includes('[Inter-Co Settlement')
+  );
+  const affectedInvoiceIds = [...new Set(linkedPayments.map(p => p.invoiceId).filter(Boolean))];
+
+  // Confirm with explicit warning
+  const lines = [
+    `Remove this settlement?`,
+    ``,
+    `  Date: ${fmtDate(row.date)}`,
+    `  Partner: ${row.partner_name}`,
+    `  Cash: ${fmtCurr(Math.abs(parseFloat(row.cash_amount)||0), row.cash_currency || row.currency || 'MYR')}`,
+    `  Balance impact: ${(parseFloat(row.amount)||0) > 0 ? '+' : ''}${fmtCurr(parseFloat(row.amount)||0, row.currency || 'MYR')}`,
+  ];
+  if (linkedPayments.length > 0) {
+    lines.push('');
+    lines.push(`This will also reverse:`);
+    lines.push(`  • ${linkedPayments.length} payment${linkedPayments.length===1?'':'s'} created by the settlement`);
+    lines.push(`  • ${affectedInvoiceIds.length} invoice${affectedInvoiceIds.length===1?'':'s'} will revert from Paid/Partial`);
+  }
+  lines.push('');
+  lines.push(`Reason (for audit, optional):`);
+
+  const reason = prompt(lines.join('\n'), '');
+  if (reason === null) return;
+
+  try {
+    // (1) Soft-delete the active-side row
+    softDelete('intercompanyTransactions', activeRowId, reason.trim());
+    if (typeof sbPersist === 'function') sbPersist('intercompanyTransactions', row);
+
+    // (2) Soft-delete linked settlement payments + recompute affected invoice statuses
+    linkedPayments.forEach(p => {
+      softDelete('payments', p.id, `Reversed by settlement removal: ${reason.trim()}`);
+      if (typeof sbPersist === 'function') sbPersist('payments', p);
+    });
+    affectedInvoiceIds.forEach(invId => {
+      const inv = (DB.invoices || []).find(i => i.id === invId);
+      if (!inv) return;
+      const totalPaid = (DB.payments || [])
+        .filter(x => !x.deleted_at && x.invoiceId === inv.id)
+        .reduce((s, x) => s + (parseFloat(x.amount) || 0), 0);
+      if (totalPaid >= (inv.total || 0)) { inv.status = 'Paid'; }
+      else if (totalPaid > 0) { inv.status = 'Partial'; }
+      else { inv.status = 'Pending'; inv.account = ''; }
+      if (typeof sbPersist === 'function') sbPersist('invoices', inv);
+    });
+
+    // (3) Soft-delete the partner-side row in their company's table.
+    // Look it up by intercompany_id + kind=settlement; PATCH with deleted_* fields.
+    const partnerPrefix = row.partner_prefix;
+    let partnerResult = null;
+    if (partnerPrefix) {
+      try {
+        const tbl = sbTableFor(partnerPrefix, 'intercompanyTransactions');
+        const partnerRows = await SB.get(`${tbl}?intercompany_id=eq.${encodeURIComponent(row.intercompany_id)}&kind=eq.settlement&select=id,deleted_at`);
+        const undeleted = (Array.isArray(partnerRows) ? partnerRows : []).filter(r => !r.deleted_at);
+        for (const pr of undeleted) {
+          await SB.patch(`${tbl}?id=eq.${pr.id}`, {
+            deleted_at: new Date().toISOString(),
+            deleted_by: (DB.currentUser && DB.currentUser.name) || 'unknown',
+            deleted_reason: `Reversed from ${getActiveCompanyName()}: ${reason.trim()}`
+          });
+        }
+        partnerResult = `${undeleted.length} partner-side row${undeleted.length===1?'':'s'} reversed`;
+      } catch (e) {
+        console.warn('Partner-side soft-delete failed:', e);
+        partnerResult = `partner-side reversal failed (${e.message}) — fix manually in Supabase`;
+      }
+    } else {
+      partnerResult = 'no partner prefix on row — partner side not touched';
+    }
+
+    showToast(`Settlement removed. ${partnerResult}.`);
+    refreshInterCoIfVisible();
+    if (typeof renderInvoices === 'function') renderInvoices();
+    if (typeof renderPaymentHistory === 'function') renderPaymentHistory();
+    if (typeof renderDashboard === 'function') renderDashboard();
+  } catch (err) {
+    console.error('deleteInterCoSettlement failed:', err);
+    showToast('Removal failed: ' + err.message, 'error');
   }
 }
 
