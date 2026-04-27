@@ -923,7 +923,10 @@ tr:hover td { background:var(--bg); }
           <div class="page-title">Production</div>
           <div class="page-subtitle">Track mushroom batches from bagging to harvest</div>
         </div>
-        <button class="btn btn-primary" onclick="openBatchModal()">+ New Batch</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" onclick="openBatchBulkModal()" title="Add multiple batches at once via a spreadsheet-style grid">📋 Bulk Add</button>
+          <button class="btn btn-primary" onclick="openBatchModal()">+ New Batch</button>
+        </div>
       </div>
       <div class="metrics-grid" id="prod-metrics" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px;"></div>
 
@@ -2260,6 +2263,46 @@ tr:hover td { background:var(--bg); }
       <div class="form-actions">
         <button class="btn btn-outline" onclick="closeModal('modal-batch')">Cancel</button>
         <button class="btn btn-primary" onclick="saveBatch()">Save Batch</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk Batch Modal -->
+<div class="modal-backdrop" id="modal-batch-bulk">
+  <div class="modal" style="width:1080px;max-width:96vw;max-height:88vh;">
+    <div class="modal-head">
+      <span class="modal-title">📋 Bulk Add Batches</span>
+      <button class="modal-close" onclick="closeModal('modal-batch-bulk')">×</button>
+    </div>
+    <div class="modal-body" style="overflow-y:auto;max-height:calc(88vh - 60px);">
+      <div style="background:var(--green-light);border:1px solid #b7e4c7;color:var(--green);padding:8px 12px;border-radius:var(--radius-sm);font-size:12px;line-height:1.5;margin-bottom:12px;">
+        Add multiple batches at once. Empty rows are skipped on save. Batch numbers (T001, T002…) are auto-assigned in order.
+      </div>
+      <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-sm);">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead>
+            <tr style="background:var(--bg);border-bottom:2px solid var(--border);">
+              <th style="padding:8px 10px;text-align:left;font-weight:500;color:var(--text2);width:130px;">Bag Date</th>
+              <th style="padding:8px 10px;text-align:left;font-weight:500;color:var(--text2);width:170px;">Type</th>
+              <th style="padding:8px 10px;text-align:right;font-weight:500;color:var(--text2);width:90px;">Bags</th>
+              <th style="padding:8px 10px;text-align:left;font-weight:500;color:var(--text2);">Substrate</th>
+              <th style="padding:8px 10px;text-align:left;font-weight:500;color:var(--text2);width:130px;">Inoc Date</th>
+              <th style="padding:8px 10px;text-align:left;font-weight:500;color:var(--text2);width:140px;">Status</th>
+              <th style="padding:8px 10px;text-align:left;font-weight:500;color:var(--text2);">Notes</th>
+              <th style="padding:8px 10px;text-align:center;font-weight:500;color:var(--text2);width:36px;"></th>
+            </tr>
+          </thead>
+          <tbody id="bulk-batch-tbody"></tbody>
+        </table>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
+        <button class="btn btn-outline btn-sm" onclick="bulkBatchAddRow()" style="font-size:12px;">+ Add Row</button>
+        <span id="bulk-batch-count" style="font-size:11px;color:var(--text3);"></span>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-outline" onclick="closeModal('modal-batch-bulk')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveBulkBatches()">Save All</button>
       </div>
     </div>
   </div>
@@ -9778,6 +9821,142 @@ function saveBatch() {
     showToast(`Batch ${no} created`);
   }
   closeModal('modal-batch');
+  renderProduction();
+}
+
+// ---- BULK BATCH ENTRY ----
+// Opens a spreadsheet-style modal for adding many batches at once.
+// Numbers are auto-assigned in T001, T002 ... order on save.
+function openBatchBulkModal() {
+  const tbody = document.getElementById('bulk-batch-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  // Start with 5 empty rows — user can add or remove as needed
+  for (let i = 0; i < 5; i++) bulkBatchAddRow();
+  updateBulkBatchCount();
+  openModal('modal-batch-bulk');
+}
+
+function bulkBatchAddRow() {
+  const tbody = document.getElementById('bulk-batch-tbody');
+  if (!tbody) return;
+  const today = new Date().toISOString().split('T')[0];
+  const cellInputStyle = 'width:100%;padding:6px 8px;border:none;background:transparent;font-size:12px;font-family:inherit;outline:none;';
+  const focusJS = "this.style.background='var(--green-light)'";
+  const blurJS  = "this.style.background='transparent'";
+
+  const tr = document.createElement('tr');
+  tr.style.borderBottom = '1px solid var(--border)';
+  tr.innerHTML = `
+    <td style="padding:0;"><input type="date" data-bulk-field="bagDate" value="${today}" style="${cellInputStyle}" onfocus="${focusJS}" onblur="${blurJS}"></td>
+    <td style="padding:0;">
+      <select data-bulk-field="type" style="${cellInputStyle}" onfocus="${focusJS}" onblur="${blurJS}">
+        <option>Oyster Mushroom</option><option>Shiitake</option><option>King Oyster</option>
+        <option>Lion's Mane</option><option>Enoki</option><option>Button</option><option>Other</option>
+      </select>
+    </td>
+    <td style="padding:0;"><input type="number" min="1" data-bulk-field="bags" placeholder="0" style="${cellInputStyle}text-align:right;font-family:'DM Mono',monospace;" onfocus="${focusJS}" onblur="${blurJS}" oninput="updateBulkBatchCount()"></td>
+    <td style="padding:0;"><input type="text" data-bulk-field="substrate" placeholder="e.g. Sawdust + Rice Bran" list="substrate-datalist" style="${cellInputStyle}" onfocus="${focusJS}" onblur="${blurJS}"></td>
+    <td style="padding:0;"><input type="date" data-bulk-field="inocDate" style="${cellInputStyle}" onfocus="${focusJS}" onblur="${blurJS}"></td>
+    <td style="padding:0;">
+      <select data-bulk-field="status" style="${cellInputStyle}" onfocus="${focusJS}" onblur="${blurJS}">
+        <option>Bagging</option><option>Inoculation</option><option>Colonising</option>
+        <option>Fruiting</option><option>Harvesting</option><option>Completed</option><option>Discarded</option>
+      </select>
+    </td>
+    <td style="padding:0;"><input type="text" data-bulk-field="notes" placeholder="Optional" style="${cellInputStyle}" onfocus="${focusJS}" onblur="${blurJS}"></td>
+    <td style="text-align:center;padding:4px;">
+      <button class="btn btn-danger btn-sm" style="font-size:11px;padding:3px 7px;line-height:1;" onclick="bulkBatchRemoveRow(this)" title="Remove this row">×</button>
+    </td>
+  `;
+  tbody.appendChild(tr);
+  updateBulkBatchCount();
+}
+
+function bulkBatchRemoveRow(btn) {
+  const tr = btn.closest('tr');
+  if (tr) tr.remove();
+  updateBulkBatchCount();
+}
+
+function updateBulkBatchCount() {
+  const el = document.getElementById('bulk-batch-count');
+  if (!el) return;
+  const rows = document.querySelectorAll('#bulk-batch-tbody tr');
+  let valid = 0;
+  rows.forEach(tr => {
+    const bagsInp = tr.querySelector('[data-bulk-field="bags"]');
+    const dateInp = tr.querySelector('[data-bulk-field="bagDate"]');
+    const bags = parseInt(bagsInp && bagsInp.value);
+    if (!isNaN(bags) && bags >= 1 && dateInp && dateInp.value) valid++;
+  });
+  el.textContent = `${rows.length} row${rows.length===1?'':'s'} · ${valid} valid (need bag date + bag count > 0)`;
+}
+
+function saveBulkBatches() {
+  const rows = document.querySelectorAll('#bulk-batch-tbody tr');
+  const collected = [];
+  rows.forEach(tr => {
+    const get = f => {
+      const el = tr.querySelector(`[data-bulk-field="${f}"]`);
+      return el ? el.value : '';
+    };
+    const bags = parseInt(get('bags'));
+    const bagDate = get('bagDate');
+    if (!bagDate || isNaN(bags) || bags < 1) return; // skip empty/invalid rows silently
+    collected.push({
+      bags,
+      type:      get('type') || 'Oyster Mushroom',
+      substrate: get('substrate') || '',
+      bagDate,
+      inocDate:  get('inocDate') || '',
+      status:    get('status') || 'Bagging',
+      notes:     get('notes') || '',
+    });
+  });
+
+  if (collected.length === 0) {
+    showToast('No valid rows — fill in bag date and bag count for at least one row', 'error');
+    return;
+  }
+
+  // Auto-number, starting from current max+1. Padding mirrors nextBatchNo() (3 digits).
+  const usedNums = (DB.batches || [])
+    .map(b => {
+      const m = b && b.no && /^T(\d+)$/.exec(b.no);
+      return m ? parseInt(m[1], 10) : 0;
+    })
+    .filter(n => n > 0);
+  let nextN = (usedNums.length ? Math.max(...usedNums) : 0) + 1;
+
+  const today = new Date().toISOString().split('T')[0];
+  const created = [];
+  collected.forEach(c => {
+    const newBatch = {
+      id:           DB.nextIds.batches++,
+      no:           'T' + String(nextN++).padStart(3, '0'),
+      type:         c.type,
+      bags:         c.bags,
+      substrate:    c.substrate,
+      bagDate:      c.bagDate,
+      inocDate:     c.inocDate,
+      maturityDate: '',
+      status:       c.status,
+      harvestDate:  '',
+      harvestKg:    0,
+      notes:        c.notes,
+      createdOn:    today,
+    };
+    DB.batches.unshift(newBatch);
+    created.push(newBatch);
+    if (typeof sbPersist === 'function') sbPersist('batches', newBatch);
+  });
+
+  closeModal('modal-batch-bulk');
+  const range = created.length === 1
+    ? created[0].no
+    : `${created[0].no}–${created[created.length-1].no}`;
+  showToast(`${created.length} batch${created.length===1?'':'es'} created (${range})`);
   renderProduction();
 }
 
