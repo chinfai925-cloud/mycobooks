@@ -2204,7 +2204,7 @@ tr:hover td { background:var(--bg); }
       <div class="form-grid form-grid-2">
         <div class="form-group">
           <label>Batch No.</label>
-          <input type="text" id="batch-no" placeholder="e.g. B-2026-001" readonly style="background:var(--bg);font-family:'DM Mono',monospace;">
+          <input type="text" id="batch-no" placeholder="e.g. T001" readonly style="background:var(--bg);font-family:'DM Mono',monospace;">
         </div>
         <div class="form-group">
           <label>Mushroom Type</label>
@@ -9703,9 +9703,17 @@ function switchProdTab(n) {
 }
 
 function nextBatchNo() {
-  const year = new Date().getFullYear();
-  const existing = DB.batches.filter(b => b.no && b.no.startsWith('B-'+year)).length;
-  return `B-${year}-${String(existing+1).padStart(3,'0')}`;
+  // Format: T + 3-digit zero-padded counter (T001, T002, ...).
+  // Uses max-of-existing rather than count, so soft-deleted batches don't
+  // cause number reuse, and gaps from manual edits are preserved.
+  const usedNums = (DB.batches || [])
+    .map(b => {
+      const m = b && b.no && /^T(\d+)$/.exec(b.no);
+      return m ? parseInt(m[1], 10) : 0;
+    })
+    .filter(n => n > 0);
+  const next = (usedNums.length ? Math.max(...usedNums) : 0) + 1;
+  return 'T' + String(next).padStart(3, '0');
 }
 
 function openBatchModal(id) {
