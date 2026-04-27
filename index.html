@@ -2010,7 +2010,7 @@ tr:hover td { background:var(--bg); }
         </div>
         <div class="form-group">
           <label>Rate per Pack (RM)</label>
-          <input type="number" id="pkrate-rate" placeholder="e.g. 0.10" min="0" step="0.01">
+          <input type="number" id="pkrate-rate" placeholder="e.g. 0.1000" min="0" step="0.0001">
         </div>
         <div class="form-group">
           <label>Notes <span style="font-weight:400;color:var(--text3);">(optional)</span></label>
@@ -8231,7 +8231,7 @@ function savePackingRate() {
     // Replace if product already exists
     DB.packingRates = DB.packingRates.filter(x=>x.product!==product);
     DB.packingRates.push(item);
-    showToast(`Rate set: ${product} → RM ${rate.toFixed(2)}/pack`);
+    showToast(`Rate set: ${product} → RM ${rate.toFixed(4)}/pack`);
   }
   closeModal('modal-packing-rate');
   renderPackingRates();
@@ -8310,7 +8310,7 @@ function renderPackingRates() {
           <tr style="border-bottom:1px solid var(--border);" data-rate-id="${r.id}">
             <td style="padding:4px 12px;font-weight:500;" title="Product name is locked — used to match packing lines">${escAttr(r.product)}</td>
             <td style="padding:0;">
-              <input type="number" min="0" step="0.01" value="${r.ratePerPack}" data-field="ratePerPack" data-rid="${r.id}"
+              <input type="number" min="0" step="0.0001" value="${r.ratePerPack}" data-field="ratePerPack" data-rid="${r.id}"
                 style="${cellStyle}text-align:right;font-family:'DM Mono',monospace;font-weight:600;color:var(--green);" ${focusStyle}>
             </td>
             <td style="padding:0;">
@@ -8345,7 +8345,7 @@ function renderPackingRates() {
           ev.target.value = rate.ratePerPack;
           return;
         }
-        newVal = parseFloat(newVal.toFixed(2));
+        newVal = parseFloat(newVal.toFixed(4));
       } else {
         newVal = (ev.target.value || '').trim();
       }
@@ -8466,7 +8466,7 @@ function renderPackingWages() {
             ${lines.map(l=>`<tr>
               <td style="padding:5px 12px;font-weight:500;">${l.product||'—'}</td>
               <td style="padding:5px 8px;text-align:center;font-family:'DM Mono',monospace;">${l.qty}</td>
-              <td style="padding:5px 8px;text-align:right;font-family:'DM Mono',monospace;color:var(--text2);">${l.rate>0?currSym()+l.rate.toFixed(2):'—'}</td>
+              <td style="padding:5px 8px;text-align:right;font-family:'DM Mono',monospace;color:var(--text2);">${l.rate>0?currSym()+l.rate.toFixed(4):'—'}</td>
               <td style="padding:5px 12px;text-align:right;font-family:'DM Mono',monospace;color:${l.earn>0?'var(--green)':'var(--text3)'};">${l.earn>0?fmt(l.earn):'no rate'}</td>
             </tr>`).join('')}
             <tr style="background:var(--bg);border-top:1px solid var(--border);font-weight:600;">
