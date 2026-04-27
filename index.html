@@ -2283,6 +2283,7 @@ tr:hover td { background:var(--bg); }
         <table style="width:100%;border-collapse:collapse;font-size:12px;">
           <thead>
             <tr style="background:var(--bg);border-bottom:2px solid var(--border);">
+              <th style="padding:8px 10px;text-align:left;font-weight:500;color:var(--text2);width:90px;">Batch No.</th>
               <th style="padding:8px 10px;text-align:left;font-weight:500;color:var(--text2);width:130px;">Bag Date</th>
               <th style="padding:8px 10px;text-align:left;font-weight:500;color:var(--text2);width:170px;">Type</th>
               <th style="padding:8px 10px;text-align:right;font-weight:500;color:var(--text2);width:90px;">Bags</th>
@@ -9857,7 +9858,8 @@ function bulkBatchAddRow() {
   const tr = document.createElement('tr');
   tr.style.borderBottom = '1px solid var(--border)';
   tr.innerHTML = `
-    <td style="padding:0;"><input type="date" data-bulk-field="bagDate" value="${today}" style="${cellInputStyle}" onfocus="${focusJS}" onblur="${blurJS}"></td>
+    <td style="padding:6px 10px;font-family:'DM Mono',monospace;font-weight:600;font-size:12px;" data-bulk-no>—</td>
+    <td style="padding:0;"><input type="date" data-bulk-field="bagDate" value="${today}" style="${cellInputStyle}" onfocus="${focusJS}" onblur="${blurJS}" oninput="updateBulkBatchCount()"></td>
     <td style="padding:0;">
       <select data-bulk-field="type" style="${cellInputStyle}" onfocus="${focusJS}" onblur="${blurJS}">
         <option>Oyster Mushroom</option><option>Shiitake</option><option>King Oyster</option>
@@ -9890,16 +9892,42 @@ function bulkBatchRemoveRow(btn) {
 
 function updateBulkBatchCount() {
   const el = document.getElementById('bulk-batch-count');
-  if (!el) return;
   const rows = document.querySelectorAll('#bulk-batch-tbody tr');
+
+  // Compute the starting batch number — same logic as nextBatchNo() / saveBulkBatches()
+  const usedNums = (DB.batches || [])
+    .map(b => {
+      const m = b && b.no && /^T(\d+)$/.exec(b.no);
+      return m ? parseInt(m[1], 10) : 0;
+    })
+    .filter(n => n > 0);
+  const startN = (usedNums.length ? Math.max(...usedNums) : 0) + 1;
+
   let valid = 0;
   rows.forEach(tr => {
     const bagsInp = tr.querySelector('[data-bulk-field="bags"]');
     const dateInp = tr.querySelector('[data-bulk-field="bagDate"]');
+    const noCell  = tr.querySelector('[data-bulk-no]');
     const bags = parseInt(bagsInp && bagsInp.value);
-    if (!isNaN(bags) && bags >= 1 && dateInp && dateInp.value) valid++;
+    const isValid = !isNaN(bags) && bags >= 1 && dateInp && dateInp.value;
+
+    // Update the projected batch-no display for this row
+    if (noCell) {
+      if (isValid) {
+        noCell.textContent = 'T' + String(startN + valid).padStart(3, '0');
+        noCell.style.color = 'var(--green)';
+      } else {
+        noCell.textContent = '—';
+        noCell.style.color = 'var(--text3)';
+      }
+    }
+
+    if (isValid) valid++;
   });
-  el.textContent = `${rows.length} row${rows.length===1?'':'s'} · ${valid} valid (need bag date + bag count > 0)`;
+
+  if (el) {
+    el.textContent = `${rows.length} row${rows.length===1?'':'s'} · ${valid} valid (need bag date + bag count > 0)`;
+  }
 }
 
 function saveBulkBatches() {
