@@ -16601,6 +16601,7 @@ function renderCompanies() {
         </select>
         ${c.verified===false ? `<button class="btn btn-primary btn-sm" onclick="showSetupSql('${c.id}')" style="font-size:11px;">Show SQL</button>` : ''}
         ${c.verified===false ? `<button class="btn btn-outline btn-sm" onclick="verifyCompany('${c.id}')" style="font-size:11px;">Verify</button>` : ''}
+        ${c.verified!==false && !isDefault ? `<button class="btn btn-outline btn-sm" onclick="showMigrateSql('${c.id}')" style="font-size:11px;" title="Generate idempotent ALTER TABLE statements to bring this company's Supabase tables up to the current schema">🔧 Sync Schema</button>` : ''}
         ${!isActive ? `<button class="btn btn-outline btn-sm" onclick="switchCompany('${c.id}')" style="font-size:11px;">Switch to</button>` : ''}
         ${!isDefault && !isActive ? `<button class="btn btn-danger btn-sm" onclick="deleteCompany('${c.id}')" style="font-size:11px;">Remove</button>` : ''}
       </div>
@@ -16688,47 +16689,93 @@ function openAddCompanyModal() {
   showSetupSql(id);
 }
 
+// Authoritative per-company table schemas. Source of truth for both
+// generateSetupSql (CREATE TABLE for new companies) and generateMigrateSql
+// (ALTER TABLE ADD COLUMN IF NOT EXISTS to bring older companies up to date).
+//
+// Keep in sync with the COLS whitelist used by sbSaveAll. When you add a
+// new field to COLS, add the matching column type here too, then click
+// "Sync Schema" on each company in Settings → Companies to push the change.
+const COMPANY_TABLE_SCHEMAS = {
+  users: `id int8 primary key, username text, password text, name text, role text, initials text, active bool, email text, auth_id text`,
+  expenses: `id int8 primary key, date text, "desc" text, cat text, amount numeric, supplier text, status text, paid text, account text, notes text, "dueDate" text, recurring bool, "recurringId" int8, deleted_at text, deleted_by text, deleted_reason text`,
+  sales: `id int8 primary key, date text, customer text, product text, qty numeric, price numeric, total numeric, type text, account text, notes text, "harvestId" int8`,
+  invoices: `id int8 primary key, no text, date text, due text, customer text, address text, lines text, total numeric, tax numeric, sst numeric, status text, account text, currency text, notes text, product text, qty numeric, unit text, discount text, "soId" int8, "soOrderNo" text, is_intercompany bool, intercompany_id text, intercompany_partner_id text, intercompany_partner_name text, booking_rate numeric, booking_value_local numeric, deleted_at text, deleted_by text, deleted_reason text`,
+  inventory: `id int8 primary key, name text, cat text, unit text, stock numeric, reorder numeric, cost numeric, supplier text`,
+  staff: `id int8 primary key, name text, role text, dept text, "payType" text, salary numeric, ic text, phone text, "joinDate" text, "empType" text, epf bool, socso bool, eis bool, bank text, "bankAcc" text, notes text, address text, "emergencyName" text, "emergencyPhone" text, "emergencyRel" text, allowances text`,
+  customers: `id int8 primary key, name text, contact text, phone text, email text, address text, terms text, currency text, "priceList" text, notes text`,
+  products: `id int8 primary key, name text, cat text, unit text, price numeric, "priceSgd" numeric, weight numeric, "desc" text, status text, sort int8`,
+  accounts: `id int8 primary key, name text, type text, description text, balance numeric`,
+  suppliers: `id int8 primary key, name text, cat text, contact text, phone text, email text, address text, terms text, notes text`,
+  payroll_runs: `id int8 primary key, month text, "processedOn" text, entries text, "totalNet" numeric, deleted_at text, deleted_by text, deleted_reason text`,
+  wage_advances: `id int8 primary key, "staffId" int8, name text, amount numeric, date text, "deductMonth" text, reason text, account text, deducted bool, deleted_at text, deleted_by text, deleted_reason text`,
+  transfers: `id int8 primary key, date text, "fromAccount" text, "toAccount" text, amount numeric, notes text`,
+  cashflow_items: `id int8 primary key, date text, "desc" text, amount numeric, type text, notes text`,
+  loans: `id int8 primary key, name text, lender text, amount numeric, balance numeric, rate numeric, term int8, "startDate" text, account text, notes text, payments text`,
+  claims: `id int8 primary key, date text, "submittedOn" text, claimant text, "claimType" text, cat text, "desc" text, amount numeric, status text, "reviewNotes" text, "reviewedOn" text, "paidOn" text, "paidAccount" text, "bulkPaid" text`,
+  recurring_expenses: `id int8 primary key, "desc" text, amount numeric, cat text, supplier text, day int8, account text, start text, "end" text, notes text, active bool, generated text`,
+  batches: `id int8 primary key, no text, type text, bags int8, substrate text, "bagDate" text, "inocDate" text, "maturityDate" text, status text, "harvestDate" text, "harvestKg" numeric, notes text, "createdOn" text, deleted_at text, deleted_by text, deleted_reason text`,
+  harvests: `id int8 primary key, date text, "batchId" int8, kg numeric, flush int8, grade text, harvester text, notes text, "saleId" int8, deleted_at text, deleted_by text, deleted_reason text`,
+  packings: `id int8 primary key, date text, team text, members text, notes text, orders text, packs int8, "totalKg" numeric, "soId" int8, "soOrderNo" text, "dispatchTeamId" int8, deleted_at text, deleted_by text, deleted_reason text`,
+  packing_rates: `id int8 primary key, product text, "ratePerPack" numeric, notes text`,
+  packing_teams: `id int8 primary key, team text, members text, notes text`,
+  sales_orders: `id int8 primary key, "orderNo" text, customers text, lines text, customer text, "deliveryDate" text, salesperson text, priority text, notes text, total numeric, status text, "createdOn" text, dispatch text, "invoiceIds" text, deleted_at text, deleted_by text, deleted_reason text`,
+  lorries: `id int8 primary key, plate text, name text, model text, odometer numeric, "serviceIntervalKm" numeric, "lastServiceKm" numeric, "roadTaxExpiry" text, "insuranceExpiry" text, "puspakomDate" text, "puspakomNext" text`,
+  refuels: `id int8 primary key, date text, "lorryId" int8, odometer numeric, km numeric, litres numeric, cost numeric, ppl numeric, efficiency numeric, driver text, account text, notes text`,
+  maintenance: `id int8 primary key, date text, "lorryId" int8, "desc" text, type text, status text, odometer numeric, "nextKm" numeric, vendor text, cost numeric, account text, "nextDate" text, notes text`,
+  trips: `id int8 primary key, date text, "lorryId" int8, driver text, "routeId" int8, route text, wage numeric, mileage numeric, "expLines" text, diesel numeric, toll numeric, other numeric, "wageAccount" text, notes text, "totalCost" numeric, deleted_at text, deleted_by text, deleted_reason text`,
+  route_rates: `id int8 primary key, route text, rate numeric, km numeric, notes text`,
+  payments: `id int8 primary key, "invoiceId" int8, "invoiceNo" text, customer text, date text, amount numeric, currency text, account text, reference text, notes text, type text, intercompany_id text, received_currency text, received_amount numeric, exchange_rate numeric, received_company_id text, received_company_name text, received_account text, deleted_at text, deleted_by text, deleted_reason text`,
+  credit_notes: `id int8 primary key, no text, date text, "invoiceId" int8, "invoiceNo" text, customer text, lines text, total numeric, currency text, reason text, status text, notes text, "createdOn" text, deleted_at text, deleted_by text, deleted_reason text`,
+  debit_notes: `id int8 primary key, no text, date text, kind text, "partyType" text, "partyName" text, "invoiceId" int8, "invoiceNo" text, lines text, total numeric, currency text, reason text, status text, notes text, "createdOn" text, deleted_at text, deleted_by text, deleted_reason text`,
+  intercompany_transactions: `id int8 primary key, date text, intercompany_id text, partner_id text, partner_name text, partner_prefix text, amount numeric, partner_amount numeric, currency text, partner_currency text, exchange_rate numeric, account text, cash_amount numeric, cash_currency text, kind text, linked_invoice_id int8, linked_invoice_no text, linked_payment_id int8, customer text, supplier text, notes text, created_by text, booking_rate numeric, booking_value_local numeric, fx_realized numeric, fx_realized_currency text, deleted_at text, deleted_by text, deleted_reason text`,
+  scheduled_trips: `id int8 primary key, date text, "startTime" text, "endTime" text, "lorryId" int8, driver text, "routeId" int8, route text, notes text, status text`,
+};
+
+// Top-level columns for a schema string. Splits "id int8 primary key, name text, ..."
+// at top-level commas only (none of the schemas use nested types so a simple split is safe).
+function _parseSchemaColumns(schemaStr) {
+  return schemaStr.split(/,\s*/).map(s => s.trim()).filter(Boolean);
+}
+
 function generateSetupSql(prefix) {
-  // Generate CREATE TABLE statements mirroring the existing schema.
-  // Columns match the COLS whitelist used by sbSaveAll.
-  const schemas = {
-    users: `id int8 primary key, username text, password text, name text, role text, initials text, active bool`,
-    expenses: `id int8 primary key, date text, "desc" text, cat text, amount numeric, supplier text, status text, paid text, account text, notes text, "dueDate" text, recurring bool, "recurringId" int8`,
-    sales: `id int8 primary key, date text, customer text, product text, qty numeric, price numeric, total numeric, type text, account text, notes text, "harvestId" int8`,
-    invoices: `id int8 primary key, no text, date text, due text, customer text, address text, lines text, total numeric, tax numeric, sst numeric, status text, account text, currency text, notes text, product text, qty numeric, unit text, discount text, "soId" int8, "soOrderNo" text, is_intercompany bool, intercompany_id text, intercompany_partner_id text, intercompany_partner_name text, booking_rate numeric, booking_value_local numeric`,
-    inventory: `id int8 primary key, name text, cat text, unit text, stock numeric, reorder numeric, cost numeric, supplier text`,
-    staff: `id int8 primary key, name text, role text, dept text, "payType" text, salary numeric, ic text, phone text, "joinDate" text, "empType" text, epf bool, socso bool, eis bool, bank text, "bankAcc" text, notes text`,
-    customers: `id int8 primary key, name text, contact text, phone text, email text, address text, terms text, currency text, "priceList" text, notes text`,
-    products: `id int8 primary key, name text, cat text, unit text, price numeric, "priceSgd" numeric, weight numeric, "desc" text, status text, sort int8`,
-    accounts: `id int8 primary key, name text, type text, description text, balance numeric`,
-    suppliers: `id int8 primary key, name text, cat text, contact text, phone text, email text, address text, terms text, notes text`,
-    payroll_runs: `id int8 primary key, month text, "processedOn" text, entries text, "totalNet" numeric`,
-    wage_advances: `id int8 primary key, "staffId" int8, name text, amount numeric, date text, "deductMonth" text, reason text, account text, deducted bool`,
-    transfers: `id int8 primary key, date text, "fromAccount" text, "toAccount" text, amount numeric, notes text`,
-    cashflow_items: `id int8 primary key, date text, "desc" text, amount numeric, type text, notes text`,
-    loans: `id int8 primary key, name text, lender text, amount numeric, balance numeric, rate numeric, term int8, "startDate" text, account text, notes text, payments text`,
-    claims: `id int8 primary key, date text, "submittedOn" text, claimant text, "claimType" text, cat text, "desc" text, amount numeric, status text, "reviewNotes" text, "reviewedOn" text, "paidOn" text, "paidAccount" text, "bulkPaid" text`,
-    recurring_expenses: `id int8 primary key, "desc" text, amount numeric, cat text, supplier text, day int8, account text, start text, "end" text, notes text, active bool, generated text`,
-    batches: `id int8 primary key, no text, type text, bags int8, substrate text, "bagDate" text, "inocDate" text, "maturityDate" text, status text, "harvestDate" text, "harvestKg" numeric, notes text, "createdOn" text`,
-    harvests: `id int8 primary key, date text, "batchId" int8, kg numeric, flush int8, grade text, harvester text, notes text, "saleId" int8`,
-    packings: `id int8 primary key, date text, team text, members text, notes text, orders text, packs int8, "totalKg" numeric`,
-    packing_rates: `id int8 primary key, product text, "ratePerPack" numeric, notes text`,
-    packing_teams: `id int8 primary key, team text, members text, notes text`,
-    sales_orders: `id int8 primary key, "orderNo" text, customers text, lines text, customer text, "deliveryDate" text, salesperson text, priority text, notes text, total numeric, status text, "createdOn" text, dispatch text, "invoiceIds" text`,
-    lorries: `id int8 primary key, plate text, name text, model text, odometer numeric, "serviceIntervalKm" numeric, "lastServiceKm" numeric, "roadTaxExpiry" text, "insuranceExpiry" text, "puspakomDate" text, "puspakomNext" text`,
-    refuels: `id int8 primary key, date text, "lorryId" int8, odometer numeric, km numeric, litres numeric, cost numeric, ppl numeric, efficiency numeric, driver text, account text, notes text`,
-    maintenance: `id int8 primary key, date text, "lorryId" int8, "desc" text, type text, status text, odometer numeric, "nextKm" numeric, vendor text, cost numeric, account text, "nextDate" text, notes text`,
-    trips: `id int8 primary key, date text, "lorryId" int8, driver text, "routeId" int8, route text, wage numeric, mileage numeric, "expLines" text, diesel numeric, toll numeric, other numeric, "wageAccount" text, notes text, "totalCost" numeric`,
-    route_rates: `id int8 primary key, route text, rate numeric, km numeric, notes text`,
-    payments: `id int8 primary key, "invoiceId" int8, "invoiceNo" text, customer text, date text, amount numeric, currency text, account text, reference text, notes text, type text, intercompany_id text, received_currency text, received_amount numeric, exchange_rate numeric, received_company_id text, received_company_name text, received_account text`,
-    credit_notes: `id int8 primary key, no text, date text, "invoiceId" int8, "invoiceNo" text, customer text, lines text, total numeric, currency text, reason text, status text, notes text, "createdOn" text`,
-    debit_notes: `id int8 primary key, no text, date text, kind text, "partyType" text, "partyName" text, "invoiceId" int8, "invoiceNo" text, lines text, total numeric, currency text, reason text, status text, notes text, "createdOn" text`,
-    intercompany_transactions: `id int8 primary key, date text, intercompany_id text, partner_id text, partner_name text, partner_prefix text, amount numeric, partner_amount numeric, currency text, partner_currency text, exchange_rate numeric, account text, cash_amount numeric, cash_currency text, kind text, linked_invoice_id int8, linked_invoice_no text, linked_payment_id int8, customer text, supplier text, notes text, created_by text, booking_rate numeric, booking_value_local numeric, fx_realized numeric, fx_realized_currency text, deleted_at text, deleted_by text, deleted_reason text`,
-  };
-  const stmts = Object.entries(schemas).map(([t, cols]) =>
+  // Generate CREATE TABLE statements for a fresh company.
+  const stmts = Object.entries(COMPANY_TABLE_SCHEMAS).map(([t, cols]) =>
     `CREATE TABLE IF NOT EXISTS ${prefix}_${t} (${cols});\nALTER TABLE ${prefix}_${t} ENABLE ROW LEVEL SECURITY;\nDROP POLICY IF EXISTS "anon_all" ON ${prefix}_${t};\nCREATE POLICY "anon_all" ON ${prefix}_${t} FOR ALL USING (true) WITH CHECK (true);`
   );
   return `-- MycoBooks: create tables for company prefix "${prefix}"\n-- Run this in Supabase SQL Editor, then click "Verify" in the app.\n\n` + stmts.join('\n\n') + '\n';
+}
+
+// Idempotent migration: brings existing prefixed tables up to the current schema.
+// Adds any columns that don't exist (ADD COLUMN IF NOT EXISTS) and creates any
+// missing tables (CREATE TABLE IF NOT EXISTS). Safe to re-run any number of times;
+// never drops or modifies existing data.
+function generateMigrateSql(prefix) {
+  const lines = [];
+  lines.push(`-- MycoBooks: sync tables for prefix "${prefix}" to current schema`);
+  lines.push(`-- Idempotent — safe to re-run. Adds missing columns; never drops data.`);
+  lines.push('');
+
+  Object.entries(COMPANY_TABLE_SCHEMAS).forEach(([t, schemaStr]) => {
+    const tbl = `${prefix}_${t}`;
+    const cols = _parseSchemaColumns(schemaStr);
+    lines.push(`-- ${tbl}`);
+    // CREATE TABLE IF NOT EXISTS handles the case where a brand-new table
+    // (e.g. scheduled_trips on an older company) hasn't been created yet.
+    lines.push(`CREATE TABLE IF NOT EXISTS ${tbl} (${schemaStr});`);
+    lines.push(`ALTER TABLE ${tbl} ENABLE ROW LEVEL SECURITY;`);
+    lines.push(`DROP POLICY IF EXISTS "anon_all" ON ${tbl};`);
+    lines.push(`CREATE POLICY "anon_all" ON ${tbl} FOR ALL USING (true) WITH CHECK (true);`);
+    // Then ADD COLUMN IF NOT EXISTS for each non-PK column — handles the case
+    // where the table already exists but is missing newer columns.
+    cols.forEach((col, idx) => {
+      if (idx === 0) return; // skip "id int8 primary key"
+      lines.push(`ALTER TABLE ${tbl} ADD COLUMN IF NOT EXISTS ${col};`);
+    });
+    lines.push('');
+  });
+
+  return lines.join('\n');
 }
 
 function showSetupSql(companyId) {
@@ -16775,6 +16822,64 @@ function copySetupSql() {
   } catch(e) {
     document.execCommand('copy');
     showToast('SQL copied');
+  }
+}
+
+// Show idempotent migration SQL that brings a company's tables up to the
+// current schema. Used when COLS / table definitions have evolved since
+// the company was originally set up.
+function showMigrateSql(companyId) {
+  const co = getCompaniesList().find(c => c.id === companyId);
+  if (!co) return;
+  const prefix = co.prefix || '';
+  if (!prefix) {
+    alert('The default company uses unprefixed tables — no migration script is generated for it. Add new columns directly in Supabase if needed.');
+    return;
+  }
+  const sql = generateMigrateSql(prefix);
+  const projectUrl = SUPABASE_URL.replace('.supabase.co','').replace('https://','');
+  const editorLink = `https://supabase.com/dashboard/project/${projectUrl}/sql/new`;
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.style.display = 'flex';
+  backdrop.id = 'modal-migrate-sql';
+  backdrop.innerHTML = `
+    <div class="modal" style="width:760px;max-height:85vh;">
+      <div class="modal-head">
+        <span class="modal-title">Sync Schema — ${co.name}</span>
+        <button class="modal-close" onclick="document.getElementById('modal-migrate-sql').remove()">×</button>
+      </div>
+      <div class="modal-body" style="overflow-y:auto;max-height:calc(85vh - 60px);">
+        <div style="background:var(--green-light);border:1px solid #b7e4c7;color:var(--green);padding:10px 12px;border-radius:var(--radius-sm);font-size:12px;line-height:1.5;margin-bottom:14px;">
+          <strong>Safe to run.</strong> This script only <em>adds</em> columns and tables that don't already exist — it never drops or modifies your data. Re-runnable any number of times.
+        </div>
+        <ol style="font-size:13px;line-height:1.7;margin:0 0 14px 18px;padding:0;">
+          <li>Click <b>Copy SQL</b> below.</li>
+          <li>Open <a href="${editorLink}" target="_blank" style="color:var(--green);">Supabase SQL Editor ↗</a> and paste.</li>
+          <li>Click <b>Run</b> in Supabase.</li>
+          <li>Come back to MycoBooks and try saving again — the column errors should be gone.</li>
+        </ol>
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <button class="btn btn-primary btn-sm" onclick="copyMigrateSql()">📋 Copy SQL</button>
+          <button class="btn btn-outline btn-sm" onclick="window.open('${editorLink}','_blank')">Open SQL Editor ↗</button>
+        </div>
+        <textarea id="migrate-sql-text" readonly style="width:100%;height:380px;padding:10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:'DM Mono',monospace;font-size:11px;resize:vertical;background:var(--bg);">${sql}</textarea>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+}
+
+function copyMigrateSql() {
+  const ta = document.getElementById('migrate-sql-text');
+  if (!ta) return;
+  ta.select();
+  try {
+    navigator.clipboard.writeText(ta.value);
+    showToast('Migration SQL copied to clipboard');
+  } catch(e) {
+    document.execCommand('copy');
+    showToast('Migration SQL copied');
   }
 }
 
