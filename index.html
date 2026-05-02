@@ -2544,6 +2544,46 @@ tr:hover td { background:var(--bg); }
   </div>
 </div>
 
+<!-- Edit Single Expense Payment Modal -->
+<div class="modal-backdrop" id="modal-edit-exp-payment">
+  <div class="modal" style="width:480px;">
+    <div class="modal-head">
+      <span class="modal-title">Edit Payment</span>
+      <button class="modal-close" onclick="closeModal('modal-edit-exp-payment')">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-pay-id">
+      <div id="edit-pay-context" style="background:var(--bg);padding:9px 12px;border-radius:var(--radius-sm);font-size:12px;margin-bottom:14px;color:var(--text2);"></div>
+      <div class="form-grid form-grid-2">
+        <div class="form-group">
+          <label>Payment Date</label>
+          <input type="date" id="edit-pay-date">
+        </div>
+        <div class="form-group">
+          <label>Amount</label>
+          <input type="number" id="edit-pay-amount" step="0.01" min="0" placeholder="0.00">
+          <div id="edit-pay-clamp-hint" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>From Account</label>
+          <select id="edit-pay-account"></select>
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Notes <span style="color:var(--text3);font-weight:400;">(optional)</span></label>
+          <input type="text" id="edit-pay-notes" placeholder="e.g. cheque #, transfer ref">
+        </div>
+      </div>
+      <div class="form-actions" style="justify-content:space-between;">
+        <button class="btn btn-danger" onclick="deleteExpensePaymentFromModal()">Delete Payment</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" onclick="closeModal('modal-edit-exp-payment')">Cancel</button>
+          <button class="btn btn-primary" onclick="saveEditExpensePayment()">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Sale Modal -->
 <div class="modal-backdrop" id="modal-sale">
   <div class="modal">
@@ -4965,6 +5005,202 @@ function addExpensePayment(expense, { date, amount, account, notes }) {
   DB.expensePayments.push(rec);
   recomputeExpenseStatus(expense);
   return rec;
+}
+
+// Open the single-payment edit modal. Pulls a fresh payment record by id and
+// pre-fills the form. Caller can be the supplier statement (clickable rows)
+// or the Edit Expense modal (per-row Edit button).
+function openEditExpensePayment(paymentId) {
+  if (!can('canEdit')) { showToast('You don\'t have permission to edit', 'error'); return; }
+  const p = (DB.expensePayments||[]).find(x => x.id === paymentId && !x.deleted_at);
+  if (!p) { showToast('Payment not found', 'error'); return; }
+  const e = (DB.expenses||[]).find(x => x.id === p.expenseId);
+  if (!e) { showToast('Parent bill not found', 'error'); return; }
+  if (!Array.isArray(DB.accounts) || DB.accounts.length === 0) {
+    showToast('Add a payment account first (Settings → Accounts)', 'error'); return;
+  }
+
+  const cs = currSym();
+  // Sum of OTHER payments against this same bill (so we can clamp the new amount)
+  const otherTotal = (DB.expensePayments||[])
+    .filter(x => x.expenseId === p.expenseId && x.id !== p.id && !x.deleted_at)
+    .reduce((s,x) => s + (parseFloat(x.amount)||0), 0);
+  const maxAllowed = Math.max(0, (e.amount||0) - otherTotal);
+
+  // Context strip — bill desc, total, other-payments, max for this row
+  document.getElementById('edit-pay-context').innerHTML = `
+    <div><strong>${escAttr(e.desc || '(no description)')}</strong>${e.supplier ? ' · '+escAttr(e.supplier) : ''}</div>
+    <div style="margin-top:4px;font-size:11px;">
+      Bill: <strong>${cs}${(e.amount||0).toFixed(2)}</strong>
+      ${otherTotal > 0 ? ` · Other payments: <strong>${cs}${otherTotal.toFixed(2)}</strong>` : ''}
+      · Max for this row: <strong style="color:var(--red);">${cs}${maxAllowed.toFixed(2)}</strong>
+    </div>`;
+
+  // Populate fields
+  document.getElementById('edit-pay-id').value     = p.id;
+  document.getElementById('edit-pay-date').value   = p.date || '';
+  document.getElementById('edit-pay-amount').value = p.amount != null ? p.amount : '';
+  // Stash the max on the input as a data attribute for client-side clamp
+  document.getElementById('edit-pay-amount').setAttribute('data-max', maxAllowed);
+  // Account dropdown — include the current value even if it's an account that
+  // no longer exists in DB.accounts (defensive).
+  const acctSel = document.getElementById('edit-pay-account');
+  const accts   = DB.accounts.map(a => a.name);
+  if (p.account && !accts.includes(p.account)) accts.unshift(p.account);
+  acctSel.innerHTML = accts.map(n => `<option value="${escAttr(n)}"${n===p.account?' selected':''}>${escAttr(n)}</option>`).join('');
+  document.getElementById('edit-pay-notes').value  = p.notes || '';
+  document.getElementById('edit-pay-clamp-hint').textContent = `Maximum: ${cs}${maxAllowed.toFixed(2)} (anything more would exceed the bill total)`;
+
+  openModal('modal-edit-exp-payment');
+}
+
+function saveEditExpensePayment() {
+  const id = parseInt(document.getElementById('edit-pay-id').value);
+  const p = (DB.expensePayments||[]).find(x => x.id === id && !x.deleted_at);
+  if (!p) { showToast('Payment not found', 'error'); return; }
+  const e = (DB.expenses||[]).find(x => x.id === p.expenseId);
+  if (!e) { showToast('Parent bill not found', 'error'); return; }
+
+  const date    = document.getElementById('edit-pay-date').value;
+  const amount  = parseFloat(document.getElementById('edit-pay-amount').value);
+  const account = document.getElementById('edit-pay-account').value;
+  const notes   = document.getElementById('edit-pay-notes').value.trim();
+
+  if (!date)                       { showToast('Date is required', 'error'); return; }
+  if (isNaN(amount) || amount <= 0){ showToast('Amount must be greater than zero', 'error'); return; }
+  if (!account)                    { showToast('Pick an account', 'error'); return; }
+
+  // Clamp: amount + sum of OTHER payments must not exceed bill amount
+  const otherTotal = (DB.expensePayments||[])
+    .filter(x => x.expenseId === p.expenseId && x.id !== p.id && !x.deleted_at)
+    .reduce((s,x) => s + (parseFloat(x.amount)||0), 0);
+  const maxAllowed = Math.max(0, (e.amount||0) - otherTotal);
+  if (amount > maxAllowed + 0.005) {
+    showToast(`Amount exceeds remaining balance — max ${currSym()}${maxAllowed.toFixed(2)}`, 'error');
+    return;
+  }
+
+  // Apply changes
+  p.date    = date;
+  p.amount  = amount;
+  p.account = account;
+  p.notes   = notes;
+  // Recompute parent expense status (paid / partial / unpaid)
+  recomputeExpenseStatus(e);
+
+  closeModal('modal-edit-exp-payment');
+  showToast('Payment updated');
+
+  // Re-render anything visible that depends on payments
+  try { renderSupplierStatement(); } catch(err) {}
+  try { renderExpenses(); } catch(err) {}
+  try { renderDashboard(); } catch(err) {}
+  try { renderSettings(); } catch(err) {}
+  // If the edit-expense modal is open showing the parent, refresh its payments list
+  const editExpModal = document.getElementById('modal-edit-expense');
+  if (editExpModal && editExpModal.classList.contains('open') && parseInt(document.getElementById('edit-exp-id').value) === e.id) {
+    refreshEditExpensePaymentList(e);
+  }
+
+  // Persist
+  if (typeof sbPersist === 'function') {
+    sbPersist('expensePayments', p);
+    sbPersist('expenses', e);
+  }
+}
+
+function deleteExpensePaymentFromModal() {
+  const id = parseInt(document.getElementById('edit-pay-id').value);
+  if (!isNaN(id)) deleteExpensePayment(id, true);
+}
+
+// Soft-delete a payment row. confirmedFromModal=true means we're being called
+// from the edit-payment modal (which has its own context display) — we still
+// confirm but skip closing the modal until after.
+function deleteExpensePayment(paymentId, confirmedFromModal) {
+  if (!can('canDelete')) { showToast('You don\'t have permission to delete', 'error'); return; }
+  const p = (DB.expensePayments||[]).find(x => x.id === paymentId && !x.deleted_at);
+  if (!p) { showToast('Payment not found', 'error'); return; }
+  const e = (DB.expenses||[]).find(x => x.id === p.expenseId);
+  const cs = currSym();
+  const billLabel = e ? `${e.desc || 'bill'} (${cs}${(e.amount||0).toFixed(2)})` : 'this bill';
+  if (!confirm(`Delete this payment of ${cs}${(p.amount||0).toFixed(2)} from ${p.account||'(no account)'} on ${fmtDate(p.date)}?\n\nThe bill "${billLabel}" will move back to ${e ? '' : ''}Partial / Unpaid status. The bill itself stays.`)) return;
+
+  // Soft-delete
+  p.deleted_at     = new Date().toISOString();
+  p.deleted_by     = (DB.currentUser && DB.currentUser.name) || 'unknown';
+  p.deleted_reason = 'payment row deleted from edit modal';
+
+  // Recompute parent status
+  if (e) recomputeExpenseStatus(e);
+
+  if (confirmedFromModal) closeModal('modal-edit-exp-payment');
+  showToast(`Payment of ${cs}${(p.amount||0).toFixed(2)} deleted`);
+
+  try { renderSupplierStatement(); } catch(err) {}
+  try { renderExpenses(); } catch(err) {}
+  try { renderDashboard(); } catch(err) {}
+  try { renderSettings(); } catch(err) {}
+  // If the edit-expense modal is open on this expense, refresh the payments list
+  if (e) {
+    const editExpModal = document.getElementById('modal-edit-expense');
+    if (editExpModal && editExpModal.classList.contains('open') && parseInt(document.getElementById('edit-exp-id').value) === e.id) {
+      refreshEditExpensePaymentList(e);
+    }
+  }
+
+  if (typeof sbPersist === 'function') {
+    sbPersist('expensePayments', p);
+    if (e) sbPersist('expenses', e);
+  }
+}
+
+// Render the per-bill payments list inside the edit-expense modal banner area.
+// Called both when opening the modal and after edit/delete operations to keep
+// the visible state in sync.
+function refreshEditExpensePaymentList(e) {
+  const banner = document.getElementById('edit-exp-payment-banner');
+  if (!banner) return;
+  const pays = getExpensePayments(e.id);
+  if (pays.length === 0) {
+    banner.style.display = 'none';
+    return;
+  }
+  const cs = currSym();
+  const paidAmt = pays.reduce((s,p) => s + (parseFloat(p.amount)||0), 0);
+  const remaining = Math.max(0, (e.amount||0) - paidAmt);
+  const sortedPays = pays.slice().sort((a,b) => (a.date||'').localeCompare(b.date||''));
+  banner.style.display = '';
+  banner.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
+      <div><strong>${pays.length} payment row${pays.length===1?'':'s'} on file</strong></div>
+      <div style="font-size:11px;">Paid <strong>${cs}${paidAmt.toFixed(2)}</strong> of ${cs}${(e.amount||0).toFixed(2)}${remaining>0?` · Remaining ${cs}${remaining.toFixed(2)}`:''}</div>
+    </div>
+    <div style="background:#fff;border:1px solid #bfdbfe;border-radius:4px;overflow:hidden;">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead>
+          <tr style="background:#f0f9ff;color:#1e40af;">
+            <th style="padding:6px 8px;text-align:left;font-weight:500;font-size:11px;">Date</th>
+            <th style="padding:6px 8px;text-align:left;font-weight:500;font-size:11px;">Account</th>
+            <th style="padding:6px 8px;text-align:right;font-weight:500;font-size:11px;">Amount</th>
+            <th style="padding:6px 8px;text-align:right;font-weight:500;font-size:11px;width:110px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sortedPays.map(p => `
+            <tr style="border-top:1px solid #e0e7ff;">
+              <td style="padding:6px 8px;color:#1e3a8a;white-space:nowrap;">${fmtDate(p.date)}</td>
+              <td style="padding:6px 8px;color:#1e3a8a;">${escAttr(p.account||'—')}${p.notes ? ` <span style="color:#64748b;font-size:11px;">(${escAttr(p.notes)})</span>` : ''}</td>
+              <td style="padding:6px 8px;text-align:right;font-family:'DM Mono',monospace;color:#1e3a8a;">${cs}${(parseFloat(p.amount)||0).toFixed(2)}</td>
+              <td style="padding:6px 8px;text-align:right;">
+                <button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;" onclick="openEditExpensePayment(${p.id})">Edit</button>
+                <button class="btn btn-danger btn-sm" style="font-size:10px;padding:2px 6px;" onclick="deleteExpensePayment(${p.id},false)">Del</button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:6px;font-size:11px;color:var(--text3);">Status / Account / Paid-on are derived from these rows. To change them, edit or delete payments above.</div>`;
 }
 
 let sbSaving = false;
@@ -11296,26 +11532,20 @@ function openEditExpense(id) {
   // If this bill has existing payment rows, the status / account / paidOn
   // fields are derived from those rows — locking them out of the edit modal
   // prevents inconsistencies (e.g. flipping to "unpaid" while RM 500 has
-  // already left the bank). Other value fields stay editable.
-  const pays   = (typeof getExpensePayments === 'function') ? getExpensePayments(e.id) : [];
-  const paidAmt = pays.reduce((s,p) => s + (parseFloat(p.amount)||0), 0);
-  const banner = document.getElementById('edit-exp-payment-banner');
+  // already left the bank). Other value fields stay editable. The banner
+  // shows a list of payments with per-row Edit/Del actions so the user can
+  // manage payments without leaving this modal.
+  const pays = (typeof getExpensePayments === 'function') ? getExpensePayments(e.id) : [];
   if (pays.length > 0) {
     statusSel.disabled = true;
     document.getElementById('edit-exp-account').disabled = true;
     document.getElementById('edit-exp-paidon').disabled  = true;
-    if (banner) {
-      const cs = currSym();
-      const remaining = Math.max(0, (e.amount||0) - paidAmt);
-      banner.style.display = '';
-      banner.innerHTML = `<strong>${pays.length} payment row${pays.length===1?'':'s'} on file</strong> · Paid ${cs}${paidAmt.toFixed(2)} of ${cs}${(e.amount||0).toFixed(2)}` +
-        (remaining > 0 ? ` · Remaining ${cs}${remaining.toFixed(2)}` : '') +
-        `<div style="margin-top:4px;font-size:11px;color:var(--text3);">Status / Account / Paid-on are locked while payment rows exist. Use Add Payment for further payments, or remove this bill via Trash to start over.</div>`;
-    }
+    if (typeof refreshEditExpensePaymentList === 'function') refreshEditExpensePaymentList(e);
   } else {
     statusSel.disabled = false;
     document.getElementById('edit-exp-account').disabled = false;
     document.getElementById('edit-exp-paidon').disabled  = false;
+    const banner = document.getElementById('edit-exp-payment-banner');
     if (banner) banner.style.display = 'none';
   }
 
@@ -12171,7 +12401,8 @@ function renderSupplierStatement() {
         type: 'pay',
         desc: `Payment${p.account ? ' — '+p.account : ''}${parent ? ' (vs '+(parent.desc||'bill').slice(0,32)+')' : ''}`,
         amount: parseFloat(p.amount) || 0,
-        ref: p.id
+        ref: p.id,
+        editable: true   // real payment row — supports edit/delete
       };
     });
   // Legacy fallback (covers paid expenses not yet migrated to ledger)
@@ -12181,7 +12412,8 @@ function renderSupplierStatement() {
       type: 'pay',
       desc: `Payment${e.account ? ' — '+e.account : ''}${e.paid && e.paid !== e.account ? ' ('+e.paid+')' : ''}`,
       amount: e.amount || 0,
-      ref: e.id
+      ref: e.id,
+      editable: false   // legacy — no payment row to edit; user must run migration first
     });
   });
   const dnRows = dns.map(d => ({
@@ -12274,10 +12506,20 @@ function buildSupplierStmtRows(charges, billPays, dnRows, cs) {
                     : (r.type === 'pay') ? 'color:var(--green);' : '';
     // If a bill is unpaid, hint visually
     const unpaidTag = (r.type === 'bill' && r.status === 'unpaid')
-      ? ' <span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;margin-left:4px;">UNPAID</span>' : '';
+      ? ' <span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;margin-left:4px;">UNPAID</span>'
+      : (r.type === 'bill' && r.status === 'partial')
+      ? ' <span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:3px;margin-left:4px;">PARTIAL</span>'
+      : '';
+    // Edit/Del actions only for real payment rows (not for bills, DN rows,
+    // or legacy-fallback rows where ref is an expense id, not a payment id).
+    // Buttons are auto-hidden in the print view via the existing @media print rule.
+    const actions = (r.type === 'pay' && r.ref != null && r.editable === true)
+      ? ` <button class="btn btn-outline btn-sm" style="font-size:10px;padding:1px 6px;margin-left:6px;vertical-align:middle;" onclick="openEditExpensePayment(${r.ref})">Edit</button>`
+      + ` <button class="btn btn-danger btn-sm" style="font-size:10px;padding:1px 6px;margin-left:2px;vertical-align:middle;" onclick="deleteExpensePayment(${r.ref},false)">Del</button>`
+      : '';
     return `<tr style="border-bottom:1px solid var(--border);">
       <td style="padding:8px 12px;font-size:12px;color:var(--text2);white-space:nowrap;">${fmtDate(r.date)}</td>
-      <td style="padding:8px 12px;font-size:12px;${descColor}">${r.desc}${unpaidTag}</td>
+      <td style="padding:8px 12px;font-size:12px;${descColor}">${r.desc}${unpaidTag}${actions}</td>
       <td style="padding:8px 12px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--red);">${chargeCol}</td>
       <td style="padding:8px 12px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--green);">${creditCol}</td>
       <td style="padding:8px 12px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;font-weight:600;color:${running>0?'var(--red)':'var(--green)'};">${cs}${running.toFixed(2)}</td>
