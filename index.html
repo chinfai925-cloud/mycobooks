@@ -16467,10 +16467,13 @@ function renderStatement() {
     txs.push({ date:i.paidDate||i.date, desc:`Invoice ${i.no} — ${i.customer}`, ref:'Invoice', type:'in', amount:i.total, raw:i.total });
   });
 
-  // Money OUT: paid expenses
+  // Money OUT: paid expenses. Use the payment date (paidOn) so the cash
+  // outflow lands on the day cash actually left the account. Falls back to
+  // the bill date for legacy rows that pre-date the paidOn field.
   live('expenses').filter(e => (e.status||'paid') === 'paid' && e.account === acctName).forEach(e => {
-    if (month && !e.date.startsWith(month)) return;
-    txs.push({ date:e.date, desc:`${e.desc}${e.supplier ? ' ('+e.supplier+')' : ''}`, ref:e.cat, type:'out', amount:e.amount, raw:e.amount });
+    const txDate = e.paidOn || e.date;
+    if (month && !txDate.startsWith(month)) return;
+    txs.push({ date:txDate, desc:`${e.desc}${e.supplier ? ' ('+e.supplier+')' : ''}`, ref:e.cat, type:'out', amount:e.amount, raw:e.amount });
   });
 
   // Transfers OUT (money leaving this account)
