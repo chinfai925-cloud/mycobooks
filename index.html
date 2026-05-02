@@ -2426,6 +2426,7 @@ tr:hover td { background:var(--bg); }
     </div>
     <div class="modal-body">
       <input type="hidden" id="edit-exp-id">
+      <div id="edit-exp-payment-banner" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:9px 12px;border-radius:var(--radius-sm);font-size:12px;margin-bottom:12px;"></div>
       <div class="form-grid form-grid-2">
         <div class="form-group">
           <label>Date</label>
@@ -2487,7 +2488,7 @@ tr:hover td { background:var(--bg); }
 
 <!-- Add Supplier Payment Modal (mark all unpaid bills paid via chosen account) -->
 <div class="modal-backdrop" id="modal-add-supp-payment">
-  <div class="modal" style="width:640px;">
+  <div class="modal" style="width:760px;">
     <div class="modal-head">
       <span class="modal-title" id="add-supp-pay-title">Add Payment</span>
       <button class="modal-close" onclick="closeModal('modal-add-supp-payment')">×</button>
@@ -2496,17 +2497,23 @@ tr:hover td { background:var(--bg); }
       <div id="add-supp-pay-summary" style="background:var(--bg);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:12px;">
         <!-- supplier + total of TICKED bills, filled in by openAddSupplierPaymentModal -->
       </div>
-      <label style="font-size:12px;font-weight:500;color:var(--text2);display:block;margin-bottom:6px;">Pick bills to pay</label>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+        <label style="font-size:12px;font-weight:500;color:var(--text2);">Pick bills &amp; amounts</label>
+        <span style="font-size:11px;color:var(--text3);">Tip: edit "Apply" to pay only part of a bill</span>
+      </div>
       <div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:14px;">
         <table style="width:100%;border-collapse:collapse;">
           <thead>
             <tr style="background:var(--bg);">
-              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:center;width:36px;border-bottom:1px solid var(--border);">
+              <th style="padding:8px 8px;font-size:11px;font-weight:500;color:var(--text2);text-align:center;width:32px;border-bottom:1px solid var(--border);">
                 <input type="checkbox" id="supp-pay-tick-all" onchange="toggleSuppPayTickAll(this.checked)" style="cursor:pointer;" checked>
               </th>
-              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:left;width:100px;border-bottom:1px solid var(--border);">Date</th>
-              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:left;border-bottom:1px solid var(--border);">Description</th>
-              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:110px;border-bottom:1px solid var(--border);">Amount</th>
+              <th style="padding:8px 8px;font-size:11px;font-weight:500;color:var(--text2);text-align:left;width:90px;border-bottom:1px solid var(--border);">Date</th>
+              <th style="padding:8px 8px;font-size:11px;font-weight:500;color:var(--text2);text-align:left;border-bottom:1px solid var(--border);">Description</th>
+              <th style="padding:8px 8px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:90px;border-bottom:1px solid var(--border);">Bill</th>
+              <th style="padding:8px 8px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:80px;border-bottom:1px solid var(--border);">Paid</th>
+              <th style="padding:8px 8px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:90px;border-bottom:1px solid var(--border);">Remaining</th>
+              <th style="padding:8px 8px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:110px;border-bottom:1px solid var(--border);">Apply</th>
             </tr>
           </thead>
           <tbody id="add-supp-pay-bills-body">
@@ -3999,7 +4006,7 @@ const SB = {
 
 // Table mapping: DB key → Supabase table name
 const SB_TABLES = [
-  'users','expenses','sales','invoices','inventory','staff','customers',
+  'users','expenses','expensePayments','sales','invoices','inventory','staff','customers',
   'products','accounts','suppliers','payrollRuns','wageAdvances','transfers',
   'cashflowItems','loans','claims','recurringExpenses','batches','harvests',
   'packings','packingRates','packingTeams','salesOrders','lorries','refuels','maintenance',
@@ -4146,6 +4153,36 @@ async function sbLoad() {
     });
     if (migrated > 0) console.log(`Migrated ${migrated} account openingBalance → balance`);
   } catch(e) { console.warn('Account balance migration skipped:', e.message); }
+
+  // ---- MIGRATION: backfill expense_payments for legacy paid expenses ----
+  // Previously a paid expense was a single row with status='paid' and one
+  // account/paidOn. To support partial payments we now keep payments in a
+  // separate ledger. For every expense already marked paid that has NO
+  // payment rows yet, synthesise one. Idempotent: re-running finds rows
+  // already migrated and skips them.
+  try {
+    if (!Array.isArray(DB.expensePayments)) DB.expensePayments = [];
+    // Build a set of expense ids that already have payment rows
+    const haveRows = new Set((DB.expensePayments || []).map(p => p.expenseId));
+    let synthesised = 0;
+    (DB.expenses || []).forEach(e => {
+      if (e && (e.status||'paid') === 'paid' && !haveRows.has(e.id) && (parseFloat(e.amount)||0) > 0) {
+        DB.expensePayments.push({
+          id:        DB.nextIds.expensePayments++,
+          expenseId: e.id,
+          date:      e.paidOn || e.date || '',
+          amount:    parseFloat(e.amount) || 0,
+          account:   e.account || e.paid || '',
+          notes:     '(migrated from legacy paid expense)',
+          createdOn: new Date().toISOString().split('T')[0]
+        });
+        synthesised++;
+      }
+    });
+    if (synthesised > 0) {
+      console.log(`Synthesised ${synthesised} expense_payment row(s) for legacy paid expenses`);
+    }
+  } catch(e) { console.warn('Expense payments migration skipped:', e.message); }
 
   // ---- SEED default packing teams A–E if none exist ----
   try {
@@ -4541,7 +4578,7 @@ const AUDIT_LOG_ENABLED = true;
 // Tables that get audit-logged (a superset of soft-delete tables)
 const AUDIT_TABLES = new Set([
   // Soft-delete tables (financial + operational)
-  'invoices','payments','expenses','payrollRuns','creditNotes','debitNotes','wageAdvances',
+  'invoices','payments','expenses','expensePayments','payrollRuns','creditNotes','debitNotes','wageAdvances',
   'salesOrders','trips','harvests','packings','batches',
   // Additional financial tables
   'accounts','transfers','claims','loans',
@@ -4775,6 +4812,7 @@ async function sbPersist(tableKey, record) {
 const COLS = {
   users:        ['id','username','name','role','initials','active','email','auth_id'],
   expenses:     ['id','date','desc','cat','amount','supplier','status','paid','account','notes','dueDate','paidOn','recurring','recurringId','deleted_at','deleted_by','deleted_reason'],
+  expensePayments: ['id','expenseId','date','amount','account','notes','createdOn','deleted_at','deleted_by','deleted_reason'],
   sales:        ['id','date','customer','product','qty','price','total','type','account','notes','harvestId'],
   invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','currency','notes','product','qty','unit','discount','soId','soOrderNo','is_intercompany','intercompany_id','intercompany_partner_id','intercompany_partner_name','booking_rate','booking_value_local','deleted_at','deleted_by','deleted_reason'],
   inventory:    ['id','name','cat','unit','stock','reorder','cost','supplier'],
@@ -4810,7 +4848,7 @@ const COLS = {
 // ---- SOFT DELETE HELPERS ----
 // Tables that support soft delete (have deleted_at column)
 const SOFT_DELETE_TABLES = new Set([
-  'invoices','payments','expenses','payrollRuns','creditNotes','debitNotes','wageAdvances',  // Tier 1
+  'invoices','payments','expenses','expensePayments','payrollRuns','creditNotes','debitNotes','wageAdvances',  // Tier 1
   'salesOrders','trips','harvests','packings','batches',                                       // Tier 2
   'intercompanyTransactions'                                                                   // Inter-company
 ]);
@@ -4849,6 +4887,83 @@ function softRestore(tableKey, id) {
   rec.deleted_at     = null;
   rec.deleted_by     = null;
   rec.deleted_reason = null;
+  return rec;
+}
+
+// ============================================================
+// EXPENSE PAYMENTS — per-bill payment ledger (supports partial payments)
+// ============================================================
+// Each row: { id, expenseId, date, amount, account, notes, createdOn }
+// Multiple rows allowed per expense. Status of the parent expense is derived
+// from sum of payments vs amount via recomputeExpenseStatus().
+
+// Live (non-soft-deleted) payment rows for a single expense.
+function getExpensePayments(expenseId) {
+  return (DB.expensePayments || []).filter(p => p.expenseId === expenseId && !p.deleted_at);
+}
+
+// Total amount paid against an expense (sum of live payment rows).
+function getExpensePaidAmount(expense) {
+  if (!expense) return 0;
+  return getExpensePayments(expense.id).reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+}
+
+// Remaining balance owed on a bill.
+function getExpenseRemaining(expense) {
+  if (!expense) return 0;
+  return Math.max(0, (parseFloat(expense.amount) || 0) - getExpensePaidAmount(expense));
+}
+
+// Recompute and update expense.status / .paidOn / .account based on its
+// payment rows. Returns the new status. Pass through changes happen via the
+// usual sbPersist path — caller should persist after.
+function recomputeExpenseStatus(expense) {
+  if (!expense) return null;
+  const total = parseFloat(expense.amount) || 0;
+  const paid  = getExpensePaidAmount(expense);
+  const pays  = getExpensePayments(expense.id);
+  let status;
+  if (paid <= 0)            status = 'unpaid';
+  else if (paid + 0.005 >= total) status = 'paid';   // small float tolerance
+  else                       status = 'partial';
+  expense.status = status;
+  // For backwards compat: keep .account / .paid / .paidOn pointing at the
+  // most recent payment when fully paid, else cleared.
+  if (status === 'unpaid') {
+    expense.account = '';
+    expense.paid    = '';
+    expense.paidOn  = '';
+  } else {
+    const latest = pays.slice().sort((a,b) => (b.date||'').localeCompare(a.date||''))[0];
+    if (latest) {
+      expense.account = latest.account || expense.account || '';
+      expense.paid    = latest.account || expense.paid    || '';
+      expense.paidOn  = latest.date    || expense.paidOn  || '';
+    }
+  }
+  return status;
+}
+
+// Add a payment row against an expense and recompute status. Returns the new
+// payment record (so caller can persist it). Does NOT call sbPersist — caller
+// is responsible for persisting both the payment and the (possibly mutated)
+// parent expense.
+function addExpensePayment(expense, { date, amount, account, notes }) {
+  if (!expense) return null;
+  const amt = parseFloat(amount) || 0;
+  if (amt <= 0) return null;
+  const rec = {
+    id:        DB.nextIds.expensePayments++,
+    expenseId: expense.id,
+    date:      date || new Date().toISOString().split('T')[0],
+    amount:    amt,
+    account:   account || '',
+    notes:     notes || '',
+    createdOn: new Date().toISOString().split('T')[0]
+  };
+  if (!Array.isArray(DB.expensePayments)) DB.expensePayments = [];
+  DB.expensePayments.push(rec);
+  recomputeExpenseStatus(expense);
   return rec;
 }
 
@@ -5061,6 +5176,7 @@ const DB = {
   currentUser: null,
   users: [],
   expenses: [],
+  expensePayments: [],   // Per-bill payment ledger. Multiple rows per expense allowed (partial payments).
   sales: [],
   invoices: [],
   inventory: [],
@@ -5093,7 +5209,7 @@ const DB = {
   debitNotes: [],
   intercompanyTransactions: [],
   company: { name:'', regno:'', phone:'', email:'', address:'', bank:'', bankacc:'', footer:'Thank you for your business!' },
-  nextIds: { expenses:1, sales:1, invoices:1, inventory:1, staff:1, customers:1, products:1, accounts:1, users:1, suppliers:1, payrollRuns:1, wageAdvances:1, transfers:1, cashflowItems:1, loans:1, claims:1, recurringExpenses:1, batches:1, harvests:1, packings:1, packingRates:1, packingTeams:1, salesOrders:1, lorries:1, refuels:1, maintenance:1, trips:1, routeRates:1, payments:1, creditNotes:1, debitNotes:1, scheduledTrips:1, intercompanyTransactions:1 }
+  nextIds: { expenses:1, expensePayments:1, sales:1, invoices:1, inventory:1, staff:1, customers:1, products:1, accounts:1, users:1, suppliers:1, payrollRuns:1, wageAdvances:1, transfers:1, cashflowItems:1, loans:1, claims:1, recurringExpenses:1, batches:1, harvests:1, packings:1, packingRates:1, packingTeams:1, salesOrders:1, lorries:1, refuels:1, maintenance:1, trips:1, routeRates:1, payments:1, creditNotes:1, debitNotes:1, scheduledTrips:1, intercompanyTransactions:1 }
 };
 
 // ============================================================
@@ -6061,7 +6177,11 @@ function saveRefuel() {
     const acct = document.getElementById('refuel-account').value;
     const lorryLabel = lorry ? lorry.plate : 'Lorry';
     if (!editingRefuelId) {
-      DB.expenses.unshift({ id:DB.nextIds.expenses++, date, desc:`Diesel — ${lorryLabel}`, cat:'Transport', amount:cost, supplier:'Petrol Station', status:'paid', paid:acct, account:acct, paidOn:date, notes:rec.notes });
+      const newExp = { id:DB.nextIds.expenses++, date, desc:`Diesel — ${lorryLabel}`, cat:'Transport', amount:cost, supplier:'Petrol Station', status:'paid', paid:acct, account:acct, paidOn:date, notes:rec.notes };
+      DB.expenses.unshift(newExp);
+      if (typeof addExpensePayment === 'function') {
+        addExpensePayment(newExp, { date, amount: cost, account: acct, notes: '' });
+      }
     }
   }
 
@@ -6155,7 +6275,11 @@ function saveMaintenance() {
   // Create expense if cost > 0
   if (cost > 0 && !editingMaintId) {
     const lorry = DB.lorries.find(x=>x.id===lorryId);
-    DB.expenses.unshift({ id:DB.nextIds.expenses++, date, desc:`${rec.type==='service'?'Service':'Repair'} — ${lorry?lorry.plate:'Lorry'}: ${desc}`, cat:'Maintenance', amount:cost, supplier:rec.vendor||'', status:'paid', paid:rec.account, account:rec.account, paidOn:date, notes:rec.notes });
+    const newExp = { id:DB.nextIds.expenses++, date, desc:`${rec.type==='service'?'Service':'Repair'} — ${lorry?lorry.plate:'Lorry'}: ${desc}`, cat:'Maintenance', amount:cost, supplier:rec.vendor||'', status:'paid', paid:rec.account, account:rec.account, paidOn:date, notes:rec.notes };
+    DB.expenses.unshift(newExp);
+    if (typeof addExpensePayment === 'function') {
+      addExpensePayment(newExp, { date, amount: cost, account: rec.account, notes: '' });
+    }
   }
 
   if (editingMaintId) {
@@ -6595,14 +6719,19 @@ function saveTrip() {
       if (amt <= 0) return;
       const cat = l.type==='Diesel'||l.type==='Toll' ? 'Transport' : 'Other';
       const isPaid = l.account && l.account !== '__unpaid__';
-      DB.expenses.unshift({ id:DB.nextIds.expenses++, date,
+      const newExp = { id:DB.nextIds.expenses++, date,
         desc:`${l.type}${l.desc?' — '+l.desc:''} (${lorryLabel} · ${route})`,
         cat, amount:amt,
         supplier: l.supplier||'',
         status: isPaid ? 'paid' : 'unpaid',
         paid: isPaid ? l.account : '',
         account: isPaid ? l.account : '',
-        notes:rec.notes });
+        paidOn: isPaid ? date : '',
+        notes:rec.notes };
+      DB.expenses.unshift(newExp);
+      if (isPaid && typeof addExpensePayment === 'function') {
+        addExpensePayment(newExp, { date, amount: amt, account: l.account, notes: '' });
+      }
     });
   }
 
@@ -10761,8 +10890,12 @@ function renderExpenses() {
         <th style="padding:8px 12px;border-bottom:1px solid var(--border);background:var(--bg);"></th>
       </tr></thead>
       <tbody>${data.map(e => {
-        const isPaid = (e.status||'paid') === 'paid';
-        const isOverdue = !isPaid && e.dueDate && e.dueDate < new Date().toISOString().split('T')[0];
+        const status    = (e.status||'paid');
+        const isPaid    = status === 'paid';
+        const isPartial = status === 'partial';
+        const isOverdue = !isPaid && !isPartial && e.dueDate && e.dueDate < new Date().toISOString().split('T')[0];
+        const paidAmt   = (typeof getExpensePaidAmount === 'function') ? getExpensePaidAmount(e) : 0;
+        const remaining = (e.amount || 0) - paidAmt;
         return `<tr>
           <td style="color:var(--text2)">${fmtDate(e.date)}</td>
           <td><div style="font-weight:500">${e.desc}</div>${e.notes?`<div style="font-size:11px;color:var(--text3)">${e.notes}</div>`:''}</td>
@@ -10771,11 +10904,15 @@ function renderExpenses() {
           <td style="font-size:12px;">
             ${isPaid
               ? `<span style="font-weight:500;">${e.account||e.paid||'—'}</span>`
-              : `<span style="color:${isOverdue?'var(--red)':'var(--amber)'};">Due ${e.dueDate ? fmtDate(e.dueDate) : 'not set'}</span>`}
+              : isPartial
+                ? `<span style="color:var(--amber);">Paid ${fmt(paidAmt)} / ${fmt(e.amount)}</span>`
+                : `<span style="color:${isOverdue?'var(--red)':'var(--amber)'};">Due ${e.dueDate ? fmtDate(e.dueDate) : 'not set'}</span>`}
           </td>
           <td>${isPaid
             ? `<span class="badge badge-green">Paid</span>`
-            : `<span class="badge ${isOverdue?'badge-red':'badge-amber'}">${isOverdue?'Overdue':'Unpaid'}</span>`}
+            : isPartial
+              ? `<span class="badge badge-blue" title="Remaining: ${fmt(remaining)}">Partial</span>`
+              : `<span class="badge ${isOverdue?'badge-red':'badge-amber'}">${isOverdue?'Overdue':'Unpaid'}</span>`}
           </td>
           <td style="text-align:center;">
             ${e.receipt
@@ -10788,7 +10925,7 @@ function renderExpenses() {
           <td class="text-right text-red mono">${amountDisplay(e.amount)}</td>
           <td style="display:flex;gap:4px;padding-top:10px;flex-wrap:wrap;">
             ${e.supplierInvoice ? `<button class="btn btn-outline btn-sm" onclick="viewSuppInvoice(${e.id})" style="font-size:11px;">📋 Inv</button>` : ''}
-            ${!isPaid && can('canEdit') ? `<button class="btn btn-sm" style="background:var(--green-light);color:var(--green);font-size:11px;border:none;" onclick="markExpensePaid(${e.id})">Mark Paid</button>` : ''}
+            ${!isPaid && can('canEdit') ? `<button class="btn btn-sm" style="background:var(--green-light);color:var(--green);font-size:11px;border:none;" onclick="markExpensePaid(${e.id})" title="${isPartial?'Pay remaining balance':'Mark paid'}">${isPartial?`Pay ${fmt(remaining)}`:'Mark Paid'}</button>` : ''}
             ${can('canEdit') ? `<button class="btn btn-outline btn-sm" onclick="openEditExpense(${e.id})" style="font-size:11px;">Edit</button>` : ''}
             ${can('canDelete') ? `<button class="btn btn-danger btn-sm" onclick="deleteExpense(${e.id})">Del</button>` : ''}
           </td>
@@ -10812,13 +10949,27 @@ function confirmExpensePaid() {
   const account = document.getElementById('pay-exp-account').value;
   const e       = live('expenses').find(x => x.id === id);
   if (!e) return;
-  e.status  = 'paid';
-  e.account = account;
-  e.paid    = account;
-  e.paidOn  = new Date().toISOString().split('T')[0];
+  // Pay the REMAINING balance — handles bills that have prior partial payments.
+  // For a clean unpaid bill, this is just the full amount.
+  const remaining = (typeof getExpenseRemaining === 'function')
+    ? getExpenseRemaining(e)
+    : (e.amount || 0);
+  if (remaining <= 0) {
+    showToast('Bill already fully paid', 'error');
+    closeModal('modal-mark-exp-paid');
+    renderExpenses();
+    return;
+  }
+  const today = new Date().toISOString().split('T')[0];
+  const rec = addExpensePayment(e, { date: today, amount: remaining, account, notes: '' });
   closeModal('modal-mark-exp-paid');
-  showToast(`Expense paid — recorded to ${account}`);
+  showToast(`Expense paid — ${fmt(remaining)} from ${account}`);
   renderExpenses();
+  // Persist both the new payment row and the (mutated) parent expense
+  if (typeof sbPersist === 'function') {
+    if (rec) sbPersist('expensePayments', rec);
+    sbPersist('expenses', e);
+  }
 }
 
 // ============================================================
@@ -11058,7 +11209,7 @@ function saveExpenses() {
     const dueEl  = document.querySelector(`input[data-lineid="${l.id}"][data-field="dueDate"]`);
     const account = isPaid ? (acctEl ? acctEl.value : l.account || '') : '';
     const dueDate = isPaid ? '' : (dueEl ? dueEl.value : l.dueDate || '');
-    DB.expenses.unshift({
+    const newExp = {
       id: DB.nextIds.expenses++,
       date, desc: l.desc.trim(),
       cat: l.cat, amount: parseFloat(l.amount),
@@ -11074,7 +11225,12 @@ function saveExpenses() {
       supplierInvoiceName: l.supplierInvoiceName || null,
       supplierInvoiceType: l.supplierInvoiceType || null,
       notes: l.notes || ''
-    });
+    };
+    DB.expenses.unshift(newExp);
+    // If paid-on-create, register a corresponding payment row
+    if (isPaid && account && parseFloat(l.amount) > 0) {
+      addExpensePayment(newExp, { date, amount: parseFloat(l.amount), account, notes: '' });
+    }
   });
 
   closeModal('modal-expense');
@@ -11126,11 +11282,43 @@ function openEditExpense(id) {
   catSel.value = cat;
   document.getElementById('edit-exp-supplier').value = e.supplier || '';
   const status = (e.status || 'paid');
-  document.getElementById('edit-exp-status').value   = status;
-  if (status === 'paid' && e.account) acctSel.value  = e.account;
+  const statusSel = document.getElementById('edit-exp-status');
+  // 'partial' isn't an option in the select but exists as a status — coerce
+  // for display purposes; the select will show 'paid' but the wrap below
+  // explains the bill's actual state.
+  statusSel.value = (status === 'partial' ? 'paid' : status);
+  if ((status === 'paid' || status === 'partial') && e.account) acctSel.value = e.account;
   document.getElementById('edit-exp-paidon').value   = e.paidOn || '';
   document.getElementById('edit-exp-due').value      = e.dueDate || '';
   document.getElementById('edit-exp-notes').value    = e.notes || '';
+
+  // ---- Payment-aware lockdown ----
+  // If this bill has existing payment rows, the status / account / paidOn
+  // fields are derived from those rows — locking them out of the edit modal
+  // prevents inconsistencies (e.g. flipping to "unpaid" while RM 500 has
+  // already left the bank). Other value fields stay editable.
+  const pays   = (typeof getExpensePayments === 'function') ? getExpensePayments(e.id) : [];
+  const paidAmt = pays.reduce((s,p) => s + (parseFloat(p.amount)||0), 0);
+  const banner = document.getElementById('edit-exp-payment-banner');
+  if (pays.length > 0) {
+    statusSel.disabled = true;
+    document.getElementById('edit-exp-account').disabled = true;
+    document.getElementById('edit-exp-paidon').disabled  = true;
+    if (banner) {
+      const cs = currSym();
+      const remaining = Math.max(0, (e.amount||0) - paidAmt);
+      banner.style.display = '';
+      banner.innerHTML = `<strong>${pays.length} payment row${pays.length===1?'':'s'} on file</strong> · Paid ${cs}${paidAmt.toFixed(2)} of ${cs}${(e.amount||0).toFixed(2)}` +
+        (remaining > 0 ? ` · Remaining ${cs}${remaining.toFixed(2)}` : '') +
+        `<div style="margin-top:4px;font-size:11px;color:var(--text3);">Status / Account / Paid-on are locked while payment rows exist. Use Add Payment for further payments, or remove this bill via Trash to start over.</div>`;
+    }
+  } else {
+    statusSel.disabled = false;
+    document.getElementById('edit-exp-account').disabled = false;
+    document.getElementById('edit-exp-paidon').disabled  = false;
+    if (banner) banner.style.display = 'none';
+  }
+
   // Adjust which conditional fields show
   onEditExpStatusChange();
   openModal('modal-edit-expense');
@@ -11164,22 +11352,45 @@ function saveEditExpense() {
   if (!date)            { showToast('Date is required', 'error'); return; }
   if (!desc)            { showToast('Description is required', 'error'); return; }
   if (isNaN(amount) || amount <= 0) { showToast('Amount must be greater than zero', 'error'); return; }
-  if (status === 'paid' && !account) { showToast('Pick an account when status is Paid', 'error'); return; }
 
-  // Apply changes (preserve fields we don't touch: receipt, supplierInvoice, recurring*, etc.)
+  const existingPayments = (typeof getExpensePayments === 'function') ? getExpensePayments(e.id) : [];
+  const hasPayments = existingPayments.length > 0;
+
+  if (status === 'paid' && !hasPayments && !account) {
+    showToast('Pick an account when status is Paid', 'error'); return;
+  }
+
+  // Apply value-field changes (always — these are independent of payment state)
   e.date     = date;
   e.amount   = amount;
   e.desc     = desc;
   e.cat      = cat;
   e.supplier = supplier;
   e.notes    = notes;
-  if (status === 'paid') {
-    e.status  = 'paid';
-    e.account = account;
-    e.paid    = account;
-    e.paidOn  = paidOn || (e.paidOn || date); // keep prior paidOn if user didn't set one; else fall back to bill date
+
+  let newPayRec = null;
+  let didTouchPayments = false;
+
+  if (hasPayments) {
+    // Status / account / paidOn fields are locked in the modal when payment
+    // rows exist. We do still recompute status because amount may have changed
+    // (e.g. amount was 1000, paid 1000 = 'paid'; user edits amount to 1500
+    // → status becomes 'partial').
+    if (typeof recomputeExpenseStatus === 'function') recomputeExpenseStatus(e);
     e.dueDate = '';
+  } else if (status === 'paid') {
+    // No prior payments — record one now for the full amount.
+    e.dueDate = '';
+    if (typeof addExpensePayment === 'function') {
+      const payDate = paidOn || date;
+      newPayRec = addExpensePayment(e, { date: payDate, amount, account, notes: '' });
+      didTouchPayments = true;
+    } else {
+      // Defensive fallback (shouldn't happen): old-style flip.
+      e.status = 'paid'; e.account = account; e.paid = account; e.paidOn = paidOn || date;
+    }
   } else {
+    // status === 'unpaid', no payments — fine.
     e.status  = 'unpaid';
     e.account = '';
     e.paid    = '';
@@ -11190,8 +11401,12 @@ function saveEditExpense() {
   closeModal('modal-edit-expense');
   showToast('Expense updated');
   renderExpenses();
-  // Persist to cloud
-  if (typeof sbPersist === 'function') sbPersist('expenses', e);
+
+  // Persist
+  if (typeof sbPersist === 'function') {
+    sbPersist('expenses', e);
+    if (newPayRec) sbPersist('expensePayments', newPayRec);
+  }
 }
 
 // ============================================================
@@ -11932,8 +12147,7 @@ function renderSupplierStatement() {
     dn.status !== 'Draft' && dn.status !== 'Voided'
   );
 
-  // Each expense is a CHARGE on its bill date. If status === 'paid', it ALSO
-  // generates a CREDIT on `paidOn` (or `date` as fallback for legacy rows).
+  // Each expense is a CHARGE on its bill date.
   const charges = exps.map(e => ({
     date: e.date, type: 'bill',
     desc: `Bill — ${e.desc || '(no description)'}${e.cat ? ' · '+e.cat : ''}`,
@@ -11941,15 +12155,35 @@ function renderSupplierStatement() {
     ref: e.id,
     status: (e.status || 'paid')
   }));
-  const billPays = exps
-    .filter(e => (e.status || 'paid') === 'paid')
-    .map(e => ({
+  // Each payment row in the expense_payments ledger is a CREDIT against this
+  // supplier on its own date. Multiple payments per bill = multiple credits.
+  // Legacy fallback: paid expenses without payment rows are credited as a
+  // single payment on paidOn||date (this disappears once migration persists).
+  const expIds = new Set(exps.map(e => e.id));
+  const expById = Object.fromEntries(exps.map(e => [e.id, e]));
+  const paidExpenseIdsWithRows = new Set((DB.expensePayments||[]).map(p => p.expenseId));
+  const billPays = (live('expensePayments')||[])
+    .filter(p => expIds.has(p.expenseId) && (!year || (p.date||'').startsWith(year)))
+    .map(p => {
+      const parent = expById[p.expenseId];
+      return {
+        date: p.date,
+        type: 'pay',
+        desc: `Payment${p.account ? ' — '+p.account : ''}${parent ? ' (vs '+(parent.desc||'bill').slice(0,32)+')' : ''}`,
+        amount: parseFloat(p.amount) || 0,
+        ref: p.id
+      };
+    });
+  // Legacy fallback (covers paid expenses not yet migrated to ledger)
+  exps.filter(e => (e.status||'paid') === 'paid' && !paidExpenseIdsWithRows.has(e.id)).forEach(e => {
+    billPays.push({
       date: e.paidOn || e.date,
       type: 'pay',
       desc: `Payment${e.account ? ' — '+e.account : ''}${e.paid && e.paid !== e.account ? ' ('+e.paid+')' : ''}`,
       amount: e.amount || 0,
       ref: e.id
-    }));
+    });
+  });
   const dnRows = dns.map(d => ({
     date: d.date, type: 'dn',
     desc: `Debit Note ${d.no}${d.invoiceNo ? ' (vs '+d.invoiceNo+')' : ''}`,
@@ -11963,10 +12197,16 @@ function renderSupplierStatement() {
   const totalDn   = dnRows.reduce((s,d) => s + d.amount, 0);
   const balance   = totalBill - totalPay - totalDn;
 
-  // Counts useful at-a-glance
-  const unpaidCount = exps.filter(e => (e.status||'paid') === 'unpaid').length;
+  // Counts useful at-a-glance — now includes 'partial' too
+  const unpaidCount = exps.filter(e => {
+    const s = (e.status||'paid');
+    return s === 'unpaid' || s === 'partial';
+  }).length;
   const oldestUnpaid = exps
-    .filter(e => (e.status||'paid') === 'unpaid')
+    .filter(e => {
+      const s = (e.status||'paid');
+      return s === 'unpaid' || s === 'partial';
+    })
     .sort((a,b) => (a.date||'').localeCompare(b.date||''))[0];
   const oldestUnpaidLabel = oldestUnpaid ? fmtDate(oldestUnpaid.date) : '—';
 
@@ -12082,10 +12322,12 @@ function printSupplierStatement() {
 function openAddSupplierPaymentModal() {
   const supplier = (document.getElementById('supp-stmt-supplier')||{}).value||'';
   if (!supplier) { showToast('Select a supplier first', 'error'); return; }
-  const unpaid = (live('expenses')||[]).filter(e =>
-    e.supplier === supplier && (e.status||'paid') === 'unpaid'
-  ).sort((a,b) => (a.date||'').localeCompare(b.date||''));
-  if (unpaid.length === 0) { showToast('No unpaid bills for this supplier', 'error'); return; }
+  // Include unpaid AND partial — both have remaining balance to apply against.
+  const outstanding = (live('expenses')||[]).filter(e => {
+    const s = (e.status||'paid');
+    return e.supplier === supplier && (s === 'unpaid' || s === 'partial');
+  }).sort((a,b) => (a.date||'').localeCompare(b.date||''));
+  if (outstanding.length === 0) { showToast('No outstanding bills for this supplier', 'error'); return; }
   if (!Array.isArray(DB.accounts) || DB.accounts.length === 0) {
     showToast('Add a payment account first (Settings → Accounts)', 'error'); return;
   }
@@ -12095,19 +12337,35 @@ function openAddSupplierPaymentModal() {
   // Header — title; the summary card is recomputed by recalcSuppPayTotals
   document.getElementById('add-supp-pay-title').textContent = `Add Payment — ${supplier}`;
 
-  // Bills table — every bill ticked by default (preserves prior "pay all" UX)
-  document.getElementById('add-supp-pay-bills-body').innerHTML = unpaid.map(e => `
-    <tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:7px 10px;text-align:center;">
-        <input type="checkbox" class="supp-pay-tick" data-expid="${e.id}" data-amount="${e.amount||0}" checked onchange="onSuppPayTickRow()" style="cursor:pointer;">
+  // Bills table — every bill ticked by default with Apply prefilled to remaining
+  document.getElementById('add-supp-pay-bills-body').innerHTML = outstanding.map(e => {
+    const billAmt   = e.amount || 0;
+    const paidAmt   = (typeof getExpensePaidAmount === 'function') ? getExpensePaidAmount(e) : 0;
+    const remaining = Math.max(0, billAmt - paidAmt);
+    const isPartial = paidAmt > 0;
+    return `
+    <tr style="border-bottom:1px solid var(--border);" data-row-expid="${e.id}">
+      <td style="padding:6px 8px;text-align:center;">
+        <input type="checkbox" class="supp-pay-tick" data-expid="${e.id}" data-remaining="${remaining}" checked onchange="onSuppPayTickRow()" style="cursor:pointer;">
       </td>
-      <td style="padding:7px 10px;font-size:12px;color:var(--text2);white-space:nowrap;">${fmtDate(e.date)}</td>
-      <td style="padding:7px 10px;font-size:12px;">
+      <td style="padding:6px 8px;font-size:12px;color:var(--text2);white-space:nowrap;">${fmtDate(e.date)}</td>
+      <td style="padding:6px 8px;font-size:12px;">
         <div>${escAttr(e.desc || '(no description)')}</div>
-        ${e.cat ? `<div style="font-size:10px;color:var(--text3);">${escAttr(e.cat)}</div>` : ''}
+        <div style="font-size:10px;color:var(--text3);">
+          ${e.cat ? escAttr(e.cat) : ''}${isPartial ? ` · <span style="color:var(--blue);">partial</span>` : ''}
+        </div>
       </td>
-      <td style="padding:7px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--red);">${cs}${(e.amount||0).toFixed(2)}</td>
-    </tr>`).join('');
+      <td style="padding:6px 8px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--text2);">${cs}${billAmt.toFixed(2)}</td>
+      <td style="padding:6px 8px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--green);">${paidAmt > 0 ? cs+paidAmt.toFixed(2) : '—'}</td>
+      <td style="padding:6px 8px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--red);font-weight:600;">${cs}${remaining.toFixed(2)}</td>
+      <td style="padding:6px 8px;text-align:right;">
+        <input type="number" class="supp-pay-apply" data-expid="${e.id}" data-remaining="${remaining}"
+               value="${remaining.toFixed(2)}" step="0.01" min="0" max="${remaining}"
+               oninput="onSuppPayApplyChange(this)"
+               style="width:100%;padding:4px 6px;text-align:right;border:1px solid var(--border);border-radius:3px;font-family:'DM Mono',monospace;font-size:12px;">
+      </td>
+    </tr>`;
+  }).join('');
 
   // Account dropdown — show each account with its CURRENT computed balance
   const acctSel = document.getElementById('add-supp-pay-account');
@@ -12136,23 +12394,64 @@ function toggleSuppPayTickAll(checked) {
 }
 
 // Called when an individual row checkbox flips — keeps the master tick-all
-// in sync with whether all rows are checked.
+// in sync, and resets the row's Apply field to its remaining (or 0 if untick).
 function onSuppPayTickRow() {
   const ticks  = [...document.querySelectorAll('#add-supp-pay-bills-body input.supp-pay-tick')];
   const allOn  = ticks.length > 0 && ticks.every(cb => cb.checked);
   const tickAll = document.getElementById('supp-pay-tick-all');
   if (tickAll) tickAll.checked = allOn;
+  // Clear / restore Apply when tick state changes
+  ticks.forEach(cb => {
+    const id = cb.getAttribute('data-expid');
+    const apply = document.querySelector(`input.supp-pay-apply[data-expid="${id}"]`);
+    if (!apply) return;
+    if (!cb.checked) {
+      apply.value = '0.00';
+    } else if (parseFloat(apply.value) <= 0) {
+      // Re-tick after untick → restore remaining
+      const remaining = parseFloat(apply.getAttribute('data-remaining')) || 0;
+      apply.value = remaining.toFixed(2);
+    }
+  });
   recalcSuppPayTotals();
 }
 
-// Recompute the summary card and the after-balance preview based on which
-// bills are currently ticked and which account is selected.
-function recalcSuppPayTotals() {
+// Apply amount changed — clamp to [0, remaining], keep tick-state in sync
+// with the value (apply > 0 means ticked).
+function onSuppPayApplyChange(input) {
+  const remaining = parseFloat(input.getAttribute('data-remaining')) || 0;
+  let v = parseFloat(input.value);
+  if (isNaN(v) || v < 0) v = 0;
+  if (v > remaining) v = remaining; // can't pay more than what's owed
+  // Don't reformat while user is mid-typing; only enforce upper/lower bounds
+  if (parseFloat(input.value) !== v) input.value = v.toFixed(2);
+  // Sync the row checkbox: ticked iff apply > 0
+  const id = input.getAttribute('data-expid');
+  const tick = document.querySelector(`input.supp-pay-tick[data-expid="${id}"]`);
+  if (tick) tick.checked = (v > 0);
+  // Sync master tick-all
   const ticks = [...document.querySelectorAll('#add-supp-pay-bills-body input.supp-pay-tick')];
-  const checked = ticks.filter(cb => cb.checked);
-  const total = checked.reduce((s, cb) => s + (parseFloat(cb.getAttribute('data-amount')) || 0), 0);
+  const allOn = ticks.length > 0 && ticks.every(cb => cb.checked);
+  const tickAll = document.getElementById('supp-pay-tick-all');
+  if (tickAll) tickAll.checked = allOn;
+  recalcSuppPayTotals();
+}
+
+// Recompute the summary card and the after-balance preview based on the sum
+// of Apply values across all ticked rows.
+function recalcSuppPayTotals() {
+  const applies = [...document.querySelectorAll('#add-supp-pay-bills-body input.supp-pay-apply')];
+  let total = 0;
+  let payingCount = 0;
+  applies.forEach(inp => {
+    const v = parseFloat(inp.value) || 0;
+    if (v > 0) {
+      total += v;
+      payingCount++;
+    }
+  });
   const cs = currSym();
-  const totalAll = ticks.length;
+  const totalAll = applies.length;
 
   // Summary card
   const summary = document.getElementById('add-supp-pay-summary');
@@ -12161,7 +12460,7 @@ function recalcSuppPayTotals() {
       <div style="display:flex;justify-content:space-between;align-items:baseline;">
         <div>
           <div style="font-size:11px;color:var(--text2);text-transform:uppercase;">Paying</div>
-          <div style="font-size:14px;font-weight:600;">${checked.length} of ${totalAll} bill${totalAll===1?'':'s'}</div>
+          <div style="font-size:14px;font-weight:600;">${payingCount} of ${totalAll} bill${totalAll===1?'':'s'}</div>
         </div>
         <div style="text-align:right;">
           <div style="font-size:11px;color:var(--text2);text-transform:uppercase;">Total</div>
@@ -12194,47 +12493,60 @@ function confirmAddSupplierPayment() {
   const acct = DB.accounts.find(a => a.name === acctName);
   if (!acct)     { showToast('Account not found', 'error'); return; }
 
-  // Collect ticked bill ids
-  const tickedIds = [...document.querySelectorAll('#add-supp-pay-bills-body input.supp-pay-tick:checked')]
-    .map(cb => parseInt(cb.getAttribute('data-expid')))
-    .filter(n => !isNaN(n));
-  if (tickedIds.length === 0) {
-    showToast('Tick at least one bill to pay', 'error');
+  // Collect (expense, applyAmount) pairs from rows where Apply > 0
+  const applyRows = [...document.querySelectorAll('#add-supp-pay-bills-body input.supp-pay-apply')]
+    .map(inp => ({
+      id:     parseInt(inp.getAttribute('data-expid')),
+      apply:  parseFloat(inp.value) || 0,
+    }))
+    .filter(r => !isNaN(r.id) && r.apply > 0);
+
+  if (applyRows.length === 0) {
+    showToast('Enter an Apply amount on at least one bill', 'error');
     return;
   }
 
-  // Look them up and double-check they're still unpaid (defensive — guards
-  // against another tab / window having paid them between modal-open and
-  // confirm). Anything that's already paid we silently skip.
-  const targets = (live('expenses')||[]).filter(e =>
-    tickedIds.includes(e.id) && e.supplier === supplier && (e.status||'paid') === 'unpaid'
-  );
-  if (targets.length === 0) {
-    showToast('Those bills are already paid', 'error');
+  // Resolve to actual expense rows and re-validate against current remaining
+  // (defends against another tab paying the bill between modal-open & confirm).
+  const created = [];
+  const touched = [];
+  const skipped = [];
+  applyRows.forEach(r => {
+    const e = (live('expenses')||[]).find(x => x.id === r.id && x.supplier === supplier);
+    if (!e) { skipped.push(r.id); return; }
+    const remaining = (typeof getExpenseRemaining === 'function') ? getExpenseRemaining(e) : (e.amount||0);
+    const applyAmt  = Math.min(r.apply, remaining);
+    if (applyAmt <= 0) { skipped.push(r.id); return; }
+    if (typeof addExpensePayment === 'function') {
+      const rec = addExpensePayment(e, { date, amount: applyAmt, account: acct.name, notes });
+      if (rec) created.push(rec);
+      touched.push(e);
+    }
+  });
+
+  if (touched.length === 0) {
+    showToast('Those bills are already fully paid', 'error');
     closeModal('modal-add-supp-payment');
     renderSupplierStatement();
     return;
   }
-  const total = targets.reduce((s,e) => s + (e.amount||0), 0);
-
-  // Apply the payment
-  targets.forEach(e => {
-    e.status  = 'paid';
-    e.account = acct.name;
-    e.paid    = acct.name;
-    e.paidOn  = date;
-    if (notes) {
-      e.notes = e.notes ? `${e.notes} · ${notes}` : notes;
-    }
-  });
+  const total = created.reduce((s,p) => s + (parseFloat(p.amount)||0), 0);
 
   // New balance after mutation
   const newBal = (typeof accountBalance === 'function') ? accountBalance(acct) : null;
   const cs = currSym();
 
+  // Build a precise toast: count of bills fully paid vs partial
+  const fullyPaidCount   = touched.filter(e => (e.status||'paid') === 'paid').length;
+  const partialCount     = touched.filter(e => (e.status||'paid') === 'partial').length;
+  const parts = [];
+  if (fullyPaidCount > 0) parts.push(`${fullyPaidCount} fully paid`);
+  if (partialCount > 0)   parts.push(`${partialCount} partial`);
+  const billsLabel = parts.length ? parts.join(', ') : `${touched.length} bills`;
+
   closeModal('modal-add-supp-payment');
   showToast(
-    `${targets.length} bill${targets.length===1?'':'s'} paid · ${cs}${total.toFixed(2)} from ${acct.name}` +
+    `Payment of ${cs}${total.toFixed(2)} from ${acct.name} · ${billsLabel}` +
     (newBal != null ? ` · new balance: ${cs}${newBal.toFixed(2)}` : '')
   );
 
@@ -12243,8 +12555,12 @@ function confirmAddSupplierPayment() {
   try { renderDashboard(); } catch(e) {}
   try { renderSettings(); } catch(e) {}
 
-  // Persist all the touched expense rows
-  if (typeof sbSaveAll === 'function') sbSaveAll().catch(()=>{});
+  // Persist all the touched rows individually so partial failures don't kill
+  // siblings (and so the safety guard in sbSaveAll doesn't see a giant diff).
+  if (typeof sbPersist === 'function') {
+    created.forEach(rec => sbPersist('expensePayments', rec));
+    touched.forEach(e => sbPersist('expenses', e));
+  }
 }
 
 // Jump to the Supplier Statement tab and pre-select a supplier.
@@ -14388,15 +14704,19 @@ function processPayroll(month) {
   const monthLabel = new Date(month+'-01').toLocaleDateString('en-MY',{month:'long',year:'numeric'});
   Object.entries(byAcct).forEach(([acct, staffList]) => {
     const amt = staffList.reduce((s,e) => s + e.net, 0);
-    DB.expenses.unshift({
+    const newExp = {
       id: DB.nextIds.expenses++,
       date: payDate,
       desc: `Payroll — ${monthLabel} (${acct})`,
       cat: 'Payroll', amount: amt,
       supplier: '', status: 'paid',
-      paid: acct, account: acct,
+      paid: acct, account: acct, paidOn: payDate,
       notes: staffList.map(e => e.name).join(', ')
-    });
+    };
+    DB.expenses.unshift(newExp);
+    if (typeof addExpensePayment === 'function') {
+      addExpensePayment(newExp, { date: payDate, amount: amt, account: acct, notes: '' });
+    }
   });
   // Create employer contribution expense (EPF + SOCSO + EIS employer share)
   const totalEpfEmr   = entries.reduce((s,e) => s + (e.statutory||{}).epfEmr||0, 0);
@@ -14917,7 +15237,22 @@ function accountBalance(acct) {
   const legacyIn  = live('invoices').filter(i => i.status==='Paid' && i.account === acct.name &&
     !(live('payments')||[]).some(p => p.invoiceId === i.id)
   ).reduce((s,x) => s+x.total, 0);
-  const outflow   = live('expenses').filter(e => (e.status||'paid') === 'paid' && e.account === acct.name).reduce((s,x) => s+x.amount, 0);
+
+  // Outflow: sum from expense_payments ledger. Legacy fallback handles paid
+  // expenses that don't yet have a payment row (covers the moment between
+  // page load and the migration persisting). After migration this fallback
+  // contributes 0 because every paid expense has at least one payment row.
+  const expPays = (live('expensePayments')||[])
+    .filter(p => p.account === acct.name)
+    .reduce((s,p) => s + (parseFloat(p.amount)||0), 0);
+  const paidExpenseIdsWithRows = new Set((DB.expensePayments||[]).map(p => p.expenseId));
+  const legacyOutflow = (live('expenses')||[])
+    .filter(e => (e.status||'paid') === 'paid'
+              && e.account === acct.name
+              && !paidExpenseIdsWithRows.has(e.id))
+    .reduce((s,x) => s + (parseFloat(x.amount)||0), 0);
+  const outflow = expPays + legacyOutflow;
+
   const xfrIn     = DB.transfers.filter(t => t.to === acct.name).reduce((s,t) => s+t.amount, 0);
   const xfrOut    = DB.transfers.filter(t => t.from === acct.name).reduce((s,t) => s+t.amount, 0);
   // Inter-company settlement cash legs (positive = received into this account; negative = sent from)
@@ -16352,14 +16687,18 @@ function saveWageAdvance() {
   };
   DB.wageAdvances.push(adv);
   // Also create a cash/bank expense record for the advance payment
-  DB.expenses.unshift({
+  const newExp = {
     id: DB.nextIds.expenses++,
     date, desc: `Wage advance — ${s ? s.name : 'Staff'}`,
     cat: 'Payroll', amount,
     supplier: '', status: 'paid',
-    paid: adv.account, account: adv.account,
+    paid: adv.account, account: adv.account, paidOn: date,
     notes: adv.notes || 'Wage advance'
-  });
+  };
+  DB.expenses.unshift(newExp);
+  if (typeof addExpensePayment === 'function') {
+    addExpensePayment(newExp, { date, amount, account: adv.account, notes: '' });
+  }
   closeModal('modal-wage-advance');
   showToast(`Advance of ${fmt(amount)} recorded for ${s ? s.name : 'staff'} — will deduct from ${new Date(adv.deductMonth+'-01').toLocaleDateString('en-MY',{month:'long',year:'numeric'})} payroll`);
   document.getElementById('adv-amount').value = '';
@@ -16522,10 +16861,24 @@ function renderStatement() {
     txs.push({ date:i.paidDate||i.date, desc:`Invoice ${i.no} — ${i.customer}`, ref:'Invoice', type:'in', amount:i.total, raw:i.total });
   });
 
-  // Money OUT: paid expenses. Use the payment date (paidOn) so the cash
-  // outflow lands on the day cash actually left the account. Falls back to
-  // the bill date for legacy rows that pre-date the paidOn field.
-  live('expenses').filter(e => (e.status||'paid') === 'paid' && e.account === acctName).forEach(e => {
+  // Money OUT: expense payments. Each row in the expense_payments ledger
+  // is one cash outflow against the chosen account on the chosen date.
+  // Falls back to legacy paid expenses (no payment row) for unmigrated data.
+  const paidExpenseIdsWithRows = new Set((DB.expensePayments||[]).map(p => p.expenseId));
+  (live('expensePayments')||[]).filter(p => p.account === acctName).forEach(p => {
+    if (month && !p.date.startsWith(month)) return;
+    const e = (DB.expenses||[]).find(x => x.id === p.expenseId);
+    const desc = e
+      ? `${e.desc}${e.supplier ? ' ('+e.supplier+')' : ''}`
+      : `Expense payment`;
+    const cat  = e ? e.cat : 'Expense';
+    const amt  = parseFloat(p.amount) || 0;
+    txs.push({ date:p.date, desc, ref:cat, type:'out', amount:amt, raw:amt });
+  });
+  // Legacy fallback: paid expenses without a payment row yet
+  live('expenses').filter(e =>
+    (e.status||'paid') === 'paid' && e.account === acctName && !paidExpenseIdsWithRows.has(e.id)
+  ).forEach(e => {
     const txDate = e.paidOn || e.date;
     if (month && !txDate.startsWith(month)) return;
     txs.push({ date:txDate, desc:`${e.desc}${e.supplier ? ' ('+e.supplier+')' : ''}`, ref:e.cat, type:'out', amount:e.amount, raw:e.amount });
@@ -17156,13 +17509,17 @@ function confirmBulkPay() {
     const c = DB.claims.find(x => x.id === id);
     if (!c) return;
     c.status = 'Paid'; c.paidOn = date; c.paidAccount = acct;
-    DB.expenses.unshift({
+    const newExp = {
       id: DB.nextIds.expenses++, date,
       desc: `Claim — ${c.claimant} (${c.cat})`,
       cat: c.cat, amount: c.amount,
       supplier: c.claimant, status: 'paid',
       paid: acct, account: acct, paidOn: date, notes: c.desc
-    });
+    };
+    DB.expenses.unshift(newExp);
+    if (typeof addExpensePayment === 'function') {
+      addExpensePayment(newExp, { date, amount: c.amount, account: acct, notes: '' });
+    }
   });
   const total = ids.reduce((s,id) => s + DB.claims.find(c=>c.id===id)?.amount||0, 0);
   closeModal('modal-bulk-pay');
@@ -17216,13 +17573,17 @@ function payClaim() {
   const c    = DB.claims.find(x => x.id === id);
   if (!c) return;
   c.status = 'Paid'; c.paidOn = date; c.paidAccount = acct;
-  DB.expenses.unshift({
+  const newExp = {
     id: DB.nextIds.expenses++, date,
     desc: `Claim — ${c.claimant} (${c.cat})`,
     cat: c.cat, amount: c.amount,
     supplier: c.claimant, status: 'paid',
     paid: acct, account: acct, paidOn: date, notes: c.desc
-  });
+  };
+  DB.expenses.unshift(newExp);
+  if (typeof addExpensePayment === 'function') {
+    addExpensePayment(newExp, { date, amount: c.amount, account: acct, notes: '' });
+  }
   closeModal('modal-claim-pay');
   showToast(`Claim paid — ${fmt(c.amount)} from ${acct}`);
   renderClaims();
@@ -17418,14 +17779,18 @@ function recordLoanPayment() {
   loan.balance = Math.max(0, parseFloat((loan.balance - amount).toFixed(2)));
   if (loan.balance === 0) loan.closed = true;
   // Create expense record automatically
-  DB.expenses.unshift({
+  const newExp = {
     id: DB.nextIds.expenses++, date,
     desc: `Loan Payment — ${loan.name}`,
     cat: 'Loan Repayment', amount,
     supplier: loan.lender || '', status: 'paid',
     paid: acct, account: acct, paidOn: date,
     notes: notes || (loan.ref ? 'Ref: ' + loan.ref : '')
-  });
+  };
+  DB.expenses.unshift(newExp);
+  if (typeof addExpensePayment === 'function') {
+    addExpensePayment(newExp, { date, amount, account: acct, notes: notes || '' });
+  }
   closeModal('modal-loan-payment');
   showToast(`Payment of ${fmt(amount)} recorded — Balance: ${fmt(loan.balance)}`);
   renderLoans();
@@ -17947,6 +18312,7 @@ function openAddCompanyModal() {
 const COMPANY_TABLE_SCHEMAS = {
   users: `id int8 primary key, username text, password text, name text, role text, initials text, active bool, email text, auth_id text`,
   expenses: `id int8 primary key, date text, "desc" text, cat text, amount numeric, supplier text, status text, paid text, account text, notes text, "dueDate" text, "paidOn" text, recurring bool, "recurringId" int8, deleted_at text, deleted_by text, deleted_reason text`,
+  expense_payments: `id int8 primary key, "expenseId" int8, date text, amount numeric, account text, notes text, "createdOn" text, deleted_at text, deleted_by text, deleted_reason text`,
   sales: `id int8 primary key, date text, customer text, product text, qty numeric, price numeric, total numeric, type text, account text, notes text, "harvestId" int8`,
   invoices: `id int8 primary key, no text, date text, due text, customer text, address text, lines text, total numeric, tax numeric, sst numeric, status text, account text, currency text, notes text, product text, qty numeric, unit text, discount text, "soId" int8, "soOrderNo" text, is_intercompany bool, intercompany_id text, intercompany_partner_id text, intercompany_partner_name text, booking_rate numeric, booking_value_local numeric, deleted_at text, deleted_by text, deleted_reason text`,
   inventory: `id int8 primary key, name text, cat text, unit text, stock numeric, reorder numeric, cost numeric, supplier text`,
