@@ -1706,6 +1706,44 @@ tr:hover td { background:var(--bg); }
           </div>
         </div>
       </div>
+
+      <!-- Opening Balances — bulk entry for migration from prior books -->
+      <div class="card" style="margin-top:16px;">
+        <div class="card-head">
+          <div>
+            <span class="card-title">Opening Balances</span>
+            <div style="font-size:12px;color:var(--text2);margin-top:2px;">Carry-forward balances from your prior books. Stored as dated dummy invoices (customers) and expenses (suppliers) on the cutoff date.</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <label style="font-size:12px;color:var(--text2);">Cutoff:</label>
+            <input type="date" id="ob-cutoff" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;" onchange="onOBCutoffChange()">
+            <button class="btn btn-primary btn-sm" onclick="saveAllOpeningBalances()">💾 Save All</button>
+          </div>
+        </div>
+        <div class="card-body" style="padding:0;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;">
+            <!-- CUSTOMERS (we are owed) -->
+            <div style="border-right:1px solid var(--border);">
+              <div style="padding:10px 16px;background:var(--bg);border-bottom:1px solid var(--border);font-size:12px;font-weight:600;display:flex;justify-content:space-between;">
+                <span>👥 Customers <span style="color:var(--text3);font-weight:400;">(they owe us)</span></span>
+                <span id="ob-cust-summary" style="color:var(--text2);font-weight:500;"></span>
+              </div>
+              <div id="ob-cust-list" style="max-height:380px;overflow-y:auto;"></div>
+            </div>
+            <!-- SUPPLIERS (we owe) -->
+            <div>
+              <div style="padding:10px 16px;background:var(--bg);border-bottom:1px solid var(--border);font-size:12px;font-weight:600;display:flex;justify-content:space-between;">
+                <span>🏭 Suppliers <span style="color:var(--text3);font-weight:400;">(we owe them)</span></span>
+                <span id="ob-supp-summary" style="color:var(--text2);font-weight:500;"></span>
+              </div>
+              <div id="ob-supp-list" style="max-height:380px;overflow-y:auto;"></div>
+            </div>
+          </div>
+          <div style="padding:10px 16px;font-size:11px;color:var(--text3);border-top:1px solid var(--border);background:var(--bg);">
+            Enter the balance owed as of cutoff date. Set to 0 to clear an existing opening balance. Negative balances (you owe customer / supplier owes you) need a credit note instead — use the regular Credit / Debit Notes UI.
+          </div>
+        </div>
+      </div>
     </div>
 
   </div><!-- end main-content -->
@@ -16148,6 +16186,276 @@ function accountBalance(acct) {
   return (acct.balance || 0) + paymentsIn + legacyIn - outflow + xfrIn - xfrOut + icSettlementCash;
 }
 
+// ============================================================
+// OPENING BALANCES (carry-forward from prior books)
+// ============================================================
+// Customer OB → invoice with no = "OB-CUST-{id}", dated cutoff, status Pending
+// Supplier OB → expense with cat = "Opening Balance", dated cutoff, status unpaid
+// Markers make the records findable for re-edit. No schema change required.
+
+// Storage key per company for the cutoff date
+function obCutoffStorageKey() {
+  const cid = (typeof activeCompanyId !== 'undefined' && activeCompanyId) ? activeCompanyId : 'default';
+  return `mycobooks_ob_cutoff_${cid}`;
+}
+
+function getOBCutoff() {
+  const stored = localStorage.getItem(obCutoffStorageKey());
+  if (stored) return stored;
+  // Default: last day of the prior month relative to today
+  const t = new Date();
+  const prevMonthEnd = new Date(t.getFullYear(), t.getMonth(), 0);
+  return prevMonthEnd.toISOString().split('T')[0];
+}
+
+function onOBCutoffChange() {
+  const v = (document.getElementById('ob-cutoff')||{}).value || '';
+  if (!v) return;
+  localStorage.setItem(obCutoffStorageKey(), v);
+  renderOpeningBalances();
+}
+
+// Find the existing OB invoice for a customer (returns null if none)
+function findCustomerOBInvoice(customerId) {
+  const marker = `OB-CUST-${customerId}`;
+  return (DB.invoices||[]).find(i => i.no === marker && !i.deleted_at) || null;
+}
+
+function getCustomerOpeningBalance(c) {
+  const inv = findCustomerOBInvoice(c.id);
+  return inv ? (parseFloat(inv.total)||0) : 0;
+}
+
+// Find the existing OB expense for a supplier name (returns null if none)
+function findSupplierOBExpense(supplierName) {
+  return (DB.expenses||[]).find(e =>
+    e.cat === 'Opening Balance' && e.supplier === supplierName && !e.deleted_at
+  ) || null;
+}
+
+function getSupplierOpeningBalance(supplierName) {
+  const e = findSupplierOBExpense(supplierName);
+  return e ? (parseFloat(e.amount)||0) : 0;
+}
+
+// Create / update / delete the customer OB invoice
+function setCustomerOpeningBalance(c, amount, cutoff) {
+  const amt = Math.max(0, parseFloat(amount) || 0);
+  let inv = findCustomerOBInvoice(c.id);
+  if (amt === 0) {
+    if (inv) {
+      // Soft-delete with a system reason
+      if (typeof softDelete === 'function') {
+        softDelete('invoices', inv.id, 'Opening balance cleared via Opening Balances tool');
+      } else {
+        inv.deleted_at = new Date().toISOString();
+        inv.deleted_by = (DB.currentUser && DB.currentUser.name) || 'system';
+        inv.deleted_reason = 'Opening balance cleared';
+      }
+      if (typeof sbPersist === 'function') sbPersist('invoices', inv);
+    }
+    return null;
+  }
+  if (inv) {
+    // Update in place
+    inv.date     = cutoff;
+    inv.dueDate  = cutoff;
+    inv.lines    = [{ desc: 'Opening Balance b/f', qty: 1, unitPrice: amt, total: amt }];
+    inv.subtotal = amt;
+    inv.tax      = 0;
+    inv.discount = 0;
+    inv.total    = amt;
+    inv.notes    = 'Opening balance carried forward — entered via Opening Balances tool';
+  } else {
+    inv = {
+      id:        DB.nextIds.invoices++,
+      no:        `OB-CUST-${c.id}`,
+      date:      cutoff,
+      dueDate:   cutoff,
+      customer:  c.name,
+      customerId: c.id,
+      currency:  c.currency || (DB.company && DB.company.currency) || 'MYR',
+      lines:     [{ desc: 'Opening Balance b/f', qty: 1, unitPrice: amt, total: amt }],
+      subtotal:  amt,
+      tax:       0,
+      discount:  0,
+      total:     amt,
+      status:    'Pending',
+      paidDate:  '',
+      account:   '',
+      notes:     'Opening balance carried forward — entered via Opening Balances tool',
+      createdOn: new Date().toISOString().split('T')[0]
+    };
+    DB.invoices.unshift(inv);
+  }
+  if (typeof sbPersist === 'function') sbPersist('invoices', inv);
+  return inv;
+}
+
+// Create / update / delete the supplier OB expense
+function setSupplierOpeningBalance(supplierName, amount, cutoff) {
+  const amt = Math.max(0, parseFloat(amount) || 0);
+  let exp = findSupplierOBExpense(supplierName);
+  if (amt === 0) {
+    if (exp) {
+      if (typeof softDelete === 'function') {
+        softDelete('expenses', exp.id, 'Opening balance cleared via Opening Balances tool');
+      } else {
+        exp.deleted_at = new Date().toISOString();
+        exp.deleted_by = (DB.currentUser && DB.currentUser.name) || 'system';
+        exp.deleted_reason = 'Opening balance cleared';
+      }
+      if (typeof sbPersist === 'function') sbPersist('expenses', exp);
+    }
+    return null;
+  }
+  if (exp) {
+    exp.date    = cutoff;
+    exp.dueDate = cutoff;
+    exp.amount  = amt;
+  } else {
+    exp = {
+      id:        DB.nextIds.expenses++,
+      date:      cutoff,
+      dueDate:   cutoff,
+      desc:      'Opening Balance b/f',
+      cat:       'Opening Balance',
+      supplier:  supplierName,
+      amount:    amt,
+      status:    'unpaid',
+      paid:      '',
+      account:   '',
+      paidOn:    '',
+      notes:     'Opening balance carried forward — entered via Opening Balances tool',
+      receipt:   null, receiptName: null, receiptType: null,
+      supplierInvoice: null, supplierInvoiceName: null, supplierInvoiceType: null
+    };
+    DB.expenses.unshift(exp);
+  }
+  if (typeof sbPersist === 'function') sbPersist('expenses', exp);
+  return exp;
+}
+
+function renderOpeningBalances() {
+  const cutoffEl = document.getElementById('ob-cutoff');
+  if (!cutoffEl) return; // Settings page not present in DOM yet
+  if (!cutoffEl.value) cutoffEl.value = getOBCutoff();
+
+  const cs = currSym();
+  const customers = (live('customers')||[]).slice().sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  const suppliers = (live('suppliers')||[]).slice().sort((a,b) => (a.name||'').localeCompare(b.name||''));
+
+  // CUSTOMERS
+  const custList = document.getElementById('ob-cust-list');
+  let custWithOB = 0;
+  let custTotal = 0;
+  if (customers.length === 0) {
+    custList.innerHTML = '<div style="padding:18px;text-align:center;color:var(--text3);font-size:12px;">No customers yet. Add some first via the Customers page.</div>';
+  } else {
+    custList.innerHTML = customers.map(c => {
+      const ob = getCustomerOpeningBalance(c);
+      if (ob > 0) { custWithOB++; custTotal += ob; }
+      const ccs = c.currency === 'SGD' ? 'SGD ' : (c.currency === 'MYR' ? 'RM ' : cs);
+      return `<div style="display:grid;grid-template-columns:1fr 130px;gap:10px;padding:8px 16px;border-bottom:1px solid var(--border);align-items:center;">
+        <div style="font-size:13px;">
+          <div style="font-weight:500;">${escAttr(c.name||'(no name)')}</div>
+          ${c.currency && c.currency !== 'MYR' ? `<div style="font-size:10px;color:var(--text3);">Currency: ${c.currency}</div>` : ''}
+        </div>
+        <div style="position:relative;">
+          <span style="position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;">${ccs.trim()}</span>
+          <input type="number" step="0.01" min="0" value="${ob>0?ob.toFixed(2):''}" placeholder="0.00"
+            data-ob-cust="${c.id}"
+            style="width:100%;padding:6px 8px 6px 36px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;">
+        </div>
+      </div>`;
+    }).join('');
+  }
+  const custSum = document.getElementById('ob-cust-summary');
+  if (custSum) custSum.textContent = custWithOB > 0 ? `${custWithOB} with OB · ${cs}${custTotal.toFixed(2)}` : '';
+
+  // SUPPLIERS
+  const suppList = document.getElementById('ob-supp-list');
+  let suppWithOB = 0;
+  let suppTotal = 0;
+  if (suppliers.length === 0) {
+    suppList.innerHTML = '<div style="padding:18px;text-align:center;color:var(--text3);font-size:12px;">No suppliers yet. Add some first via the Suppliers page.</div>';
+  } else {
+    suppList.innerHTML = suppliers.map(s => {
+      const ob = getSupplierOpeningBalance(s.name);
+      if (ob > 0) { suppWithOB++; suppTotal += ob; }
+      return `<div style="display:grid;grid-template-columns:1fr 130px;gap:10px;padding:8px 16px;border-bottom:1px solid var(--border);align-items:center;">
+        <div style="font-size:13px;">
+          <div style="font-weight:500;">${escAttr(s.name||'(no name)')}</div>
+          ${s.terms ? `<div style="font-size:10px;color:var(--text3);">Terms: ${escAttr(s.terms)}</div>` : ''}
+        </div>
+        <div style="position:relative;">
+          <span style="position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;">${cs.trim()}</span>
+          <input type="number" step="0.01" min="0" value="${ob>0?ob.toFixed(2):''}" placeholder="0.00"
+            data-ob-supp="${escAttr(s.name)}"
+            style="width:100%;padding:6px 8px 6px 36px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;">
+        </div>
+      </div>`;
+    }).join('');
+  }
+  const suppSum = document.getElementById('ob-supp-summary');
+  if (suppSum) suppSum.textContent = suppWithOB > 0 ? `${suppWithOB} with OB · ${cs}${suppTotal.toFixed(2)}` : '';
+}
+
+function saveAllOpeningBalances() {
+  if (!can('canEdit')) { showToast('You don\'t have permission', 'error'); return; }
+  const cutoff = (document.getElementById('ob-cutoff')||{}).value || '';
+  if (!cutoff) { showToast('Pick a cutoff date first', 'error'); return; }
+
+  let custChanged = 0, custCleared = 0;
+  let suppChanged = 0, suppCleared = 0;
+
+  // Customers
+  document.querySelectorAll('[data-ob-cust]').forEach(inp => {
+    const id = parseInt(inp.getAttribute('data-ob-cust'));
+    const c  = (DB.customers||[]).find(x => x.id === id && !x.deleted_at);
+    if (!c) return;
+    const newAmt = parseFloat(inp.value) || 0;
+    const curAmt = getCustomerOpeningBalance(c);
+    // Only act if value actually changed (avoid pointless writes)
+    if (Math.abs(newAmt - curAmt) < 0.005) return;
+    setCustomerOpeningBalance(c, newAmt, cutoff);
+    if (newAmt === 0) custCleared++; else custChanged++;
+  });
+
+  // Suppliers
+  document.querySelectorAll('[data-ob-supp]').forEach(inp => {
+    const name = inp.getAttribute('data-ob-supp');
+    if (!name) return;
+    const newAmt = parseFloat(inp.value) || 0;
+    const curAmt = getSupplierOpeningBalance(name);
+    if (Math.abs(newAmt - curAmt) < 0.005) return;
+    setSupplierOpeningBalance(name, newAmt, cutoff);
+    if (newAmt === 0) suppCleared++; else suppChanged++;
+  });
+
+  // Persist cutoff
+  localStorage.setItem(obCutoffStorageKey(), cutoff);
+
+  const totalChanged = custChanged + suppChanged + custCleared + suppCleared;
+  if (totalChanged === 0) {
+    showToast('No changes — values are already up to date');
+    return;
+  }
+  const parts = [];
+  if (custChanged) parts.push(`${custChanged} customer${custChanged===1?'':'s'}`);
+  if (suppChanged) parts.push(`${suppChanged} supplier${suppChanged===1?'':'s'}`);
+  if (custCleared || suppCleared) parts.push(`${custCleared+suppCleared} cleared`);
+  showToast(`Opening balances saved · ${parts.join(', ')}`);
+
+  // Re-render to reflect any changes (e.g. cleared rows showing as 0)
+  renderOpeningBalances();
+  // Refresh dependent views
+  try { renderDashboard(); } catch(err) {}
+  try { renderInvoices(); } catch(err) {}
+  try { renderExpenses(); } catch(err) {}
+}
+
+
 function renderSettings() {
   const typeIcon = {cash:'💵', bank:'🏦', ewallet:'📱'};
   const typeLabel = {cash:'Cash', bank:'Bank', ewallet:'E-wallet'};
@@ -16155,6 +16463,7 @@ function renderSettings() {
   renderRouteRates();
   renderCompanyProfile();
   if (typeof renderCompanies === 'function') renderCompanies();
+  if (typeof renderOpeningBalances === 'function') renderOpeningBalances();
   // Show/hide account management buttons for admin only
   const btnAddAcct = document.getElementById('btn-add-account');
   if (btnAddAcct) btnAddAcct.style.display = can('seeUsers') ? '' : 'none';
