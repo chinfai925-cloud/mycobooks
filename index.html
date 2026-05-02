@@ -500,6 +500,7 @@ tr:hover td { background:var(--bg); }
         <button id="exp-tab-1" onclick="switchExpPage(1)" class="btn btn-outline" style="border-bottom:2px solid var(--green);color:var(--green);border-radius:var(--radius-sm) var(--radius-sm) 0 0;">All Expenses</button>
         <button id="exp-tab-2" onclick="switchExpPage(2)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">🔄 Recurring</button>
         <button id="exp-tab-3" onclick="switchExpPage(3)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">📄 Supplier Statement</button>
+        <button id="exp-tab-4" onclick="switchExpPage(4)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">📦 Goods Received</button>
       </div>
 
       <!-- Panel 1: All Expenses -->
@@ -573,6 +574,31 @@ tr:hover td { background:var(--bg); }
           </div>
         </div>
         <div id="supp-stmt-content"></div>
+      </div>
+
+      <!-- Panel 4: Goods Received (delivery notes / tickets pending invoice) -->
+      <div id="exp-page-panel-4" style="display:none;">
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-body" style="padding:12px 16px;">
+            <div class="flex-row">
+              <input class="search-bar" placeholder="Search by supplier, ref, or description..." id="grn-search" oninput="renderGoodsReceived()" style="flex:1;min-width:200px;">
+              <select class="select-filter" id="grn-status-filter" onchange="renderGoodsReceived()">
+                <option value="">All statuses</option>
+                <option value="awaiting_invoice">Awaiting Invoice</option>
+                <option value="invoiced">Invoiced</option>
+                <option value="voided">Voided</option>
+              </select>
+              <select class="select-filter" id="grn-supplier-filter" onchange="renderGoodsReceived()">
+                <option value="">All suppliers</option>
+              </select>
+              <span id="grn-summary" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
+              <button class="btn btn-primary btn-sm" onclick="openGRNModal()">+ New GRN</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="table-wrap" id="grn-table"></div>
+        </div>
       </div>
     </div>
 
@@ -2584,6 +2610,129 @@ tr:hover td { background:var(--bg); }
   </div>
 </div>
 
+<!-- New / Edit Goods Received Note Modal -->
+<div class="modal-backdrop" id="modal-grn">
+  <div class="modal" style="width:760px;">
+    <div class="modal-head">
+      <span class="modal-title" id="grn-modal-title">New Goods Received Note</span>
+      <button class="modal-close" onclick="closeModal('modal-grn')">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="grn-id">
+      <div class="form-grid form-grid-2" style="margin-bottom:14px;">
+        <div class="form-group">
+          <label>Date Received</label>
+          <input type="date" id="grn-date">
+        </div>
+        <div class="form-group">
+          <label>DO / Ticket Ref</label>
+          <input type="text" id="grn-ref" placeholder="e.g. DO-12345">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Supplier</label>
+          <input type="text" id="grn-supplier" list="supp-datalist" placeholder="Type to search or add new...">
+        </div>
+      </div>
+      <label style="font-size:12px;font-weight:500;color:var(--text2);display:block;margin-bottom:8px;">Items Received</label>
+      <div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:10px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="background:var(--bg);">
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:left;border-bottom:1px solid var(--border);">Description</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:90px;border-bottom:1px solid var(--border);">Qty</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:110px;border-bottom:1px solid var(--border);">Unit Price</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:110px;border-bottom:1px solid var(--border);">Subtotal</th>
+              <th style="width:28px;border-bottom:1px solid var(--border);"></th>
+            </tr>
+          </thead>
+          <tbody id="grn-lines-body"></tbody>
+        </table>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="addGRNLine()" style="margin-bottom:14px;">+ Add Line</button>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+        <div style="width:220px;">
+          <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:14px;font-weight:600;border-top:2px solid var(--border);">
+            <span>Total</span>
+            <span class="mono" id="grn-grand-total" style="color:var(--red);">RM 0.00</span>
+          </div>
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:6px;">
+        <label>Notes <span style="color:var(--text3);font-weight:400;">(optional)</span></label>
+        <input type="text" id="grn-notes" placeholder="Any additional context...">
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-outline" onclick="closeModal('modal-grn')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveGRN()">Save GRN</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Match GRN to Invoice Modal -->
+<div class="modal-backdrop" id="modal-grn-match">
+  <div class="modal" style="width:680px;">
+    <div class="modal-head">
+      <span class="modal-title" id="grn-match-title">Match to Invoice</span>
+      <button class="modal-close" onclick="closeModal('modal-grn-match')">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="grn-match-id">
+      <div id="grn-match-summary" style="background:var(--bg);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:14px;"></div>
+      <div style="display:flex;gap:4px;padding:3px;background:var(--bg);border-radius:4px;margin-bottom:14px;width:fit-content;">
+        <button type="button" id="grn-match-mode-existing" onclick="setGRNMatchMode('existing')" class="btn btn-sm" style="padding:6px 14px;background:var(--green);color:#fff;border:none;font-size:12px;">Match to existing expense</button>
+        <button type="button" id="grn-match-mode-new" onclick="setGRNMatchMode('new')" class="btn btn-sm" style="padding:6px 14px;background:transparent;color:var(--text2);border:none;font-size:12px;">Create new expense</button>
+      </div>
+      <!-- Mode 1: pick existing expense -->
+      <div id="grn-match-existing-pane">
+        <label style="font-size:12px;font-weight:500;color:var(--text2);display:block;margin-bottom:6px;">Pick the supplier's invoice (any expense for this supplier)</label>
+        <div id="grn-match-expense-list" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);"></div>
+        <div id="grn-match-existing-diff" style="margin-top:10px;font-size:12px;"></div>
+      </div>
+      <!-- Mode 2: create new expense -->
+      <div id="grn-match-new-pane" style="display:none;">
+        <div class="form-grid form-grid-2">
+          <div class="form-group">
+            <label>Invoice Date</label>
+            <input type="date" id="grn-match-new-date">
+          </div>
+          <div class="form-group">
+            <label>Invoice Amount</label>
+            <input type="number" id="grn-match-new-amount" step="0.01" min="0" oninput="recalcGRNMatchNewDiff()">
+            <div id="grn-match-new-diff" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
+          </div>
+          <div class="form-group">
+            <label>Invoice Ref / Description</label>
+            <input type="text" id="grn-match-new-desc" placeholder="e.g. INV-2026-789">
+          </div>
+          <div class="form-group">
+            <label>Category</label>
+            <select id="grn-match-new-cat">
+              <option>Supplies</option><option>Utilities</option><option>Transport</option>
+              <option>Maintenance</option><option>Payroll</option><option>Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <select id="grn-match-new-status">
+              <option value="unpaid">Unpaid</option>
+              <option value="paid">Paid</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Due Date</label>
+            <input type="date" id="grn-match-new-due">
+          </div>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-outline" onclick="closeModal('modal-grn-match')">Cancel</button>
+        <button class="btn btn-primary" onclick="confirmGRNMatch()">Confirm Match</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Sale Modal -->
 <div class="modal-backdrop" id="modal-sale">
   <div class="modal">
@@ -4046,7 +4195,7 @@ const SB = {
 
 // Table mapping: DB key → Supabase table name
 const SB_TABLES = [
-  'users','expenses','expensePayments','sales','invoices','inventory','staff','customers',
+  'users','expenses','expensePayments','goodsReceived','sales','invoices','inventory','staff','customers',
   'products','accounts','suppliers','payrollRuns','wageAdvances','transfers',
   'cashflowItems','loans','claims','recurringExpenses','batches','harvests',
   'packings','packingRates','packingTeams','salesOrders','lorries','refuels','maintenance',
@@ -4618,7 +4767,7 @@ const AUDIT_LOG_ENABLED = true;
 // Tables that get audit-logged (a superset of soft-delete tables)
 const AUDIT_TABLES = new Set([
   // Soft-delete tables (financial + operational)
-  'invoices','payments','expenses','expensePayments','payrollRuns','creditNotes','debitNotes','wageAdvances',
+  'invoices','payments','expenses','expensePayments','goodsReceived','payrollRuns','creditNotes','debitNotes','wageAdvances',
   'salesOrders','trips','harvests','packings','batches',
   // Additional financial tables
   'accounts','transfers','claims','loans',
@@ -4853,6 +5002,7 @@ const COLS = {
   users:        ['id','username','name','role','initials','active','email','auth_id'],
   expenses:     ['id','date','desc','cat','amount','supplier','status','paid','account','notes','dueDate','paidOn','recurring','recurringId','deleted_at','deleted_by','deleted_reason'],
   expensePayments: ['id','expenseId','date','amount','account','notes','createdOn','deleted_at','deleted_by','deleted_reason'],
+  goodsReceived:   ['id','date','supplier','ref','lines','total','status','linkedExpenseId','notes','createdOn','deleted_at','deleted_by','deleted_reason'],
   sales:        ['id','date','customer','product','qty','price','total','type','account','notes','harvestId'],
   invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','currency','notes','product','qty','unit','discount','soId','soOrderNo','is_intercompany','intercompany_id','intercompany_partner_id','intercompany_partner_name','booking_rate','booking_value_local','deleted_at','deleted_by','deleted_reason'],
   inventory:    ['id','name','cat','unit','stock','reorder','cost','supplier'],
@@ -4888,7 +5038,7 @@ const COLS = {
 // ---- SOFT DELETE HELPERS ----
 // Tables that support soft delete (have deleted_at column)
 const SOFT_DELETE_TABLES = new Set([
-  'invoices','payments','expenses','expensePayments','payrollRuns','creditNotes','debitNotes','wageAdvances',  // Tier 1
+  'invoices','payments','expenses','expensePayments','goodsReceived','payrollRuns','creditNotes','debitNotes','wageAdvances',  // Tier 1
   'salesOrders','trips','harvests','packings','batches',                                       // Tier 2
   'intercompanyTransactions'                                                                   // Inter-company
 ]);
@@ -5413,6 +5563,7 @@ const DB = {
   users: [],
   expenses: [],
   expensePayments: [],   // Per-bill payment ledger. Multiple rows per expense allowed (partial payments).
+  goodsReceived: [],     // Goods Received Notes (DOs/tickets) — pre-invoice deliveries from suppliers.
   sales: [],
   invoices: [],
   inventory: [],
@@ -5445,7 +5596,7 @@ const DB = {
   debitNotes: [],
   intercompanyTransactions: [],
   company: { name:'', regno:'', phone:'', email:'', address:'', bank:'', bankacc:'', footer:'Thank you for your business!' },
-  nextIds: { expenses:1, expensePayments:1, sales:1, invoices:1, inventory:1, staff:1, customers:1, products:1, accounts:1, users:1, suppliers:1, payrollRuns:1, wageAdvances:1, transfers:1, cashflowItems:1, loans:1, claims:1, recurringExpenses:1, batches:1, harvests:1, packings:1, packingRates:1, packingTeams:1, salesOrders:1, lorries:1, refuels:1, maintenance:1, trips:1, routeRates:1, payments:1, creditNotes:1, debitNotes:1, scheduledTrips:1, intercompanyTransactions:1 }
+  nextIds: { expenses:1, expensePayments:1, goodsReceived:1, sales:1, invoices:1, inventory:1, staff:1, customers:1, products:1, accounts:1, users:1, suppliers:1, payrollRuns:1, wageAdvances:1, transfers:1, cashflowItems:1, loans:1, claims:1, recurringExpenses:1, batches:1, harvests:1, packings:1, packingRates:1, packingTeams:1, salesOrders:1, lorries:1, refuels:1, maintenance:1, trips:1, routeRates:1, payments:1, creditNotes:1, debitNotes:1, scheduledTrips:1, intercompanyTransactions:1 }
 };
 
 // ============================================================
@@ -8772,7 +8923,7 @@ function renderDispatchBoard() {
 let editingRecurId = null;
 
 function switchExpPage(n) {
-  [1,2,3].forEach(i => {
+  [1,2,3,4].forEach(i => {
     document.getElementById('exp-page-panel-'+i).style.display = i===n ? '' : 'none';
     const btn = document.getElementById('exp-tab-'+i);
     btn.style.borderBottomColor = i===n ? 'var(--green)' : 'transparent';
@@ -8781,6 +8932,7 @@ function switchExpPage(n) {
   if (n===1) renderExpenses();
   if (n===2) renderRecurring();
   if (n===3) { populateSupplierStmtSelect(); renderSupplierStatement(); }
+  if (n===4) { populateGRNSupplierFilter(); renderGoodsReceived(); }
 }
 
 // ============================================================
@@ -12841,6 +12993,498 @@ function viewSupplierStatement(idOrName) {
     renderSupplierStatement();
   }
   closeSidebar();
+}
+
+// ============================================================
+// GOODS RECEIVED NOTES (GRNs / DOs / Tickets)
+// ============================================================
+// Pre-invoice deliveries from suppliers. A GRN is recorded when goods are
+// received; later a supplier invoice arrives and gets matched to one or more
+// GRNs (creates an `expense` row with `linkedExpenseId` on each matched GRN).
+//
+// Status flow: awaiting_invoice → invoiced (or → voided)
+
+let editingGRNId = null;
+let grnLines = [];
+let grnMatchMode = 'existing';
+
+function populateGRNSupplierFilter() {
+  const el = document.getElementById('grn-supplier-filter');
+  if (!el) return;
+  const cur = el.value;
+  const suppliers = [...new Set([
+    ...(live('suppliers')||[]).map(s => s.name),
+    ...(live('goodsReceived')||[]).map(g => g.supplier)
+  ].filter(Boolean))].sort();
+  el.innerHTML = '<option value="">All suppliers</option>' +
+    suppliers.map(n => `<option${n===cur?' selected':''}>${escAttr(n)}</option>`).join('');
+}
+
+function renderGoodsReceived() {
+  const search   = (document.getElementById('grn-search')||{}).value?.toLowerCase() || '';
+  const statusF  = (document.getElementById('grn-status-filter')||{}).value || '';
+  const supplierF= (document.getElementById('grn-supplier-filter')||{}).value || '';
+
+  let data = (live('goodsReceived')||[]).filter(g => {
+    const s = g.status || 'awaiting_invoice';
+    if (statusF && s !== statusF) return false;
+    if (supplierF && g.supplier !== supplierF) return false;
+    if (search) {
+      const hay = `${g.supplier||''} ${g.ref||''} ${g.notes||''} ${(g.lines||[]).map(l => l.desc||'').join(' ')}`.toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  }).sort((a,b) => (b.date||'').localeCompare(a.date||''));
+
+  // Summary
+  const awaiting = (live('goodsReceived')||[]).filter(g => (g.status||'awaiting_invoice') === 'awaiting_invoice');
+  const awaitingTotal = awaiting.reduce((s,g) => s + (parseFloat(g.total)||0), 0);
+  const cs = currSym();
+  const summaryEl = document.getElementById('grn-summary');
+  if (summaryEl) summaryEl.textContent = `${awaiting.length} awaiting invoice · ${cs}${awaitingTotal.toFixed(2)}`;
+
+  const tbl = document.getElementById('grn-table');
+  if (data.length === 0) {
+    tbl.innerHTML = '<div class="empty-state"><div class="icon">📦</div><p>No goods received notes yet</p><p style="font-size:12px;color:var(--text3);margin-top:4px;">Click <strong>+ New GRN</strong> when you receive a delivery from a supplier</p></div>';
+    return;
+  }
+
+  const statusBadge = (s) => {
+    if (s === 'invoiced')         return '<span class="badge badge-green">Invoiced</span>';
+    if (s === 'voided')           return '<span class="badge badge-gray">Voided</span>';
+    return '<span class="badge badge-amber">Awaiting Invoice</span>';
+  };
+
+  tbl.innerHTML = `<table>
+    <thead><tr>
+      <th>Date</th><th>Supplier</th><th>DO Ref</th><th>Items</th>
+      <th class="text-right">Total</th><th>Status</th><th></th>
+    </tr></thead>
+    <tbody>${data.map(g => {
+      const status = g.status || 'awaiting_invoice';
+      const lineCount = (g.lines||[]).length;
+      const itemsLabel = lineCount === 0
+        ? '—'
+        : (g.lines[0].desc || '(no description)') + (lineCount > 1 ? ` <span style="color:var(--text3);font-size:11px;">+${lineCount-1} more</span>` : '');
+      const total = parseFloat(g.total) || 0;
+      const linkedExp = g.linkedExpenseId ? (DB.expenses||[]).find(e => e.id === g.linkedExpenseId) : null;
+      return `<tr>
+        <td style="color:var(--text2)">${fmtDate(g.date)}</td>
+        <td style="font-weight:500;">${escAttr(g.supplier||'—')}</td>
+        <td style="font-family:'DM Mono',monospace;font-size:12px;">${escAttr(g.ref||'—')}</td>
+        <td style="font-size:12px;">${itemsLabel}${linkedExp ? `<div style="font-size:11px;color:var(--green);margin-top:2px;">→ ${escAttr(linkedExp.desc||'invoice')}</div>` : ''}</td>
+        <td class="text-right mono">${cs}${total.toFixed(2)}</td>
+        <td>${statusBadge(status)}</td>
+        <td style="display:flex;gap:4px;flex-wrap:wrap;">
+          ${status === 'awaiting_invoice' && can('canEdit') ? `<button class="btn btn-primary btn-sm" onclick="openMatchGRNModal(${g.id})" style="font-size:11px;">Match to Invoice</button>` : ''}
+          ${status === 'invoiced' && can('canEdit') ? `<button class="btn btn-outline btn-sm" onclick="unmatchGRN(${g.id})" style="font-size:11px;" title="Unlink from invoice">Unmatch</button>` : ''}
+          ${can('canEdit') ? `<button class="btn btn-outline btn-sm" onclick="openGRNModal(${g.id})" style="font-size:11px;">Edit</button>` : ''}
+          ${can('canDelete') ? `<button class="btn btn-danger btn-sm" onclick="deleteGRN(${g.id})">Del</button>` : ''}
+        </td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function openGRNModal(id) {
+  if (!can('canEdit')) { showToast('You don\'t have permission', 'error'); return; }
+  populateSuppDatalist();
+  editingGRNId = id || null;
+  grnLines = [];
+  document.getElementById('grn-modal-title').textContent = id ? 'Edit Goods Received Note' : 'New Goods Received Note';
+  if (id) {
+    const g = (live('goodsReceived')||[]).find(x => x.id === id);
+    if (!g) { showToast('GRN not found', 'error'); return; }
+    if (g.status === 'invoiced') {
+      showToast('This GRN is already matched to an invoice. Unmatch first to edit.', 'error');
+      return;
+    }
+    document.getElementById('grn-id').value     = g.id;
+    document.getElementById('grn-date').value   = g.date || '';
+    document.getElementById('grn-ref').value    = g.ref || '';
+    document.getElementById('grn-supplier').value = g.supplier || '';
+    document.getElementById('grn-notes').value  = g.notes || '';
+    grnLines = (g.lines || []).map(l => ({
+      id:        Date.now() + Math.random(),
+      desc:      l.desc || '',
+      qty:       l.qty != null ? l.qty : '',
+      unitPrice: l.unitPrice != null ? l.unitPrice : ''
+    }));
+  } else {
+    document.getElementById('grn-id').value     = '';
+    document.getElementById('grn-date').value   = new Date().toISOString().split('T')[0];
+    document.getElementById('grn-ref').value    = '';
+    document.getElementById('grn-supplier').value = '';
+    document.getElementById('grn-notes').value  = '';
+    grnLines.push({ id: Date.now(), desc: '', qty: '', unitPrice: '' });
+  }
+  renderGRNLines();
+  openModal('modal-grn');
+}
+
+function addGRNLine() {
+  grnLines.push({ id: Date.now() + Math.random(), desc: '', qty: '', unitPrice: '' });
+  renderGRNLines();
+}
+
+function removeGRNLine(id) {
+  // Snapshot current values from DOM into grnLines first, so we don't lose them
+  syncGRNLinesFromDOM();
+  grnLines = grnLines.filter(l => l.id !== id);
+  if (grnLines.length === 0) {
+    grnLines.push({ id: Date.now() + Math.random(), desc: '', qty: '', unitPrice: '' });
+  }
+  renderGRNLines();
+}
+
+function renderGRNLines() {
+  const tbody = document.getElementById('grn-lines-body');
+  if (!tbody) return;
+  if (grnLines.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="padding:14px;text-align:center;font-size:12px;color:var(--text3);">No lines yet — click "+ Add Line"</td></tr>';
+    calcGRNTotal();
+    return;
+  }
+  tbody.innerHTML = grnLines.map(l => {
+    const sub = (parseFloat(l.qty)||0) * (parseFloat(l.unitPrice)||0);
+    return `<tr style="border-bottom:1px solid var(--border);" data-grn-line="${l.id}">
+      <td style="padding:5px 6px;">
+        <input type="text" placeholder="Description" value="${escAttr(l.desc||'')}"
+          data-grnline="${l.id}" data-field="desc" oninput="onGRNLineInput(${l.id},'desc',this.value)"
+          style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;">
+      </td>
+      <td style="padding:5px 6px;">
+        <input type="number" step="any" min="0" placeholder="0" value="${l.qty}"
+          data-grnline="${l.id}" data-field="qty" oninput="onGRNLineInput(${l.id},'qty',this.value)"
+          style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;">
+      </td>
+      <td style="padding:5px 6px;">
+        <input type="number" step="0.01" min="0" placeholder="0.00" value="${l.unitPrice}"
+          data-grnline="${l.id}" data-field="unitPrice" oninput="onGRNLineInput(${l.id},'unitPrice',this.value)"
+          style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;">
+      </td>
+      <td style="padding:5px 6px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--red);" data-grn-sub="${l.id}">${currSym()}${sub.toFixed(2)}</td>
+      <td style="padding:5px 4px;text-align:center;">
+        <button class="btn btn-sm" onclick="removeGRNLine(${l.id})" style="background:transparent;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:2px 6px;" title="Remove">×</button>
+      </td>
+    </tr>`;
+  }).join('');
+  calcGRNTotal();
+}
+
+function onGRNLineInput(id, field, value) {
+  const l = grnLines.find(x => x.id === id);
+  if (!l) return;
+  l[field] = value;
+  // Update subtotal cell + grand total without re-rendering all rows
+  const sub = (parseFloat(l.qty)||0) * (parseFloat(l.unitPrice)||0);
+  const cell = document.querySelector(`[data-grn-sub="${id}"]`);
+  if (cell) cell.textContent = currSym() + sub.toFixed(2);
+  calcGRNTotal();
+}
+
+function syncGRNLinesFromDOM() {
+  // Pull current values from inputs back into grnLines (used before removeGRNLine
+  // re-renders, so we don't lose typed-but-unsaved values in other rows).
+  document.querySelectorAll('#grn-lines-body [data-grnline]').forEach(inp => {
+    const id    = parseFloat(inp.getAttribute('data-grnline'));
+    const field = inp.getAttribute('data-field');
+    const l = grnLines.find(x => x.id === id);
+    if (l) l[field] = inp.value;
+  });
+}
+
+function calcGRNTotal() {
+  const total = grnLines.reduce((s,l) => s + (parseFloat(l.qty)||0) * (parseFloat(l.unitPrice)||0), 0);
+  const el = document.getElementById('grn-grand-total');
+  if (el) el.textContent = currSym() + total.toFixed(2);
+}
+
+function saveGRN() {
+  if (!can('canEdit')) { showToast('You don\'t have permission', 'error'); return; }
+  syncGRNLinesFromDOM();
+  const date     = document.getElementById('grn-date').value;
+  const supplier = document.getElementById('grn-supplier').value.trim();
+  const ref      = document.getElementById('grn-ref').value.trim();
+  const notes    = document.getElementById('grn-notes').value.trim();
+
+  if (!date)     { showToast('Date is required', 'error'); return; }
+  if (!supplier) { showToast('Supplier is required', 'error'); return; }
+
+  // Filter to lines with both a description AND qty > 0 AND unit price >= 0
+  const validLines = grnLines.filter(l =>
+    (l.desc||'').trim() && parseFloat(l.qty) > 0 && parseFloat(l.unitPrice) >= 0
+  ).map(l => ({
+    desc:      l.desc.trim(),
+    qty:       parseFloat(l.qty),
+    unitPrice: parseFloat(l.unitPrice),
+    subtotal:  parseFloat(l.qty) * parseFloat(l.unitPrice)
+  }));
+  if (validLines.length === 0) {
+    showToast('Add at least one valid line (description, qty, unit price)', 'error');
+    return;
+  }
+  const total = validLines.reduce((s,l) => s + l.subtotal, 0);
+
+  if (editingGRNId) {
+    const g = DB.goodsReceived.find(x => x.id === editingGRNId);
+    if (!g) { showToast('GRN not found', 'error'); return; }
+    g.date     = date;
+    g.supplier = supplier;
+    g.ref      = ref;
+    g.lines    = validLines;
+    g.total    = total;
+    g.notes    = notes;
+    showToast('GRN updated');
+    if (typeof sbPersist === 'function') sbPersist('goodsReceived', g);
+  } else {
+    const newG = {
+      id:               DB.nextIds.goodsReceived++,
+      date, supplier, ref,
+      lines:            validLines,
+      total,
+      status:           'awaiting_invoice',
+      linkedExpenseId:  null,
+      notes,
+      createdOn:        new Date().toISOString().split('T')[0]
+    };
+    DB.goodsReceived.unshift(newG);
+    showToast(`GRN saved · ${currSym()}${total.toFixed(2)} awaiting invoice`);
+    if (typeof sbPersist === 'function') sbPersist('goodsReceived', newG);
+  }
+  editingGRNId = null;
+  closeModal('modal-grn');
+  populateGRNSupplierFilter();
+  renderGoodsReceived();
+}
+
+function deleteGRN(id) {
+  if (!can('canDelete')) { showToast('You don\'t have permission', 'error'); return; }
+  const g = DB.goodsReceived.find(x => x.id === id && !x.deleted_at);
+  if (!g) { showToast('GRN not found', 'error'); return; }
+  const reason = prompt(
+    `Move this GRN (${g.supplier || ''} · ${g.ref || ''} · ${currSym()}${(g.total||0).toFixed(2)}) to Trash?\n\n` +
+    `Why? (optional, recommended for audit)`,
+    ''
+  );
+  if (reason === null) return;
+  // Unlink from any matched expense first (defensive)
+  if (g.linkedExpenseId) {
+    g.linkedExpenseId = null;
+    g.status = 'awaiting_invoice';
+  }
+  softDelete('goodsReceived', id, reason.trim());
+  showToast('GRN moved to Trash');
+  if (typeof sbPersist === 'function') sbPersist('goodsReceived', g);
+  renderGoodsReceived();
+}
+
+// ---- MATCH-TO-INVOICE FLOW ----
+
+function openMatchGRNModal(id) {
+  if (!can('canEdit')) { showToast('You don\'t have permission', 'error'); return; }
+  const g = (live('goodsReceived')||[]).find(x => x.id === id);
+  if (!g) { showToast('GRN not found', 'error'); return; }
+  if ((g.status||'awaiting_invoice') !== 'awaiting_invoice') {
+    showToast('This GRN is not awaiting invoice', 'error'); return;
+  }
+  document.getElementById('grn-match-id').value = g.id;
+  document.getElementById('grn-match-title').textContent = `Match GRN to Invoice — ${g.supplier}`;
+
+  const cs = currSym();
+  // Other awaiting GRNs from the same supplier — user may want to match
+  // multiple GRNs to the same invoice. We'll auto-include all of them in
+  // the matching summary so they can pick the right invoice once.
+  const sameSupplier = (live('goodsReceived')||[]).filter(x =>
+    x.supplier === g.supplier && (x.status||'awaiting_invoice') === 'awaiting_invoice'
+  );
+
+  // Header summary
+  document.getElementById('grn-match-summary').innerHTML = `
+    <div style="font-size:13px;font-weight:600;margin-bottom:6px;">${escAttr(g.supplier)} · ${escAttr(g.ref || '(no ref)')}</div>
+    <div style="font-size:12px;color:var(--text2);">Received ${fmtDate(g.date)} · ${(g.lines||[]).length} item${(g.lines||[]).length===1?'':'s'} · Total <strong style="color:var(--red);">${cs}${(g.total||0).toFixed(2)}</strong></div>
+    ${sameSupplier.length > 1 ? `<div style="font-size:11px;color:var(--blue);margin-top:6px;">${sameSupplier.length-1} other awaiting GRN${sameSupplier.length-1===1?'':'s'} from this supplier — match them too if this invoice covers them.</div>` : ''}`;
+
+  // Default to existing-expense mode
+  setGRNMatchMode('existing');
+  populateGRNMatchExpenseList(g);
+
+  // Pre-fill new-expense pane with sane defaults
+  document.getElementById('grn-match-new-date').value   = new Date().toISOString().split('T')[0];
+  document.getElementById('grn-match-new-amount').value = (g.total||0).toFixed(2);
+  document.getElementById('grn-match-new-desc').value   = g.ref ? `Invoice for DO ${g.ref}` : `Invoice — ${g.supplier}`;
+  document.getElementById('grn-match-new-cat').value    = 'Supplies';
+  document.getElementById('grn-match-new-status').value = 'unpaid';
+  document.getElementById('grn-match-new-due').value    = '';
+  recalcGRNMatchNewDiff();
+
+  openModal('modal-grn-match');
+}
+
+function setGRNMatchMode(mode) {
+  grnMatchMode = mode;
+  const btnE = document.getElementById('grn-match-mode-existing');
+  const btnN = document.getElementById('grn-match-mode-new');
+  if (mode === 'existing') {
+    btnE.style.background = 'var(--green)'; btnE.style.color = '#fff';
+    btnN.style.background = 'transparent';  btnN.style.color = 'var(--text2)';
+    document.getElementById('grn-match-existing-pane').style.display = '';
+    document.getElementById('grn-match-new-pane').style.display = 'none';
+  } else {
+    btnN.style.background = 'var(--green)'; btnN.style.color = '#fff';
+    btnE.style.background = 'transparent';  btnE.style.color = 'var(--text2)';
+    document.getElementById('grn-match-existing-pane').style.display = 'none';
+    document.getElementById('grn-match-new-pane').style.display = '';
+  }
+}
+
+let grnMatchSelectedExpenseId = null;
+function populateGRNMatchExpenseList(g) {
+  // List ALL expenses for this supplier (any status) — user may want to
+  // match against an already-paid invoice (rare but valid).
+  const candidates = (live('expenses')||[])
+    .filter(e => e.supplier === g.supplier)
+    .sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const cs = currSym();
+  const el = document.getElementById('grn-match-expense-list');
+  if (candidates.length === 0) {
+    el.innerHTML = `<div style="padding:18px;text-align:center;color:var(--text3);font-size:12px;">No expenses on file for ${escAttr(g.supplier)} yet.<br>Switch to "Create new expense" to add the invoice.</div>`;
+    grnMatchSelectedExpenseId = null;
+    return;
+  }
+  // Pre-select the most recent unpaid/partial as a sensible default
+  const defaultPick = candidates.find(e => (e.status||'paid') !== 'paid') || candidates[0];
+  grnMatchSelectedExpenseId = defaultPick.id;
+  el.innerHTML = candidates.map(e => {
+    const status = e.status || 'paid';
+    const badge = status === 'paid' ? 'badge-green' : status === 'partial' ? 'badge-blue' : 'badge-amber';
+    return `<label style="display:flex;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;align-items:center;${e.id===grnMatchSelectedExpenseId?'background:var(--green-light);':''}" data-grn-match-row="${e.id}">
+      <input type="radio" name="grn-match-exp" value="${e.id}" ${e.id===grnMatchSelectedExpenseId?'checked':''} onchange="onGRNMatchExpensePick(${e.id})" style="cursor:pointer;">
+      <div style="flex:1;font-size:12px;">
+        <div style="font-weight:500;">${escAttr(e.desc || '(no description)')}</div>
+        <div style="color:var(--text3);font-size:11px;">${fmtDate(e.date)} · <span class="badge ${badge}" style="font-size:9px;padding:1px 5px;">${status}</span></div>
+      </div>
+      <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--red);">${cs}${(e.amount||0).toFixed(2)}</div>
+    </label>`;
+  }).join('');
+  recalcGRNMatchExistingDiff();
+}
+
+function onGRNMatchExpensePick(id) {
+  grnMatchSelectedExpenseId = id;
+  // Repaint highlight
+  document.querySelectorAll('[data-grn-match-row]').forEach(row => {
+    row.style.background = (parseInt(row.getAttribute('data-grn-match-row')) === id) ? 'var(--green-light)' : '';
+  });
+  recalcGRNMatchExistingDiff();
+}
+
+function recalcGRNMatchExistingDiff() {
+  const id = parseInt(document.getElementById('grn-match-id').value);
+  const g  = (DB.goodsReceived||[]).find(x => x.id === id);
+  if (!g) return;
+  const e  = (DB.expenses||[]).find(x => x.id === grnMatchSelectedExpenseId);
+  const diffEl = document.getElementById('grn-match-existing-diff');
+  if (!e) { diffEl.innerHTML = ''; return; }
+  const cs = currSym();
+  const grnTotal = parseFloat(g.total) || 0;
+  const expTotal = parseFloat(e.amount) || 0;
+  const diff = expTotal - grnTotal;
+  let label, color;
+  if (Math.abs(diff) < 0.005) {
+    label = '✓ Matches exactly'; color = 'var(--green)';
+  } else if (diff > 0) {
+    label = `Invoice is ${cs}${diff.toFixed(2)} more than this GRN. Likely covers other GRNs too — that's normal.`;
+    color = 'var(--blue)';
+  } else {
+    label = `⚠ Invoice is ${cs}${(-diff).toFixed(2)} less than this GRN. Check for short-shipment or pricing dispute.`;
+    color = 'var(--amber)';
+  }
+  diffEl.innerHTML = `<div style="color:${color};">GRN total ${cs}${grnTotal.toFixed(2)} vs Invoice ${cs}${expTotal.toFixed(2)} — ${label}</div>`;
+}
+
+function recalcGRNMatchNewDiff() {
+  const id = parseInt(document.getElementById('grn-match-id').value);
+  const g  = (DB.goodsReceived||[]).find(x => x.id === id);
+  if (!g) return;
+  const cs = currSym();
+  const grnTotal = parseFloat(g.total) || 0;
+  const newAmt   = parseFloat(document.getElementById('grn-match-new-amount').value) || 0;
+  const diff = newAmt - grnTotal;
+  const el = document.getElementById('grn-match-new-diff');
+  if (!el) return;
+  if (Math.abs(diff) < 0.005) {
+    el.innerHTML = `<span style="color:var(--green);">Matches GRN total exactly</span>`;
+  } else if (diff > 0) {
+    el.innerHTML = `<span style="color:var(--blue);">${cs}${diff.toFixed(2)} more than GRN — invoice likely covers other GRNs too</span>`;
+  } else {
+    el.innerHTML = `<span style="color:var(--amber);">${cs}${(-diff).toFixed(2)} less than GRN — short-shipment or pricing dispute?</span>`;
+  }
+}
+
+function confirmGRNMatch() {
+  const grnId = parseInt(document.getElementById('grn-match-id').value);
+  const g = DB.goodsReceived.find(x => x.id === grnId);
+  if (!g) { showToast('GRN not found', 'error'); return; }
+
+  let expense;
+  if (grnMatchMode === 'existing') {
+    if (!grnMatchSelectedExpenseId) { showToast('Pick an invoice', 'error'); return; }
+    expense = DB.expenses.find(e => e.id === grnMatchSelectedExpenseId);
+    if (!expense) { showToast('Invoice not found', 'error'); return; }
+  } else {
+    // Create a new expense
+    const date     = document.getElementById('grn-match-new-date').value;
+    const amount   = parseFloat(document.getElementById('grn-match-new-amount').value);
+    const desc     = document.getElementById('grn-match-new-desc').value.trim();
+    const cat      = document.getElementById('grn-match-new-cat').value;
+    const status   = document.getElementById('grn-match-new-status').value;
+    const dueDate  = document.getElementById('grn-match-new-due').value;
+    if (!date)            { showToast('Date is required', 'error'); return; }
+    if (isNaN(amount) || amount <= 0) { showToast('Amount must be > 0', 'error'); return; }
+    if (!desc)            { showToast('Description is required', 'error'); return; }
+    expense = {
+      id:       DB.nextIds.expenses++,
+      date,
+      desc,
+      cat,
+      amount,
+      supplier: g.supplier,
+      status,
+      paid: '', account: '',
+      dueDate: status === 'unpaid' ? dueDate : '',
+      paidOn:  '',
+      notes:   g.ref ? `Linked to GRN ${g.ref}` : '',
+      receipt: null, receiptName: null, receiptType: null,
+      supplierInvoice: null, supplierInvoiceName: null, supplierInvoiceType: null
+    };
+    DB.expenses.unshift(expense);
+    if (typeof sbPersist === 'function') sbPersist('expenses', expense);
+  }
+
+  // Link the GRN to the expense
+  g.linkedExpenseId = expense.id;
+  g.status = 'invoiced';
+  if (typeof sbPersist === 'function') sbPersist('goodsReceived', g);
+
+  closeModal('modal-grn-match');
+  showToast(`GRN matched to ${escAttr(expense.desc||'invoice')}`);
+  renderGoodsReceived();
+  try { renderExpenses(); } catch(err) {}
+  try { renderSupplierStatement(); } catch(err) {}
+}
+
+function unmatchGRN(id) {
+  if (!can('canEdit')) { showToast('You don\'t have permission', 'error'); return; }
+  const g = DB.goodsReceived.find(x => x.id === id);
+  if (!g) return;
+  if (!confirm(`Unmatch this GRN from its invoice?\n\nThe invoice itself will not be deleted — the GRN will just go back to "Awaiting Invoice" status.`)) return;
+  g.linkedExpenseId = null;
+  g.status = 'awaiting_invoice';
+  if (typeof sbPersist === 'function') sbPersist('goodsReceived', g);
+  showToast('GRN unmatched');
+  renderGoodsReceived();
+  try { renderSupplierStatement(); } catch(err) {}
 }
 
 function renderPaymentHistory() {
@@ -18555,6 +19199,7 @@ const COMPANY_TABLE_SCHEMAS = {
   users: `id int8 primary key, username text, password text, name text, role text, initials text, active bool, email text, auth_id text`,
   expenses: `id int8 primary key, date text, "desc" text, cat text, amount numeric, supplier text, status text, paid text, account text, notes text, "dueDate" text, "paidOn" text, recurring bool, "recurringId" int8, deleted_at text, deleted_by text, deleted_reason text`,
   expense_payments: `id int8 primary key, "expenseId" int8, date text, amount numeric, account text, notes text, "createdOn" text, deleted_at text, deleted_by text, deleted_reason text`,
+  goods_received: `id int8 primary key, date text, supplier text, ref text, lines text, total numeric, status text, "linkedExpenseId" int8, notes text, "createdOn" text, deleted_at text, deleted_by text, deleted_reason text`,
   sales: `id int8 primary key, date text, customer text, product text, qty numeric, price numeric, total numeric, type text, account text, notes text, "harvestId" int8`,
   invoices: `id int8 primary key, no text, date text, due text, customer text, address text, lines text, total numeric, tax numeric, sst numeric, status text, account text, currency text, notes text, product text, qty numeric, unit text, discount text, "soId" int8, "soOrderNo" text, is_intercompany bool, intercompany_id text, intercompany_partner_id text, intercompany_partner_name text, booking_rate numeric, booking_value_local numeric, deleted_at text, deleted_by text, deleted_reason text`,
   inventory: `id int8 primary key, name text, cat text, unit text, stock numeric, reorder numeric, cost numeric, supplier text`,
