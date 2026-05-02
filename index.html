@@ -4008,6 +4008,25 @@ async function sbLoad() {
     }
   } catch(e) { console.warn('Scheduled trips migration skipped:', e.message); }
 
+  // ---- MIGRATION: accounts.openingBalance → accounts.balance ----
+  // The schema column has always been `balance` but earlier code wrote to a
+  // non-persistent `openingBalance` field, causing edits to be lost on reload.
+  // For any in-memory record carrying the legacy field, copy across (only if
+  // balance is missing/zero so we don't clobber a real value), then drop it.
+  try {
+    let migrated = 0;
+    (DB.accounts || []).forEach(a => {
+      if (a && 'openingBalance' in a) {
+        if ((a.balance == null || a.balance === 0) && a.openingBalance) {
+          a.balance = a.openingBalance;
+          migrated++;
+        }
+        delete a.openingBalance;
+      }
+    });
+    if (migrated > 0) console.log(`Migrated ${migrated} account openingBalance → balance`);
+  } catch(e) { console.warn('Account balance migration skipped:', e.message); }
+
   // ---- SEED default packing teams A–E if none exist ----
   try {
     const existingTeams = new Set((DB.packingTeams || []).map(t => t.team));
@@ -14547,7 +14566,7 @@ function accountBalance(acct) {
   const icSettlementCash = (DB.intercompanyTransactions||[])
     .filter(r => !r.deleted_at && r.kind === 'settlement' && r.account === acct.name)
     .reduce((s,r) => s + (parseFloat(r.cash_amount) || 0), 0);
-  return (acct.openingBalance || 0) + paymentsIn + legacyIn - outflow + xfrIn - xfrOut + icSettlementCash;
+  return (acct.balance || 0) + paymentsIn + legacyIn - outflow + xfrIn - xfrOut + icSettlementCash;
 }
 
 function renderSettings() {
@@ -14606,16 +14625,22 @@ function saveAccount() {
   const obj = {
     name, type: document.getElementById('acct-type').value,
     description: document.getElementById('acct-desc').value,
-    openingBalance: parseFloat(document.getElementById('acct-balance').value) || 0
+    balance: parseFloat(document.getElementById('acct-balance').value) || 0
   };
+  let saved;
   if (editingAccountId) {
     const idx = DB.accounts.findIndex(a => a.id === editingAccountId);
+    if (idx === -1) { showToast('Account not found', 'error'); return; }
     DB.accounts[idx] = { ...DB.accounts[idx], ...obj };
+    // Strip legacy openingBalance field if present (now stored in `balance`)
+    if ('openingBalance' in DB.accounts[idx]) delete DB.accounts[idx].openingBalance;
+    saved = DB.accounts[idx];
     editingAccountId = null;
     document.getElementById('acct-modal-title').textContent = 'Add Payment Account';
     showToast('Account updated');
   } else {
-    DB.accounts.push({ id: DB.nextIds.accounts++, ...obj });
+    saved = { id: DB.nextIds.accounts++, ...obj };
+    DB.accounts.push(saved);
     showToast('Account added');
   }
   closeModal('modal-account');
@@ -14624,6 +14649,8 @@ function saveAccount() {
   document.getElementById('acct-name').value = '';
   document.getElementById('acct-desc').value = '';
   document.getElementById('acct-balance').value = '0';
+  // Persist to Supabase — this is what was missing before
+  if (typeof sbPersist === 'function') sbPersist('accounts', saved);
 }
 
 function editAccount(id) {
@@ -14635,7 +14662,7 @@ function editAccount(id) {
   document.getElementById('acct-name').value = a.name;
   document.getElementById('acct-type').value = a.type;
   document.getElementById('acct-desc').value = a.description || '';
-  document.getElementById('acct-balance').value = a.openingBalance || 0;
+  document.getElementById('acct-balance').value = (a.balance != null ? a.balance : (a.openingBalance || 0));
   openModal('modal-account');
 }
 
@@ -14647,6 +14674,10 @@ function deleteAccount(id) {
   populateAccountSelects();
   showToast('Account deleted');
   renderSettings();
+  // Persist deletion to Supabase
+  if (typeof sbDelete === 'function') {
+    sbDelete('accounts', id).catch(()=>{ /* error toast already shown by sbDelete */ });
+  }
 }
 
 // ============================================================
@@ -16160,7 +16191,7 @@ function renderStatement() {
   // Calculate totals
   const totalIn  = txs.filter(t=>t.type==='in').reduce((s,t)=>s+t.raw,0);
   const totalOut = txs.filter(t=>t.type==='out').reduce((s,t)=>s+t.raw,0);
-  const opening  = acct.openingBalance || 0;
+  const opening  = acct.balance || 0;
   const closing  = opening + totalIn - totalOut;
 
   document.getElementById('stmt-summary').textContent =
