@@ -499,6 +499,7 @@ tr:hover td { background:var(--bg); }
       <div class="tab-bar">
         <button id="exp-tab-1" onclick="switchExpPage(1)" class="btn btn-outline" style="border-bottom:2px solid var(--green);color:var(--green);border-radius:var(--radius-sm) var(--radius-sm) 0 0;">All Expenses</button>
         <button id="exp-tab-2" onclick="switchExpPage(2)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">🔄 Recurring</button>
+        <button id="exp-tab-3" onclick="switchExpPage(3)" class="btn btn-outline" style="border-bottom:2px solid transparent;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">📄 Supplier Statement</button>
       </div>
 
       <!-- Panel 1: All Expenses -->
@@ -550,6 +551,28 @@ tr:hover td { background:var(--bg); }
           </div>
         </div>
         <div id="recurring-list"></div>
+      </div>
+
+      <!-- Panel 3: Supplier Statement -->
+      <div id="exp-page-panel-3" style="display:none;">
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-body" style="padding:12px 16px;">
+            <div class="flex-row">
+              <select class="select-filter" id="supp-stmt-supplier" onchange="renderSupplierStatement()" style="min-width:220px;">
+                <option value="">— Select supplier —</option>
+              </select>
+              <select class="select-filter" id="supp-stmt-year" onchange="renderSupplierStatement()">
+                <option value="">All time</option>
+                <option value="2026">2026</option>
+                <option value="2025">2025</option>
+                <option value="2024">2024</option>
+              </select>
+              <button class="btn btn-primary btn-sm" onclick="openPaySupplierModal()" style="margin-left:auto;" title="Mark all unpaid bills for this supplier as paid">💸 Pay Supplier</button>
+              <button class="btn btn-outline btn-sm" onclick="printSupplierStatement()">🖨 Print</button>
+            </div>
+          </div>
+        </div>
+        <div id="supp-stmt-content"></div>
       </div>
     </div>
 
@@ -4612,7 +4635,7 @@ async function sbPersist(tableKey, record) {
 // Column whitelist — only send fields that exist in Supabase schema
 const COLS = {
   users:        ['id','username','name','role','initials','active','email','auth_id'],
-  expenses:     ['id','date','desc','cat','amount','supplier','status','paid','account','notes','dueDate','recurring','recurringId','deleted_at','deleted_by','deleted_reason'],
+  expenses:     ['id','date','desc','cat','amount','supplier','status','paid','account','notes','dueDate','paidOn','recurring','recurringId','deleted_at','deleted_by','deleted_reason'],
   sales:        ['id','date','customer','product','qty','price','total','type','account','notes','harvestId'],
   invoices:     ['id','no','date','due','customer','address','lines','total','tax','sst','status','account','currency','notes','product','qty','unit','discount','soId','soOrderNo','is_intercompany','intercompany_id','intercompany_partner_id','intercompany_partner_name','booking_rate','booking_value_local','deleted_at','deleted_by','deleted_reason'],
   inventory:    ['id','name','cat','unit','stock','reorder','cost','supplier'],
@@ -5899,7 +5922,7 @@ function saveRefuel() {
     const acct = document.getElementById('refuel-account').value;
     const lorryLabel = lorry ? lorry.plate : 'Lorry';
     if (!editingRefuelId) {
-      DB.expenses.unshift({ id:DB.nextIds.expenses++, date, desc:`Diesel — ${lorryLabel}`, cat:'Transport', amount:cost, supplier:'Petrol Station', status:'paid', paid:acct, account:acct, notes:rec.notes });
+      DB.expenses.unshift({ id:DB.nextIds.expenses++, date, desc:`Diesel — ${lorryLabel}`, cat:'Transport', amount:cost, supplier:'Petrol Station', status:'paid', paid:acct, account:acct, paidOn:date, notes:rec.notes });
     }
   }
 
@@ -5993,7 +6016,7 @@ function saveMaintenance() {
   // Create expense if cost > 0
   if (cost > 0 && !editingMaintId) {
     const lorry = DB.lorries.find(x=>x.id===lorryId);
-    DB.expenses.unshift({ id:DB.nextIds.expenses++, date, desc:`${rec.type==='service'?'Service':'Repair'} — ${lorry?lorry.plate:'Lorry'}: ${desc}`, cat:'Maintenance', amount:cost, supplier:rec.vendor||'', status:'paid', paid:rec.account, account:rec.account, notes:rec.notes });
+    DB.expenses.unshift({ id:DB.nextIds.expenses++, date, desc:`${rec.type==='service'?'Service':'Repair'} — ${lorry?lorry.plate:'Lorry'}: ${desc}`, cat:'Maintenance', amount:cost, supplier:rec.vendor||'', status:'paid', paid:rec.account, account:rec.account, paidOn:date, notes:rec.notes });
   }
 
   if (editingMaintId) {
@@ -8245,7 +8268,7 @@ function renderDispatchBoard() {
 let editingRecurId = null;
 
 function switchExpPage(n) {
-  [1,2].forEach(i => {
+  [1,2,3].forEach(i => {
     document.getElementById('exp-page-panel-'+i).style.display = i===n ? '' : 'none';
     const btn = document.getElementById('exp-tab-'+i);
     btn.style.borderBottomColor = i===n ? 'var(--green)' : 'transparent';
@@ -8253,6 +8276,7 @@ function switchExpPage(n) {
   });
   if (n===1) renderExpenses();
   if (n===2) renderRecurring();
+  if (n===3) { populateSupplierStmtSelect(); renderSupplierStatement(); }
 }
 
 // ============================================================
@@ -10651,6 +10675,7 @@ function confirmExpensePaid() {
   e.status  = 'paid';
   e.account = account;
   e.paid    = account;
+  e.paidOn  = new Date().toISOString().split('T')[0];
   closeModal('modal-mark-exp-paid');
   showToast(`Expense paid — recorded to ${account}`);
   renderExpenses();
@@ -10901,6 +10926,7 @@ function saveExpenses() {
       status: l.status || 'paid',
       paid: account, account,
       dueDate,
+      paidOn: isPaid ? date : '',
       receipt: l.receipt || null,
       receiptName: l.receiptName || null,
       receiptType: l.receiptType || null,
@@ -11624,6 +11650,262 @@ function printCustomerStatement() {
     </div>
     </body></html>`);
   win.document.close();
+}
+
+// ============================================================
+// SUPPLIER STATEMENT (creditor / AP statement)
+// ============================================================
+// Mirror of the customer statement, but on the AP side. Charges = expenses
+// recorded against the supplier (bills received). Credits = (a) the same
+// expense once marked paid (recorded on `paidOn`, falling back to `date`),
+// and (b) Purchase Debit Notes we issued the supplier (kind === 'purchase').
+// "Balance" is what we still owe the supplier.
+
+function populateSupplierStmtSelect() {
+  const el = document.getElementById('supp-stmt-supplier');
+  if (!el) return;
+  const cur = el.value;
+  // Pull supplier names from BOTH the suppliers table and any expense.supplier
+  // string, so suppliers entered ad-hoc on an expense still appear here.
+  const fromSuppliers = (live('suppliers')||[]).map(s => s.name).filter(Boolean);
+  const fromExpenses  = (live('expenses')||[]).map(e => e.supplier).filter(Boolean);
+  const names = [...new Set([...fromSuppliers, ...fromExpenses])].sort();
+  el.innerHTML = '<option value="">— Select supplier —</option>' +
+    names.map(n => `<option${n===cur?' selected':''}>${n}</option>`).join('');
+}
+
+function renderSupplierStatement() {
+  const el = document.getElementById('supp-stmt-content');
+  if (!el) return;
+  const supplier = (document.getElementById('supp-stmt-supplier')||{}).value||'';
+  const year     = (document.getElementById('supp-stmt-year')||{}).value||'';
+  if (!supplier) {
+    el.innerHTML = '<div class="empty-state card"><p>Select a supplier to view their statement</p></div>';
+    return;
+  }
+
+  // All expenses owed to or paid to this supplier
+  const exps = (live('expenses')||[]).filter(e =>
+    e.supplier === supplier && (!year || (e.date||'').startsWith(year))
+  );
+
+  // Purchase debit notes issued against this supplier (non-Draft, non-Voided)
+  const dns = (live('debitNotes')||[]).filter(dn =>
+    dn.kind === 'purchase' && dn.partyName === supplier &&
+    (!year || (dn.date||'').startsWith(year)) &&
+    dn.status !== 'Draft' && dn.status !== 'Voided'
+  );
+
+  // Each expense is a CHARGE on its bill date. If status === 'paid', it ALSO
+  // generates a CREDIT on `paidOn` (or `date` as fallback for legacy rows).
+  const charges = exps.map(e => ({
+    date: e.date, type: 'bill',
+    desc: `Bill — ${e.desc || '(no description)'}${e.cat ? ' · '+e.cat : ''}`,
+    amount: e.amount || 0,
+    ref: e.id,
+    status: (e.status || 'paid')
+  }));
+  const billPays = exps
+    .filter(e => (e.status || 'paid') === 'paid')
+    .map(e => ({
+      date: e.paidOn || e.date,
+      type: 'pay',
+      desc: `Payment${e.account ? ' — '+e.account : ''}${e.paid && e.paid !== e.account ? ' ('+e.paid+')' : ''}`,
+      amount: e.amount || 0,
+      ref: e.id
+    }));
+  const dnRows = dns.map(d => ({
+    date: d.date, type: 'dn',
+    desc: `Debit Note ${d.no}${d.invoiceNo ? ' (vs '+d.invoiceNo+')' : ''}`,
+    amount: d.total || 0,
+    ref: d.id
+  }));
+
+  const cs       = currSym();
+  const totalBill = charges.reduce((s,c) => s + c.amount, 0);
+  const totalPay  = billPays.reduce((s,p) => s + p.amount, 0);
+  const totalDn   = dnRows.reduce((s,d) => s + d.amount, 0);
+  const balance   = totalBill - totalPay - totalDn;
+
+  // Counts useful at-a-glance
+  const unpaidCount = exps.filter(e => (e.status||'paid') === 'unpaid').length;
+  const oldestUnpaid = exps
+    .filter(e => (e.status||'paid') === 'unpaid')
+    .sort((a,b) => (a.date||'').localeCompare(b.date||''))[0];
+  const oldestUnpaidLabel = oldestUnpaid ? fmtDate(oldestUnpaid.date) : '—';
+
+  // Supplier reference info (for header)
+  const supp = (live('suppliers')||[]).find(s => s.name === supplier);
+  const terms = supp && supp.terms ? supp.terms : '';
+
+  el.innerHTML = `
+    <div class="card" id="supp-stmt-printable">
+      <div class="card-head" style="flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-size:16px;font-weight:700;">${escAttr(supplier)}</div>
+          <div style="font-size:12px;color:var(--text2);">Supplier Statement${year ? ' — '+year : ''}${terms ? ' · Terms: '+escAttr(terms) : ''}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:11px;color:var(--text2);">Outstanding Balance</div>
+          <div style="font-size:20px;font-weight:700;color:${balance>0?'var(--red)':'var(--green)'};">${cs}${balance.toFixed(2)}</div>
+          ${unpaidCount > 0 ? `<div style="font-size:11px;color:var(--amber);margin-top:2px;">${unpaidCount} unpaid bill${unpaidCount===1?'':'s'} · oldest ${oldestUnpaidLabel}</div>` : ''}
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(${totalDn?4:3},1fr);gap:10px;padding:12px 16px;background:var(--bg);">
+        <div><div style="font-size:10px;text-transform:uppercase;color:var(--text2);">Billed</div><div style="font-size:15px;font-weight:600;">${cs}${totalBill.toFixed(2)}</div></div>
+        <div><div style="font-size:10px;text-transform:uppercase;color:var(--text2);">Paid</div><div style="font-size:15px;font-weight:600;color:var(--green);">${cs}${totalPay.toFixed(2)}</div></div>
+        ${totalDn?`<div><div style="font-size:10px;text-transform:uppercase;color:var(--text2);">− Debit Notes</div><div style="font-size:15px;font-weight:600;color:var(--blue);">${cs}${totalDn.toFixed(2)}</div></div>`:''}
+        <div><div style="font-size:10px;text-transform:uppercase;color:var(--text2);">Balance Owed</div><div style="font-size:15px;font-weight:600;color:${balance>0?'var(--red)':'var(--green)'};">${cs}${balance.toFixed(2)}</div></div>
+      </div>
+      <div class="table-wrap"><table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="background:var(--bg);">
+          <th style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);">Date</th>
+          <th style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);">Description</th>
+          <th style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);text-align:right;">Charge</th>
+          <th style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);text-align:right;">Credit</th>
+          <th style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);text-align:right;">Balance</th>
+        </tr></thead>
+        <tbody>
+          ${buildSupplierStmtRows(charges, billPays, dnRows, cs)}
+        </tbody>
+      </table></div>
+    </div>`;
+}
+
+function buildSupplierStmtRows(charges, billPays, dnRows, cs) {
+  // Merge all transactions and sort by date. For ties on the same date,
+  // bills come first (they create the obligation), then payments/credits.
+  const typeOrder = { bill: 0, pay: 1, dn: 1 };
+  const rows = [...charges, ...billPays, ...dnRows].sort((a, b) => {
+    const d = (a.date||'').localeCompare(b.date||'');
+    if (d !== 0) return d;
+    return (typeOrder[a.type]||9) - (typeOrder[b.type]||9);
+  });
+
+  if (rows.length === 0) {
+    return `<tr><td colspan="5" style="padding:24px;text-align:center;color:var(--text3);font-size:12px;">No transactions yet for this supplier.</td></tr>`;
+  }
+
+  let running = 0;
+  return rows.map(r => {
+    // bill increases what we owe; pay and dn decrease it
+    if (r.type === 'bill') running += r.amount;
+    else running -= r.amount;
+    const isCharge = (r.type === 'bill');
+    const chargeCol = isCharge ? cs + r.amount.toFixed(2) : '—';
+    const creditCol = !isCharge ? cs + r.amount.toFixed(2) : '—';
+    const descColor = (r.type === 'dn') ? 'color:var(--blue);'
+                    : (r.type === 'pay') ? 'color:var(--green);' : '';
+    // If a bill is unpaid, hint visually
+    const unpaidTag = (r.type === 'bill' && r.status === 'unpaid')
+      ? ' <span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;margin-left:4px;">UNPAID</span>' : '';
+    return `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px 12px;font-size:12px;color:var(--text2);white-space:nowrap;">${fmtDate(r.date)}</td>
+      <td style="padding:8px 12px;font-size:12px;${descColor}">${r.desc}${unpaidTag}</td>
+      <td style="padding:8px 12px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--red);">${chargeCol}</td>
+      <td style="padding:8px 12px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--green);">${creditCol}</td>
+      <td style="padding:8px 12px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;font-weight:600;color:${running>0?'var(--red)':'var(--green)'};">${cs}${running.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function printSupplierStatement() {
+  const el = document.getElementById('supp-stmt-printable');
+  if (!el) { showToast('Select a supplier first', 'error'); return; }
+  const supplier = (document.getElementById('supp-stmt-supplier')||{}).value||'';
+  const win = window.open('','_blank');
+  const co = DB.company || {};
+  win.document.write(`<!DOCTYPE html><html><head><title>Supplier Statement — ${supplier}</title>
+    <style>
+      body{font-family:sans-serif;font-size:13px;color:#111;padding:30px;max-width:800px;margin:0 auto;}
+      table{width:100%;border-collapse:collapse;}
+      th,td{padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;}
+      th{background:#f9fafb;font-weight:600;font-size:11px;color:#6b7280;}
+      @media print{button{display:none;}}
+    </style></head><body>
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:18px;font-weight:700;color:#166534;">${co.name||'MycoBooks'}</div>
+      <div style="font-size:14px;font-weight:600;margin-top:6px;">SUPPLIER STATEMENT</div>
+      <div style="font-size:11px;color:#6b7280;margin-top:4px;">Generated ${new Date().toLocaleDateString('en-MY',{day:'numeric',month:'long',year:'numeric'})}</div>
+    </div>
+    ${el.innerHTML}
+    <div style="text-align:center;margin-top:20px;">
+      <button onclick="window.print()" style="padding:8px 24px;background:#166534;color:#fff;border:none;border-radius:6px;cursor:pointer;">🖨 Print</button>
+    </div>
+    </body></html>`);
+  win.document.close();
+}
+
+// "Pay Supplier" — quick way to mark all unpaid bills for a supplier as paid.
+// Shown on the Supplier Statement tab; uses a simple confirm + account picker.
+function openPaySupplierModal() {
+  const supplier = (document.getElementById('supp-stmt-supplier')||{}).value||'';
+  if (!supplier) { showToast('Select a supplier first', 'error'); return; }
+  const unpaid = (live('expenses')||[]).filter(e =>
+    e.supplier === supplier && (e.status||'paid') === 'unpaid'
+  );
+  if (unpaid.length === 0) { showToast('No unpaid bills for this supplier', 'error'); return; }
+  const total = unpaid.reduce((s,e) => s + (e.amount||0), 0);
+  const acctOpts = DB.accounts.map(a => a.name);
+  if (acctOpts.length === 0) { showToast('Add a bank account first (Settings → Accounts)', 'error'); return; }
+  const acct = prompt(
+    `Pay ${unpaid.length} unpaid bill${unpaid.length===1?'':'s'} for ${supplier}?\n` +
+    `Total: ${currSym()}${total.toFixed(2)}\n\n` +
+    `Type the account name to pay from:\n${acctOpts.map(n => '  • '+n).join('\n')}`,
+    acctOpts[0]
+  );
+  if (!acct) return;
+  const match = DB.accounts.find(a => a.name.toLowerCase() === acct.trim().toLowerCase());
+  if (!match) { showToast(`Account "${acct}" not found`, 'error'); return; }
+  const today = new Date().toISOString().split('T')[0];
+  unpaid.forEach(e => {
+    e.status  = 'paid';
+    e.account = match.name;
+    e.paid    = match.name;
+    e.paidOn  = today;
+  });
+  showToast(`${unpaid.length} bill${unpaid.length===1?'':'s'} marked paid · ${currSym()}${total.toFixed(2)} from ${match.name}`);
+  renderSupplierStatement();
+  // Save right away
+  if (typeof sbSaveAll === 'function') sbSaveAll().catch(()=>{});
+}
+
+// Jump to the Supplier Statement tab and pre-select a supplier.
+// Accepts either a supplier id (from the suppliers table) or a name string
+// (so ad-hoc suppliers entered on an expense still work).
+function viewSupplierStatement(idOrName) {
+  let name = '';
+  if (typeof idOrName === 'number') {
+    const s = (DB.suppliers||[]).find(x => x.id === idOrName);
+    if (!s) { showToast('Supplier not found', 'error'); return; }
+    name = s.name;
+  } else {
+    name = String(idOrName || '').trim();
+  }
+  if (!name) { showToast('No supplier selected', 'error'); return; }
+  // Navigate to expenses page (without an active el — manually update sidebar)
+  document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+  const navEl = document.querySelector('.nav-link[data-page="expenses"]');
+  if (navEl) navEl.classList.add('active');
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const pg = document.getElementById('page-expenses');
+  if (pg) pg.classList.add('active');
+  // Switch to tab 3 and pre-select
+  switchExpPage(3);
+  // populateSupplierStmtSelect was just called by switchExpPage(3); set value & re-render
+  const sel = document.getElementById('supp-stmt-supplier');
+  if (sel) {
+    // If the supplier name isn't in the list (rare — supplier exists but no expenses
+    // and no suppliers-table entry under this exact name), inject the option.
+    if (![...sel.options].some(o => o.value === name)) {
+      const opt = document.createElement('option');
+      opt.value = name; opt.textContent = name;
+      sel.appendChild(opt);
+    }
+    sel.value = name;
+    renderSupplierStatement();
+  }
+  closeSidebar();
 }
 
 function renderPaymentHistory() {
@@ -14600,6 +14882,7 @@ function renderSuppliers() {
             <td class="text-right mono" style="color:var(--red);">${fmt(spend)}</td>
             <td class="text-right mono" style="color:${unpaidAmt>0?'var(--amber)':'var(--text3)'};">${unpaidAmt>0?fmt(unpaidAmt):'—'}</td>
             <td><div style="display:flex;gap:4px;">
+              <button class="btn btn-outline btn-sm" onclick="viewSupplierStatement(${s.id})" style="font-size:11px;" title="View supplier statement">📄</button>
               ${can('canEdit')?`<button class="btn btn-outline btn-sm" onclick="editSupplier(${s.id})" style="font-size:11px;">Edit</button>`:''}
               ${can('canDelete')?`<button class="btn btn-danger btn-sm" onclick="deleteSupplier(${s.id})">Del</button>`:''}
             </div></td>
@@ -14621,6 +14904,7 @@ function renderSuppliers() {
               <div class="customer-type"><span class="badge ${catColors[s.cat]||'badge-gray'}" style="font-size:10px;padding:1px 7px;">${s.cat}</span></div>
             </div>
             <div style="display:flex;gap:4px;flex-shrink:0;">
+              <button class="btn btn-outline btn-sm" onclick="viewSupplierStatement(${s.id})" title="View supplier statement">📄</button>
               ${can('canEdit')?`<button class="btn btn-outline btn-sm" onclick="editSupplier(${s.id})">Edit</button>`:''}
               ${can('canDelete')?`<button class="btn btn-danger btn-sm" onclick="deleteSupplier(${s.id})">Del</button>`:''}
             </div>
@@ -16485,7 +16769,7 @@ function confirmBulkPay() {
       desc: `Claim — ${c.claimant} (${c.cat})`,
       cat: c.cat, amount: c.amount,
       supplier: c.claimant, status: 'paid',
-      paid: acct, account: acct, notes: c.desc
+      paid: acct, account: acct, paidOn: date, notes: c.desc
     });
   });
   const total = ids.reduce((s,id) => s + DB.claims.find(c=>c.id===id)?.amount||0, 0);
@@ -16545,7 +16829,7 @@ function payClaim() {
     desc: `Claim — ${c.claimant} (${c.cat})`,
     cat: c.cat, amount: c.amount,
     supplier: c.claimant, status: 'paid',
-    paid: acct, account: acct, notes: c.desc
+    paid: acct, account: acct, paidOn: date, notes: c.desc
   });
   closeModal('modal-claim-pay');
   showToast(`Claim paid — ${fmt(c.amount)} from ${acct}`);
@@ -16747,7 +17031,7 @@ function recordLoanPayment() {
     desc: `Loan Payment — ${loan.name}`,
     cat: 'Loan Repayment', amount,
     supplier: loan.lender || '', status: 'paid',
-    paid: acct, account: acct,
+    paid: acct, account: acct, paidOn: date,
     notes: notes || (loan.ref ? 'Ref: ' + loan.ref : '')
   });
   closeModal('modal-loan-payment');
@@ -17270,7 +17554,7 @@ function openAddCompanyModal() {
 // "Sync Schema" on each company in Settings → Companies to push the change.
 const COMPANY_TABLE_SCHEMAS = {
   users: `id int8 primary key, username text, password text, name text, role text, initials text, active bool, email text, auth_id text`,
-  expenses: `id int8 primary key, date text, "desc" text, cat text, amount numeric, supplier text, status text, paid text, account text, notes text, "dueDate" text, recurring bool, "recurringId" int8, deleted_at text, deleted_by text, deleted_reason text`,
+  expenses: `id int8 primary key, date text, "desc" text, cat text, amount numeric, supplier text, status text, paid text, account text, notes text, "dueDate" text, "paidOn" text, recurring bool, "recurringId" int8, deleted_at text, deleted_by text, deleted_reason text`,
   sales: `id int8 primary key, date text, customer text, product text, qty numeric, price numeric, total numeric, type text, account text, notes text, "harvestId" int8`,
   invoices: `id int8 primary key, no text, date text, due text, customer text, address text, lines text, total numeric, tax numeric, sst numeric, status text, account text, currency text, notes text, product text, qty numeric, unit text, discount text, "soId" int8, "soOrderNo" text, is_intercompany bool, intercompany_id text, intercompany_partner_id text, intercompany_partner_name text, booking_rate numeric, booking_value_local numeric, deleted_at text, deleted_by text, deleted_reason text`,
   inventory: `id int8 primary key, name text, cat text, unit text, stock numeric, reorder numeric, cost numeric, supplier text`,
