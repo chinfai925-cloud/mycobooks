@@ -2487,22 +2487,37 @@ tr:hover td { background:var(--bg); }
 
 <!-- Add Supplier Payment Modal (mark all unpaid bills paid via chosen account) -->
 <div class="modal-backdrop" id="modal-add-supp-payment">
-  <div class="modal" style="width:520px;">
+  <div class="modal" style="width:640px;">
     <div class="modal-head">
       <span class="modal-title" id="add-supp-pay-title">Add Payment</span>
       <button class="modal-close" onclick="closeModal('modal-add-supp-payment')">×</button>
     </div>
     <div class="modal-body">
-      <div id="add-supp-pay-summary" style="background:var(--bg);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:14px;">
-        <!-- supplier + total filled in by openAddSupplierPaymentModal -->
+      <div id="add-supp-pay-summary" style="background:var(--bg);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:12px;">
+        <!-- supplier + total of TICKED bills, filled in by openAddSupplierPaymentModal -->
       </div>
-      <div id="add-supp-pay-bills" style="margin-bottom:14px;font-size:12px;color:var(--text2);max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);">
-        <!-- bills list filled in by openAddSupplierPaymentModal -->
+      <label style="font-size:12px;font-weight:500;color:var(--text2);display:block;margin-bottom:6px;">Pick bills to pay</label>
+      <div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:14px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="background:var(--bg);">
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:center;width:36px;border-bottom:1px solid var(--border);">
+                <input type="checkbox" id="supp-pay-tick-all" onchange="toggleSuppPayTickAll(this.checked)" style="cursor:pointer;" checked>
+              </th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:left;width:100px;border-bottom:1px solid var(--border);">Date</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:left;border-bottom:1px solid var(--border);">Description</th>
+              <th style="padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);text-align:right;width:110px;border-bottom:1px solid var(--border);">Amount</th>
+            </tr>
+          </thead>
+          <tbody id="add-supp-pay-bills-body">
+            <!-- rows filled by openAddSupplierPaymentModal -->
+          </tbody>
+        </table>
       </div>
       <div class="form-grid form-grid-2">
         <div class="form-group">
           <label>Pay From (Account)</label>
-          <select id="add-supp-pay-account"></select>
+          <select id="add-supp-pay-account" onchange="recalcSuppPayTotals()"></select>
           <div id="add-supp-pay-acct-balance" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
         </div>
         <div class="form-group">
@@ -12057,13 +12072,13 @@ function printSupplierStatement() {
   win.document.close();
 }
 
-// "Add Payment" — record a payment against the selected supplier's unpaid
-// bills. Marks all unpaid bills as paid against the chosen account on the
-// chosen date. The account's running balance auto-updates because
-// accountBalance() subtracts paid expenses against an account.
+// "Add Payment" — record a payment against the selected supplier's bills.
+// Supports per-bill selection: tick the bills you're paying. Each ticked bill
+// is paid in full; unticked bills stay unpaid. (Per-bill partial — paying e.g.
+// 500 of a 1200 bill — is deferred until we add a paidAmount field.)
 //
-// (Future enhancement: per-bill allocation. For now this is "pay everything
-// outstanding" — same behavior as before, just with a real modal UI.)
+// The chosen account's balance auto-updates because accountBalance() subtracts
+// paid expenses against an account.
 function openAddSupplierPaymentModal() {
   const supplier = (document.getElementById('supp-stmt-supplier')||{}).value||'';
   if (!supplier) { showToast('Select a supplier first', 'error'); return; }
@@ -12075,68 +12090,97 @@ function openAddSupplierPaymentModal() {
     showToast('Add a payment account first (Settings → Accounts)', 'error'); return;
   }
 
-  const total = unpaid.reduce((s,e) => s + (e.amount||0), 0);
   const cs = currSym();
 
-  // Header summary
+  // Header — title; the summary card is recomputed by recalcSuppPayTotals
   document.getElementById('add-supp-pay-title').textContent = `Add Payment — ${supplier}`;
-  document.getElementById('add-supp-pay-summary').innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:baseline;">
-      <div>
-        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;">Paying off</div>
-        <div style="font-size:14px;font-weight:600;">${unpaid.length} unpaid bill${unpaid.length===1?'':'s'}</div>
-      </div>
-      <div style="text-align:right;">
-        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;">Total</div>
-        <div style="font-size:18px;font-weight:700;color:var(--red);font-family:'DM Mono',monospace;">${cs}${total.toFixed(2)}</div>
-      </div>
-    </div>`;
 
-  // Read-only bills list
-  document.getElementById('add-supp-pay-bills').innerHTML = unpaid.map(e => `
-    <div style="display:flex;justify-content:space-between;padding:7px 12px;border-bottom:1px solid var(--border);font-size:12px;">
-      <div>
-        <span style="color:var(--text2);">${fmtDate(e.date)}</span>
-        <span style="margin-left:10px;">${escAttr(e.desc || '(no description)')}</span>
-      </div>
-      <span class="mono" style="color:var(--red);">${cs}${(e.amount||0).toFixed(2)}</span>
-    </div>`).join('');
+  // Bills table — every bill ticked by default (preserves prior "pay all" UX)
+  document.getElementById('add-supp-pay-bills-body').innerHTML = unpaid.map(e => `
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:7px 10px;text-align:center;">
+        <input type="checkbox" class="supp-pay-tick" data-expid="${e.id}" data-amount="${e.amount||0}" checked onchange="onSuppPayTickRow()" style="cursor:pointer;">
+      </td>
+      <td style="padding:7px 10px;font-size:12px;color:var(--text2);white-space:nowrap;">${fmtDate(e.date)}</td>
+      <td style="padding:7px 10px;font-size:12px;">
+        <div>${escAttr(e.desc || '(no description)')}</div>
+        ${e.cat ? `<div style="font-size:10px;color:var(--text3);">${escAttr(e.cat)}</div>` : ''}
+      </td>
+      <td style="padding:7px 10px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--red);">${cs}${(e.amount||0).toFixed(2)}</td>
+    </tr>`).join('');
 
-  // Account dropdown — show each account with its CURRENT computed balance,
-  // so the user knows where they're drawing from.
+  // Account dropdown — show each account with its CURRENT computed balance
   const acctSel = document.getElementById('add-supp-pay-account');
   acctSel.innerHTML = DB.accounts.map(a => {
     const bal = (typeof accountBalance === 'function') ? accountBalance(a) : (a.balance || 0);
     return `<option value="${escAttr(a.name)}" data-bal="${bal}">${escAttr(a.name)} — ${cs}${bal.toFixed(2)}</option>`;
   }).join('');
-  acctSel.onchange = updateAddSuppPayAcctPreview;
 
   // Default date = today
   document.getElementById('add-supp-pay-date').value = new Date().toISOString().split('T')[0];
   document.getElementById('add-supp-pay-notes').value = '';
 
-  // Initial preview of "after this payment"
-  updateAddSuppPayAcctPreview();
+  // Sync the tick-all checkbox state and compute initial totals
+  const tickAll = document.getElementById('supp-pay-tick-all');
+  if (tickAll) tickAll.checked = true;
+  recalcSuppPayTotals();
 
   openModal('modal-add-supp-payment');
 }
 
-// Show the chosen account's balance and what it'll be after this payment.
-function updateAddSuppPayAcctPreview() {
-  const sel = document.getElementById('add-supp-pay-account');
-  const opt = sel.options[sel.selectedIndex];
-  if (!opt) return;
-  const bal = parseFloat(opt.getAttribute('data-bal')) || 0;
-  // Pull total from the summary card we built (most reliable single source)
-  const supplier = (document.getElementById('supp-stmt-supplier')||{}).value||'';
-  const total = (live('expenses')||[])
-    .filter(e => e.supplier === supplier && (e.status||'paid') === 'unpaid')
-    .reduce((s,e) => s + (e.amount||0), 0);
-  const after = bal - total;
+// Tick / untick all rows
+function toggleSuppPayTickAll(checked) {
+  document.querySelectorAll('#add-supp-pay-bills-body input.supp-pay-tick')
+    .forEach(cb => { cb.checked = checked; });
+  recalcSuppPayTotals();
+}
+
+// Called when an individual row checkbox flips — keeps the master tick-all
+// in sync with whether all rows are checked.
+function onSuppPayTickRow() {
+  const ticks  = [...document.querySelectorAll('#add-supp-pay-bills-body input.supp-pay-tick')];
+  const allOn  = ticks.length > 0 && ticks.every(cb => cb.checked);
+  const tickAll = document.getElementById('supp-pay-tick-all');
+  if (tickAll) tickAll.checked = allOn;
+  recalcSuppPayTotals();
+}
+
+// Recompute the summary card and the after-balance preview based on which
+// bills are currently ticked and which account is selected.
+function recalcSuppPayTotals() {
+  const ticks = [...document.querySelectorAll('#add-supp-pay-bills-body input.supp-pay-tick')];
+  const checked = ticks.filter(cb => cb.checked);
+  const total = checked.reduce((s, cb) => s + (parseFloat(cb.getAttribute('data-amount')) || 0), 0);
   const cs = currSym();
-  const colorAfter = after < 0 ? 'var(--red)' : 'var(--text2)';
-  document.getElementById('add-supp-pay-acct-balance').innerHTML =
-    `Current: <strong>${cs}${bal.toFixed(2)}</strong> → After: <strong style="color:${colorAfter};">${cs}${after.toFixed(2)}</strong>`;
+  const totalAll = ticks.length;
+
+  // Summary card
+  const summary = document.getElementById('add-supp-pay-summary');
+  if (summary) {
+    summary.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <div>
+          <div style="font-size:11px;color:var(--text2);text-transform:uppercase;">Paying</div>
+          <div style="font-size:14px;font-weight:600;">${checked.length} of ${totalAll} bill${totalAll===1?'':'s'}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:11px;color:var(--text2);text-transform:uppercase;">Total</div>
+          <div style="font-size:18px;font-weight:700;color:var(--red);font-family:'DM Mono',monospace;">${cs}${total.toFixed(2)}</div>
+        </div>
+      </div>`;
+  }
+
+  // After-balance preview
+  const sel = document.getElementById('add-supp-pay-account');
+  const opt = sel ? sel.options[sel.selectedIndex] : null;
+  const balLabel = document.getElementById('add-supp-pay-acct-balance');
+  if (opt && balLabel) {
+    const bal = parseFloat(opt.getAttribute('data-bal')) || 0;
+    const after = bal - total;
+    const colorAfter = after < 0 ? 'var(--red)' : 'var(--text2)';
+    balLabel.innerHTML =
+      `Current: <strong>${cs}${bal.toFixed(2)}</strong> → After: <strong style="color:${colorAfter};">${cs}${after.toFixed(2)}</strong>`;
+  }
 }
 
 function confirmAddSupplierPayment() {
@@ -12150,20 +12194,31 @@ function confirmAddSupplierPayment() {
   const acct = DB.accounts.find(a => a.name === acctName);
   if (!acct)     { showToast('Account not found', 'error'); return; }
 
-  const unpaid = (live('expenses')||[]).filter(e =>
-    e.supplier === supplier && (e.status||'paid') === 'unpaid'
-  );
-  if (unpaid.length === 0) {
-    showToast('No unpaid bills found — nothing to pay', 'error');
-    closeModal('modal-add-supp-payment');
+  // Collect ticked bill ids
+  const tickedIds = [...document.querySelectorAll('#add-supp-pay-bills-body input.supp-pay-tick:checked')]
+    .map(cb => parseInt(cb.getAttribute('data-expid')))
+    .filter(n => !isNaN(n));
+  if (tickedIds.length === 0) {
+    showToast('Tick at least one bill to pay', 'error');
     return;
   }
-  const total = unpaid.reduce((s,e) => s + (e.amount||0), 0);
 
-  // Apply the payment: each unpaid bill becomes paid against this account
-  // on the chosen date. Notes (if any) are appended to each bill so the audit
-  // trail captures the cheque number / transfer ref.
-  unpaid.forEach(e => {
+  // Look them up and double-check they're still unpaid (defensive — guards
+  // against another tab / window having paid them between modal-open and
+  // confirm). Anything that's already paid we silently skip.
+  const targets = (live('expenses')||[]).filter(e =>
+    tickedIds.includes(e.id) && e.supplier === supplier && (e.status||'paid') === 'unpaid'
+  );
+  if (targets.length === 0) {
+    showToast('Those bills are already paid', 'error');
+    closeModal('modal-add-supp-payment');
+    renderSupplierStatement();
+    return;
+  }
+  const total = targets.reduce((s,e) => s + (e.amount||0), 0);
+
+  // Apply the payment
+  targets.forEach(e => {
     e.status  = 'paid';
     e.account = acct.name;
     e.paid    = acct.name;
@@ -12173,17 +12228,17 @@ function confirmAddSupplierPayment() {
     }
   });
 
-  // Compute new balance AFTER mutation so toast is accurate
+  // New balance after mutation
   const newBal = (typeof accountBalance === 'function') ? accountBalance(acct) : null;
   const cs = currSym();
 
   closeModal('modal-add-supp-payment');
   showToast(
-    `${unpaid.length} bill${unpaid.length===1?'':'s'} paid · ${cs}${total.toFixed(2)} from ${acct.name}` +
+    `${targets.length} bill${targets.length===1?'':'s'} paid · ${cs}${total.toFixed(2)} from ${acct.name}` +
     (newBal != null ? ` · new balance: ${cs}${newBal.toFixed(2)}` : '')
   );
 
-  // Re-render statement and any other view that depends on account balances
+  // Re-render anything that depends on account balances or paid expenses
   renderSupplierStatement();
   try { renderDashboard(); } catch(e) {}
   try { renderSettings(); } catch(e) {}
