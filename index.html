@@ -319,8 +319,9 @@ tr:hover td { background:var(--bg); }
         onmouseover="this.style.borderColor='#52b788';this.style.color='#a8c8ac';"
         onmouseout="this.style.borderColor='#2d4a32';this.style.color='#7aab82';">⚙</button>
     </div>
-    <div style="padding:0 12px 10px;">
-      <button id="btn-sb-save" onclick="sbSaveAll()" style="width:100%;padding:7px 10px;background:var(--green-light);border:1px solid #b7e4c7;border-radius:var(--radius-sm);color:var(--green);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;">☁ Save to Cloud</button>
+    <div style="padding:0 12px 10px;display:flex;gap:6px;">
+      <button id="btn-sb-save" onclick="sbSaveAll()" style="flex:1;padding:7px 10px;background:var(--green-light);border:1px solid #b7e4c7;border-radius:var(--radius-sm);color:var(--green);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;">☁ Save to Cloud</button>
+      <button id="btn-sb-pull" onclick="sbPullFromCloud()" title="Refetch all data from cloud (overwrites local in-memory state)." style="padding:7px 10px;background:#fff;border:1px solid #b7e4c7;border-radius:var(--radius-sm);color:var(--green);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap;">⟲ Pull</button>
     </div>
     <nav>
       <div class="nav-section-label">Overview</div>
@@ -4027,7 +4028,11 @@ async function sbDelete(tableKey, id) {
   try {
     await SB.delete(`${tbl}?id=eq.${id}`);
   } catch(e) {
-    console.warn(`sbDelete ${tbl}:`, e.message);
+    console.error(`sbDelete ${tbl} id=${id}:`, e.message);
+    if (typeof showToast === 'function') {
+      showToast(`⚠ Cloud delete failed: ${tbl}#${id} — ${e.message}`, 'error');
+    }
+    throw e;   // let caller decide whether to roll back local state
   }
 }
 
@@ -4066,7 +4071,11 @@ async function sbDeleteFor(prefix, tableKey, id) {
   try {
     await SB.delete(`${tbl}?id=eq.${id}`);
   } catch(e) {
-    console.warn(`sbDeleteFor ${tbl}:`, e.message);
+    console.error(`sbDeleteFor ${tbl} id=${id}:`, e.message);
+    if (typeof showToast === 'function') {
+      showToast(`⚠ Cloud delete failed (sister): ${tbl}#${id} — ${e.message}`, 'error');
+    }
+    throw e;
   }
 }
 
@@ -4835,6 +4844,34 @@ async function sbSaveAll(opts) {
 // Convenience: dry-run the save to see what it would do without doing it.
 // Call from console: sbDryRun()
 function sbDryRun() { return sbSaveAll({ dryRun: true }); }
+
+// Force-refetch all data from cloud. Use this if local DB has drifted
+// from cloud (e.g. failed cloud deletes) and the safety guard is blocking saves.
+// Wired to the "⟲ Pull" button in the sidebar.
+async function sbPullFromCloud() {
+  if (sbSaving) {
+    showToast('Save in progress — wait for it to finish first', 'error');
+    return;
+  }
+  if (!confirm('Refetch all data from cloud?\n\nAny unsaved local changes will be discarded. Use this when the safety guard is blocking saves due to drift.')) return;
+  const btn = document.getElementById('btn-sb-pull');
+  if (btn) { btn.textContent = '⟲ Pulling...'; btn.disabled = true; }
+  try {
+    await sbLoad();
+    // Re-render visible pages so the new data shows up
+    try { populateProductSelects(); } catch(e) {}
+    try { populateAccountSelects(); } catch(e) {}
+    try { populateStatementAccounts(); } catch(e) {}
+    try { renderDashboard(); } catch(e) {}
+    if (typeof applyCurrencyLabels === 'function') applyCurrencyLabels();
+    showToast('Cloud data refetched ✓');
+  } catch(e) {
+    console.error('sbPullFromCloud:', e);
+    showToast('Pull failed — check console', 'error');
+  } finally {
+    if (btn) { btn.textContent = '⟲ Pull'; btn.disabled = false; }
+  }
+}
 
 // Auto-save every 2 minutes after login
 function startAutoSave() {
@@ -15086,7 +15123,7 @@ function trashRestore(tableKey, id) {
   if (typeof sbPersist === 'function') sbPersist(tableKey, rec);
 }
 
-function trashPurge(tableKey, id) {
+async function trashPurge(tableKey, id) {
   const rec = (DB[tableKey]||[]).find(r => r.id === id);
   if (!rec) return;
   const label = rec.no || rec.desc || rec.invoiceNo || `#${id}`;
@@ -15094,14 +15131,26 @@ function trashPurge(tableKey, id) {
   if (!confirm(`Are you absolutely sure? Type-confirm by clicking OK one more time.`)) return;
   // AUDIT: log the purge BEFORE removing the record (so we still have it for the label)
   if (typeof auditLog === 'function') auditLog(tableKey, rec, 'purge', { reason: rec.deleted_reason || '' });
-  // Remove from local array
+  // ---- CLOUD-FIRST: only remove from local array if Supabase delete succeeded ----
+  // Previously this removed locally first and fired sbDelete fire-and-forget; if the cloud
+  // delete failed silently, local diverged from cloud and the safety guard would later
+  // refuse to sync. Now we await and abort the local removal on failure.
+  if (typeof sbDelete === 'function') {
+    try {
+      await sbDelete(tableKey, id);
+    } catch(e) {
+      showToast('Purge aborted — cloud delete failed. Local record kept in sync with cloud.', 'error');
+      return;   // do NOT remove from local; keep state consistent with cloud
+    }
+  }
   DB[tableKey] = (DB[tableKey]||[]).filter(r => r.id !== id);
+  // Keep sbBaselineIds in sync so the next save guard sees the legitimate delete
+  if (sbBaselineIds && sbBaselineIds[tableKey]) sbBaselineIds[tableKey].delete(String(id));
   showToast('Permanently deleted');
   renderTrash();
-  if (typeof sbDelete === 'function') sbDelete(tableKey, id);
 }
 
-function trashEmpty(tableKey) {
+async function trashEmpty(tableKey) {
   const items = trashed(tableKey);
   if (items.length === 0) return;
   if (!confirm(`PERMANENTLY DELETE all ${items.length} items in ${tableKey} trash?\n\nThis cannot be undone.`)) return;
@@ -15111,13 +15160,35 @@ function trashEmpty(tableKey) {
   if (typeof auditLog === 'function') {
     items.forEach(rec => auditLog(tableKey, rec, 'purge', { reason: rec.deleted_reason || '' }));
   }
-  DB[tableKey] = (DB[tableKey]||[]).filter(r => !ids.includes(r.id));
-  showToast(`${ids.length} records permanently deleted`);
-  renderTrash();
-  // Delete each from Supabase
+  // ---- CLOUD-FIRST: delete from Supabase, then remove only the ones that succeeded ----
+  const succeeded = [];
+  const failed = [];
   if (typeof sbDelete === 'function') {
-    ids.forEach(id => { try { sbDelete(tableKey, id); } catch(e){} });
+    for (const id of ids) {
+      try { await sbDelete(tableKey, id); succeeded.push(id); }
+      catch(e) { failed.push({ id, msg: e.message }); }
+    }
+  } else {
+    succeeded.push(...ids);
   }
+  // Remove only the cloud-confirmed deletes from local
+  if (succeeded.length > 0) {
+    const okSet = new Set(succeeded);
+    DB[tableKey] = (DB[tableKey]||[]).filter(r => !okSet.has(r.id));
+    if (sbBaselineIds && sbBaselineIds[tableKey]) {
+      succeeded.forEach(id => sbBaselineIds[tableKey].delete(String(id)));
+    }
+  }
+  if (failed.length === 0) {
+    showToast(`${succeeded.length} records permanently deleted`);
+  } else if (succeeded.length > 0) {
+    showToast(`${succeeded.length} purged, ${failed.length} cloud delete${failed.length===1?'':'s'} failed — see console`, 'error');
+    console.error(`trashEmpty(${tableKey}) partial: ${failed.length} failed`, failed);
+  } else {
+    showToast(`Purge aborted — all ${failed.length} cloud delete${failed.length===1?'':'s'} failed`, 'error');
+    console.error(`trashEmpty(${tableKey}) total failure`, failed);
+  }
+  renderTrash();
 }
 
 // ============================================================
