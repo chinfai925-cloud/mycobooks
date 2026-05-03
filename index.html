@@ -22233,6 +22233,15 @@ async function _boot() {
       const mm = String(curM + 1).padStart(2, '0');
       recurStart.defaultValue = `${yyyy}-${mm}`;
     }
+
+    // Default the dashboard month filter to the current month
+    // (instead of "All time", so KPIs reflect the current period out of the box)
+    const dashMonth = document.getElementById('dash-month');
+    if (dashMonth) {
+      const yyyy = curY;
+      const mm = String(curM + 1).padStart(2, '0');
+      dashMonth.value = `${yyyy}-${mm}`;
+    }
   } catch (e) {
     console.warn('Month dropdown refresh failed:', e);
   }
