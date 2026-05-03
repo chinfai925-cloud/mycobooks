@@ -2420,7 +2420,7 @@ tr:hover td { background:var(--bg); }
         <div class="form-group"><label>Default Account</label>
           <select id="recur-account" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
         </div>
-        <div class="form-group"><label>Start Month</label><input type="month" id="recur-start" value="2026-04"></div>
+        <div class="form-group"><label>Start Month</label><input type="month" id="recur-start"></div>
         <div class="form-group"><label>End Month <span style="font-weight:400;color:var(--text3);">(optional)</span></label><input type="month" id="recur-end" placeholder="Leave blank = no end"></div>
         <div class="form-group" style="grid-column:1/-1;"><label>Notes <span style="font-weight:400;color:var(--text3);">(optional)</span></label><input type="text" id="recur-notes" placeholder="e.g. Office unit A-12-3"></div>
       </div>
@@ -11100,7 +11100,8 @@ function openRecurringModal(id) {
   } else {
     ['recur-desc','recur-supplier','recur-amount','recur-end','recur-notes'].forEach(i=>document.getElementById(i).value='');
     document.getElementById('recur-day').value   = '1';
-    document.getElementById('recur-start').value = '2026-04';
+    const _now = new Date();
+    document.getElementById('recur-start').value = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}`;
   }
   openModal('modal-recurring');
 }
@@ -22166,6 +22167,77 @@ async function _boot() {
     _watchAuthState();
   }
 }
+// ============================================================
+// Auto-refresh hardcoded month dropdowns to a sliding window
+// ending at the current month. The static HTML option lists
+// were authored in April 2026 and won't update on their own.
+// ============================================================
+(function refreshMonthDropdowns() {
+  try {
+    const today = new Date();
+    const curY = today.getFullYear();
+    const curM = today.getMonth(); // 0-indexed
+    const longMonths  = ['January','February','March','April','May','June',
+                         'July','August','September','October','November','December'];
+    const shortMonths = ['Jan','Feb','Mar','Apr','May','Jun',
+                         'Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    document.querySelectorAll('select').forEach(sel => {
+      const opts = Array.from(sel.options);
+      // Only touch selects whose options use YYYY-MM values
+      const hasMonthOpts = opts.some(o => /^\d{4}-\d{2}$/.test(o.value));
+      if (!hasMonthOpts) return;
+
+      // Preserve any leading non-month options (e.g. "All months", "All time")
+      const preservedHead = [];
+      for (const o of opts) {
+        if (/^\d{4}-\d{2}$/.test(o.value)) break;
+        preservedHead.push(o.cloneNode(true));
+      }
+
+      // Match the original label format (long "April 2026" vs short "Apr 2026")
+      // and capture any trailing suffix like " payroll"
+      const monthOpts = opts.filter(o => /^\d{4}-\d{2}$/.test(o.value));
+      const sample = (monthOpts[0].textContent || '').trim();
+      const m = sample.match(/^([A-Za-z]+)\s+\d{4}(.*)$/);
+      const useShort = m && m[1].length <= 4;
+      const suffix   = m ? m[2] : '';
+
+      const count = monthOpts.length;
+      const prevValue = sel.value;
+
+      // Rebuild option list
+      sel.innerHTML = '';
+      preservedHead.forEach(o => sel.appendChild(o));
+      for (let i = 0; i < count; i++) {
+        const d = new Date(curY, curM - i, 1);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth()+1).padStart(2, '0');
+        const name = (useShort ? shortMonths : longMonths)[d.getMonth()];
+        const opt = document.createElement('option');
+        opt.value = `${yyyy}-${mm}`;
+        opt.textContent = `${name} ${yyyy}${suffix}`;
+        sel.appendChild(opt);
+      }
+
+      // Restore previous selection if it's still in the new option list
+      if (Array.from(sel.options).some(o => o.value === prevValue)) {
+        sel.value = prevValue;
+      }
+    });
+
+    // Also seed the Start Month input on the recurring-expense modal
+    const recurStart = document.getElementById('recur-start');
+    if (recurStart) {
+      const yyyy = curY;
+      const mm = String(curM + 1).padStart(2, '0');
+      recurStart.defaultValue = `${yyyy}-${mm}`;
+    }
+  } catch (e) {
+    console.warn('Month dropdown refresh failed:', e);
+  }
+})();
+
 _boot();
 
 </script>
