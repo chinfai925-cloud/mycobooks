@@ -6081,6 +6081,10 @@ function populateMonthDropdowns() {
     // Restore previous selection if it still exists in the fresh list
     if (currentValue && Array.from(sel.options).some(o => o.value === currentValue)) {
       sel.value = currentValue;
+    } else if (sel.id === 'dash-month') {
+      // Dashboard defaults to current month (instead of "All time")
+      // so users land on this month's numbers, not lifetime totals
+      sel.value = months[0].value;
     }
   });
 }
