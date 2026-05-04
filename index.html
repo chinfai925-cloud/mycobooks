@@ -1706,7 +1706,6 @@ tr:hover td { background:var(--bg); }
             <p>• <strong>E-wallet</strong> — Touch 'n Go, Boost, GrabPay etc.</p>
           </div>
         </div>
-      </div>
 
       <!-- Opening Balances — bulk entry for migration from prior books -->
       <div class="card" style="margin-top:16px;">
@@ -5738,6 +5737,7 @@ function _completeLogin(user) {
   document.getElementById('dash-date').textContent = new Date().toLocaleDateString('en-MY', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
   applyPermissions();
   setToday();
+  try { populateMonthDropdowns(); } catch(e) { console.error('populateMonthDropdowns:', e); }
   try { populateProductSelects(); } catch(e) { console.error('populateProductSelects:', e); }
   try { populateAccountSelects(); } catch(e) { console.error('populateAccountSelects:', e); }
   try { populateStatementAccounts(); } catch(e) { console.error('populateStatementAccounts:', e); }
@@ -5760,6 +5760,7 @@ function _completeLogin(user) {
     if (!DB.currentUser) DB.currentUser = user;
     applyPermissions();
     setToday();
+    populateMonthDropdowns();
     populateProductSelects();
     populateAccountSelects();
     populateStatementAccounts();
@@ -6020,6 +6021,68 @@ function setToday() {
   if (invNoEl) invNoEl.value = 'INV-2026-0' + DB.nextIds.invoices;
   invLines = [];
   renderInvLines();
+}
+
+// Refresh every month-filter <select> in the DOM so it ALWAYS contains
+// the current month and a rolling window of prior months. Without this,
+// the hardcoded month options in the HTML go stale every month.
+// Detects format from existing options ("April 2026", "Apr 2026", or
+// "April 2026 payroll") and preserves any leading non-month options like
+// "All time" / "All months".
+function populateMonthDropdowns() {
+  const now = new Date();
+  const N_MONTHS = 13; // current + 12 prior
+
+  document.querySelectorAll('select').forEach(sel => {
+    const opts = Array.from(sel.options);
+    const monthOpts = opts.filter(o => /^\d{4}-\d{2}$/.test(o.value));
+    if (monthOpts.length === 0) return;
+
+    // Detect text format from a sample option, e.g.:
+    //   "April 2026"          -> name="April",  suffix=""
+    //   "Apr 2026"            -> name="Apr",    suffix=""
+    //   "April 2026 payroll"  -> name="April",  suffix=" payroll"
+    const sample = monthOpts[0];
+    const m = sample.text.match(/^(\S+)\s+\d{4}(.*)$/);
+    if (!m) return;
+    const useShort = m[1].length === 3;
+    const suffix = m[2];
+
+    // Preserve current selection
+    const currentValue = sel.value;
+
+    // Preserve any non-month options at the start (e.g. "All time")
+    const leading = [];
+    for (const o of opts) {
+      if (/^\d{4}-\d{2}$/.test(o.value)) break;
+      leading.push({ value: o.value, text: o.text });
+    }
+
+    // Build fresh option list: current month first, then prior months
+    const months = [];
+    for (let i = 0; i < N_MONTHS; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const long = d.toLocaleString('en-US', { month: 'long' });
+      const short = d.toLocaleString('en-US', { month: 'short' });
+      months.push({
+        value: `${yyyy}-${mm}`,
+        text: `${useShort ? short : long} ${yyyy}${suffix}`
+      });
+    }
+
+    const escAttr = s => String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+    const escHtml = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    sel.innerHTML =
+      leading.map(o => `<option value="${escAttr(o.value)}">${escHtml(o.text)}</option>`).join('') +
+      months.map(o => `<option value="${escAttr(o.value)}">${escHtml(o.text)}</option>`).join('');
+
+    // Restore previous selection if it still exists in the fresh list
+    if (currentValue && Array.from(sel.options).some(o => o.value === currentValue)) {
+      sel.value = currentValue;
+    }
+  });
 }
 
 // ============================================================
