@@ -9499,9 +9499,10 @@ function toggleMembersDropdown() {
   const dd = document.getElementById('pk-members-dropdown');
   if (!dd) return;
   if (dd.style.display === 'none') {
-    dd.innerHTML = DB.staff.length === 0
+    const sortedStaff = [...DB.staff].sort((a,b)=>a.name.localeCompare(b.name, undefined, {sensitivity:'base'}));
+    dd.innerHTML = sortedStaff.length === 0
       ? '<div style="padding:10px;font-size:12px;color:var(--text3);">No staff added yet</div>'
-      : DB.staff.map(s => {
+      : sortedStaff.map(s => {
           const checked = pkSelectedMembers.includes(s.name);
           return `<label id="pk-dd-label-${s.name.replace(/\s+/g,'_')}"
             style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-radius:4px;background:${checked?'var(--green-light)':'#ffffff'};"
@@ -10308,13 +10309,14 @@ function openPackingTeamModal(id) {
   document.getElementById('pt-team-label').textContent = `Team ${row.team}`;
   document.getElementById('pt-notes').value = row.notes || '';
 
-  // Build staff checklist
+  // Build staff checklist (sorted A–Z by name, case-insensitive, for easier scanning)
   const listEl = document.getElementById('pt-staff-list');
   const selected = new Set(row.members || []);
   if (DB.staff.length === 0) {
     listEl.innerHTML = '<div style="padding:14px;font-size:12px;color:var(--text3);text-align:center;">No staff added yet. Add staff from the Payroll page first.</div>';
   } else {
-    listEl.innerHTML = DB.staff.map(s => {
+    const sortedStaff = [...DB.staff].sort((a,b)=>a.name.localeCompare(b.name, undefined, {sensitivity:'base'}));
+    listEl.innerHTML = sortedStaff.map(s => {
       const checked = selected.has(s.name);
       return `<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-radius:4px;background:${checked?'var(--green-light)':'#ffffff'};margin-bottom:2px;"
         onmouseover="if(!this.querySelector('input').checked)this.style.background='var(--bg)'"
