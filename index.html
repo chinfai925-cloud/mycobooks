@@ -1070,7 +1070,8 @@ tr:hover td { background:var(--bg); }
                 <option value="2026-02">February 2026</option>
               </select>
               <span id="pk-total" style="margin-left:auto;font-size:13px;color:var(--text2);"></span>
-              <button class="btn btn-primary btn-sm" onclick="openPackingModal()" style="margin-left:8px;">+ Record Packing</button>
+              <button class="btn btn-outline btn-sm" onclick="openBulkPackingModal()" style="margin-left:8px;" title="Enter packing data for all teams (A–E) in one spreadsheet view">📊 Bulk Entry (All Teams)</button>
+              <button class="btn btn-primary btn-sm" onclick="openPackingModal()" style="margin-left:6px;">+ Record Packing</button>
             </div>
           </div>
         </div>
@@ -1705,6 +1706,7 @@ tr:hover td { background:var(--bg); }
             <p>• <strong>E-wallet</strong> — Touch 'n Go, Boost, GrabPay etc.</p>
           </div>
         </div>
+      </div>
 
       <!-- Opening Balances — bulk entry for migration from prior books -->
       <div class="card" style="margin-top:16px;">
@@ -2219,6 +2221,68 @@ tr:hover td { background:var(--bg); }
   </div>
 </div>
 
+<!-- BULK Packing Modal — enter all teams (A–E) for one date in a spreadsheet -->
+<div class="modal-backdrop" id="modal-packing-bulk">
+  <div class="modal" style="width:min(1180px, 96vw);max-height:92vh;">
+    <div class="modal-head">
+      <span class="modal-title">📊 Bulk Record Packing — All Teams (A–E)</span>
+      <button class="modal-close" onclick="closeModal('modal-packing-bulk')">×</button>
+    </div>
+    <div class="modal-body" style="overflow-y:auto;">
+      <!-- Header row: date + notes -->
+      <div class="form-grid form-grid-2" style="margin-bottom:12px;">
+        <div class="form-group"><label>Date</label><input type="date" id="bpk-date"></div>
+        <div class="form-group"><label>Notes <span style="font-weight:400;color:var(--text3);">(applies to all teams)</span></label>
+          <input type="text" id="bpk-notes" placeholder="Shift notes, issues, etc.">
+        </div>
+      </div>
+
+      <!-- Team rosters preview -->
+      <div style="background:var(--bg);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;">
+        <div style="font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Team Members <span style="font-weight:400;color:var(--text3);text-transform:none;letter-spacing:0;">(auto-loaded from saved rosters · manage in Harvest → Manage Teams)</span></div>
+        <div id="bpk-rosters" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;font-size:12px;"></div>
+      </div>
+
+      <!-- Spreadsheet -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <label style="font-size:12px;font-weight:500;color:var(--text2);">Packing Lines — enter qty (packs) per team</label>
+        <button class="btn btn-outline btn-sm" onclick="addBulkPkRow()">+ Add Row</button>
+      </div>
+      <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-sm);">
+        <table id="bpk-table" style="width:100%;border-collapse:collapse;font-size:12px;min-width:980px;">
+          <thead>
+            <tr style="background:var(--bg);">
+              <th style="padding:8px 8px;text-align:left;font-size:11px;font-weight:600;color:var(--text2);border-bottom:1px solid var(--border);min-width:170px;">Customer</th>
+              <th style="padding:8px 8px;text-align:left;font-size:11px;font-weight:600;color:var(--text2);border-bottom:1px solid var(--border);min-width:200px;">Product</th>
+              <th style="padding:8px 8px;text-align:left;font-size:11px;font-weight:600;color:var(--text2);border-bottom:1px solid var(--border);width:110px;">Pack Size</th>
+              <th style="padding:8px 6px;text-align:center;font-size:11px;font-weight:600;color:var(--text2);border-bottom:1px solid var(--border);width:70px;background:#fef3c7;">A</th>
+              <th style="padding:8px 6px;text-align:center;font-size:11px;font-weight:600;color:var(--text2);border-bottom:1px solid var(--border);width:70px;background:#dbeafe;">B</th>
+              <th style="padding:8px 6px;text-align:center;font-size:11px;font-weight:600;color:var(--text2);border-bottom:1px solid var(--border);width:70px;background:#dcfce7;">C</th>
+              <th style="padding:8px 6px;text-align:center;font-size:11px;font-weight:600;color:var(--text2);border-bottom:1px solid var(--border);width:70px;background:#fce7f3;">D</th>
+              <th style="padding:8px 6px;text-align:center;font-size:11px;font-weight:600;color:var(--text2);border-bottom:1px solid var(--border);width:70px;background:#ede9fe;">E</th>
+              <th style="padding:8px 8px;text-align:right;font-size:11px;font-weight:600;color:var(--text2);border-bottom:1px solid var(--border);width:90px;">Row Total</th>
+              <th style="width:32px;border-bottom:1px solid var(--border);"></th>
+            </tr>
+          </thead>
+          <tbody id="bpk-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- Per-team totals -->
+      <div style="margin-top:12px;padding:10px 14px;background:var(--green-light);border-radius:var(--radius-sm);">
+        <div style="font-size:11px;font-weight:600;color:var(--green);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Per-Team Totals</div>
+        <div id="bpk-team-totals" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;font-family:'DM Mono',monospace;font-size:12px;"></div>
+        <div id="bpk-grand-total" style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--green-mid);font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:var(--green);text-align:right;">Grand Total: 0 packs · 0.00 kg</div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-outline" onclick="closeModal('modal-packing-bulk')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveBulkPacking()">Save All Teams</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Harvest Modal -->
 <div class="modal-backdrop" id="modal-harvest">
   <div class="modal" style="width:520px;">
@@ -2420,7 +2484,7 @@ tr:hover td { background:var(--bg); }
         <div class="form-group"><label>Default Account</label>
           <select id="recur-account" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
         </div>
-        <div class="form-group"><label>Start Month</label><input type="month" id="recur-start"></div>
+        <div class="form-group"><label>Start Month</label><input type="month" id="recur-start" value="2026-04"></div>
         <div class="form-group"><label>End Month <span style="font-weight:400;color:var(--text3);">(optional)</span></label><input type="month" id="recur-end" placeholder="Leave blank = no end"></div>
         <div class="form-group" style="grid-column:1/-1;"><label>Notes <span style="font-weight:400;color:var(--text3);">(optional)</span></label><input type="text" id="recur-notes" placeholder="e.g. Office unit A-12-3"></div>
       </div>
@@ -9330,9 +9394,10 @@ function getTeamRoster(team) {
 }
 
 const PK_PACK_SIZES = [
-  {label:'150g', val:0.15},{label:'200g',val:0.2},{label:'250g',val:0.25},
-  {label:'300g',val:0.3},{label:'500g',val:0.5},{label:'1 kg',val:1},
-  {label:'2 kg',val:2},{label:'5 kg',val:5},{label:'Custom',val:'custom'}
+  {label:'50g', val:0.05},{label:'100g',val:0.1},{label:'150g', val:0.15},
+  {label:'200g',val:0.2},{label:'250g',val:0.25},{label:'300g',val:0.3},
+  {label:'500g',val:0.5},{label:'1 kg',val:1},{label:'2 kg',val:2},
+  {label:'5 kg',val:5},{label:'Custom',val:'custom'}
 ];
 
 function loadTeamDefaults(team) {
@@ -9792,6 +9857,281 @@ function savePacking() {
     showToast(`Packing saved — ${totalPacks} packs · ${totalKg.toFixed(2)} kg`);
   }
   closeModal('modal-packing');
+  renderPacking();
+}
+
+// =================================================================
+// BULK PACKING ENTRY — enter packing for all teams (A–E) on a single
+// date in one spreadsheet view. Each row = (Customer × Product × PackSize)
+// with one qty cell per team. On save, one packing record is created
+// per team that has any non-zero qty (members auto-loaded from roster).
+// =================================================================
+const BPK_TEAMS = ['A','B','C','D','E'];
+let bpkRows = []; // [{ id, customer, product, packSize, customSize, qtyA, qtyB, qtyC, qtyD, qtyE }]
+
+function openBulkPackingModal() {
+  bpkRows = [];
+  document.getElementById('bpk-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('bpk-notes').value = '';
+  renderBpkRosters();
+  addBulkPkRow();
+  addBulkPkRow();
+  addBulkPkRow();
+  renderBpkTable();
+  openModal('modal-packing-bulk');
+}
+
+function renderBpkRosters() {
+  const el = document.getElementById('bpk-rosters');
+  if (!el) return;
+  el.innerHTML = BPK_TEAMS.map(t => {
+    const roster = getTeamRoster(t);
+    const tagColor = {A:'#fef3c7',B:'#dbeafe',C:'#dcfce7',D:'#fce7f3',E:'#ede9fe'}[t];
+    const txtColor = {A:'#92400e',B:'#1e40af',C:'#166534',D:'#9d174d',E:'#5b21b6'}[t];
+    return `
+      <div style="background:${tagColor};border-radius:6px;padding:6px 10px;">
+        <div style="font-weight:700;color:${txtColor};font-size:11px;margin-bottom:3px;">Team ${t}</div>
+        <div style="color:var(--text2);font-size:11px;line-height:1.4;">${roster.length ? roster.join(', ') : '<span style="color:var(--text3);font-style:italic;">No roster saved</span>'}</div>
+      </div>`;
+  }).join('');
+}
+
+function addBulkPkRow() {
+  const id = Date.now() + Math.random();
+  bpkRows.push({
+    id, customer:'', product:'', packSize:0.5, customSize:'',
+    qtyA:'', qtyB:'', qtyC:'', qtyD:'', qtyE:''
+  });
+  renderBpkTable();
+}
+
+function removeBulkPkRow(id) {
+  bpkRows = bpkRows.filter(r => r.id !== id);
+  if (bpkRows.length === 0) addBulkPkRow();
+  renderBpkTable();
+}
+
+function setBpkField(id, field, val) {
+  const row = bpkRows.find(r => r.id === id);
+  if (!row) return;
+  row[field] = val;
+  // Auto-fill pack size from product weight
+  if (field === 'product' && val) {
+    const prod = DB.products.find(p => p.name === val);
+    if (prod && prod.weight > 0) {
+      const presetVals = PK_PACK_SIZES.filter(s => s.val !== 'custom').map(s => parseFloat(s.val));
+      if (presetVals.includes(parseFloat(prod.weight))) {
+        row.packSize = parseFloat(prod.weight);
+        row.customSize = '';
+      } else {
+        row.packSize = 'custom';
+        row.customSize = prod.weight;
+      }
+    }
+    renderBpkTable();
+    return;
+  }
+  if (field === 'packSize') {
+    renderBpkTable();
+    return;
+  }
+  // For qty / customSize changes, just recompute totals without full re-render
+  recalcBpkTotals();
+}
+
+function getBpkRowSize(row) {
+  return row.packSize === 'custom' ? (parseFloat(row.customSize) || 0) : (parseFloat(row.packSize) || 0);
+}
+
+function recalcBpkTotals() {
+  // Per-row totals
+  bpkRows.forEach(r => {
+    const size = getBpkRowSize(r);
+    const totalPacks = BPK_TEAMS.reduce((s,t)=>s+(parseInt(r['qty'+t])||0), 0);
+    const totalKg = totalPacks * size;
+    const cell = document.getElementById(`bpk-rowtotal-${r.id}`);
+    if (cell) cell.textContent = totalPacks > 0 ? `${totalPacks} · ${totalKg.toFixed(2)}kg` : '—';
+  });
+  // Per-team totals
+  const teamEl = document.getElementById('bpk-team-totals');
+  if (teamEl) {
+    let grandPacks = 0, grandKg = 0;
+    teamEl.innerHTML = BPK_TEAMS.map(t => {
+      let packs = 0, kg = 0;
+      bpkRows.forEach(r => {
+        const q = parseInt(r['qty'+t]) || 0;
+        if (q > 0) {
+          packs += q;
+          kg += q * getBpkRowSize(r);
+        }
+      });
+      grandPacks += packs;
+      grandKg += kg;
+      const tagColor = {A:'#fef3c7',B:'#dbeafe',C:'#dcfce7',D:'#fce7f3',E:'#ede9fe'}[t];
+      const txtColor = {A:'#92400e',B:'#1e40af',C:'#166534',D:'#9d174d',E:'#5b21b6'}[t];
+      return `<div style="background:${tagColor};border-radius:4px;padding:5px 8px;color:${txtColor};">
+        <strong>${t}:</strong> ${packs} packs · ${kg.toFixed(2)} kg
+      </div>`;
+    }).join('');
+    const grandEl = document.getElementById('bpk-grand-total');
+    if (grandEl) grandEl.textContent = `Grand Total: ${grandPacks} packs · ${grandKg.toFixed(2)} kg`;
+  }
+}
+
+function renderBpkTable() {
+  const tbody = document.getElementById('bpk-tbody');
+  if (!tbody) return;
+
+  if (bpkRows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="10" style="padding:20px;text-align:center;font-size:12px;color:var(--text3);">No rows yet — click "+ Add Row"</td></tr>`;
+    return;
+  }
+
+  const teamBg = {A:'#fffbeb',B:'#eff6ff',C:'#f0fdf4',D:'#fdf2f8',E:'#f5f3ff'};
+
+  tbody.innerHTML = bpkRows.map(r => {
+    // Customer dropdown
+    const custInList = DB.customers.some(c => c.name === r.customer);
+    const custControl = (custInList || !r.customer)
+      ? `<select style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:#fff;"
+           onchange="if(this.value==='__new__'){setBpkField(${r.id},'customer','');renderBpkTable();}else{setBpkField(${r.id},'customer',this.value);}">
+           <option value="">— Customer —</option>
+           ${DB.customers.map(c=>`<option value="${c.name}"${c.name===r.customer?' selected':''}>${c.name}</option>`).join('')}
+           <option value="__new__"${!r.customer?' selected':''}>+ Type new...</option>
+         </select>
+         ${!r.customer?`<input type="text" placeholder="New customer" style="width:100%;margin-top:3px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;" oninput="setBpkField(${r.id},'customer',this.value)">`:''}`
+      : `<input type="text" value="${r.customer}" style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;" oninput="setBpkField(${r.id},'customer',this.value)">`;
+
+    // Product dropdown
+    const prodInList = DB.products.some(p => p.name === r.product);
+    const prodControl = (prodInList || !r.product)
+      ? `<select style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:#fff;"
+           onchange="if(this.value==='__new__'){setBpkField(${r.id},'product','');renderBpkTable();}else{setBpkField(${r.id},'product',this.value);}">
+           <option value="">— Product —</option>
+           ${DB.products.map(p=>`<option value="${p.name}"${p.name===r.product?' selected':''}>${p.name}</option>`).join('')}
+           <option value="__new__"${!r.product?' selected':''}>+ Type new...</option>
+         </select>
+         ${!r.product?`<input type="text" placeholder="New product" style="width:100%;margin-top:3px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;" oninput="setBpkField(${r.id},'product',this.value)">`:''}`
+      : `<input type="text" value="${r.product}" style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;" oninput="setBpkField(${r.id},'product',this.value)">`;
+
+    // Pack size
+    const sizeOpts = PK_PACK_SIZES.map(s=>`<option value="${s.val}"${String(r.packSize)===String(s.val)?' selected':''}>${s.label}</option>`).join('');
+    const isCustom = r.packSize === 'custom';
+    const sizeControl = `<select style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:4px;font-size:11px;font-family:inherit;background:#fff;"
+        onchange="setBpkField(${r.id},'packSize',this.value)">${sizeOpts}</select>
+        ${isCustom?`<input type="number" value="${r.customSize||''}" placeholder="kg" min="0" step="0.01"
+          style="width:100%;margin-top:3px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;font-size:11px;"
+          oninput="setBpkField(${r.id},'customSize',this.value)">`:''}`;
+
+    // Qty cells per team
+    const qtyCells = BPK_TEAMS.map(t => `
+      <td style="padding:4px 4px;text-align:center;background:${teamBg[t]};">
+        <input type="number" value="${r['qty'+t]}" placeholder="0" min="0"
+          style="width:56px;padding:5px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:center;background:#fff;"
+          oninput="setBpkField(${r.id},'qty${t}',this.value)">
+      </td>`).join('');
+
+    return `<tr>
+      <td style="padding:5px 6px;border-bottom:1px solid var(--border);vertical-align:top;">${custControl}</td>
+      <td style="padding:5px 6px;border-bottom:1px solid var(--border);vertical-align:top;">${prodControl}</td>
+      <td style="padding:5px 6px;border-bottom:1px solid var(--border);vertical-align:top;">${sizeControl}</td>
+      ${qtyCells}
+      <td style="padding:5px 8px;text-align:right;font-family:'DM Mono',monospace;font-size:11px;font-weight:600;color:var(--green);border-bottom:1px solid var(--border);vertical-align:top;" id="bpk-rowtotal-${r.id}">—</td>
+      <td style="padding:5px 4px;text-align:center;border-bottom:1px solid var(--border);vertical-align:top;">
+        <button onclick="removeBulkPkRow(${r.id})" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;line-height:1;" title="Remove row">×</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  recalcBpkTotals();
+}
+
+function saveBulkPacking() {
+  const date = document.getElementById('bpk-date').value;
+  if (!date) { showToast('Please select a date', 'error'); return; }
+  const notes = document.getElementById('bpk-notes').value;
+
+  // Validate: every row that has any qty must have customer + product
+  const usedRows = bpkRows.filter(r => BPK_TEAMS.some(t => (parseInt(r['qty'+t])||0) > 0));
+  if (usedRows.length === 0) {
+    showToast('Enter at least one quantity for any team', 'error'); return;
+  }
+  for (const r of usedRows) {
+    if (!r.customer || !r.customer.trim()) {
+      showToast('Every row with quantities needs a customer', 'error'); return;
+    }
+    if (!r.product || !r.product.trim()) {
+      showToast('Every row with quantities needs a product', 'error'); return;
+    }
+    const size = getBpkRowSize(r);
+    if (size <= 0) {
+      showToast(`Row "${r.product}" — pack size must be > 0`, 'error'); return;
+    }
+  }
+
+  // Build one packing record per team that has data
+  const created = [];
+  BPK_TEAMS.forEach(team => {
+    const teamLines = [];
+    usedRows.forEach(r => {
+      const q = parseInt(r['qty'+team]) || 0;
+      if (q <= 0) return;
+      const size = getBpkRowSize(r);
+      teamLines.push({
+        id: Date.now() + Math.random(),
+        customer: r.customer.trim(),
+        product: r.product.trim(),
+        packSize: r.packSize,
+        customSize: r.packSize === 'custom' ? parseFloat(r.customSize) : undefined,
+        qty: q,
+        totalKg: parseFloat((q * size).toFixed(3)),
+      });
+    });
+    if (teamLines.length === 0) return;
+
+    // Group lines by customer → orders[]
+    const byCust = {};
+    teamLines.forEach(l => {
+      if (!byCust[l.customer]) byCust[l.customer] = [];
+      byCust[l.customer].push({
+        id: l.id,
+        product: l.product,
+        packSize: l.packSize,
+        customSize: l.customSize,
+        qty: l.qty,
+        totalKg: l.totalKg,
+      });
+    });
+    const orders = Object.keys(byCust).map(custName => ({
+      id: Date.now() + Math.random(),
+      customer: custName,
+      lines: byCust[custName],
+    }));
+
+    const totalPacks = teamLines.reduce((s,l)=>s+l.qty, 0);
+    const totalKg = teamLines.reduce((s,l)=>s+l.totalKg, 0);
+
+    const rec = {
+      id: DB.nextIds.packings++,
+      date,
+      team,
+      members: getTeamRoster(team),
+      notes,
+      orders,
+      packs: totalPacks,
+      totalKg: parseFloat(totalKg.toFixed(3)),
+      soId: null,
+      soOrderNo: null,
+      dispatchTeamId: null,
+    };
+    DB.packings.unshift(rec);
+    if (typeof sbPersist === 'function') sbPersist('packings', rec);
+    created.push({team, packs: totalPacks, kg: totalKg});
+  });
+
+  const summary = created.map(c => `${c.team}: ${c.packs}p`).join(' · ');
+  showToast(`✓ Saved ${created.length} team record${created.length>1?'s':''} — ${summary}`);
+  closeModal('modal-packing-bulk');
   renderPacking();
 }
 
@@ -11100,8 +11440,7 @@ function openRecurringModal(id) {
   } else {
     ['recur-desc','recur-supplier','recur-amount','recur-end','recur-notes'].forEach(i=>document.getElementById(i).value='');
     document.getElementById('recur-day').value   = '1';
-    const _now = new Date();
-    document.getElementById('recur-start').value = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}`;
+    document.getElementById('recur-start').value = '2026-04';
   }
   openModal('modal-recurring');
 }
@@ -22167,86 +22506,6 @@ async function _boot() {
     _watchAuthState();
   }
 }
-// ============================================================
-// Auto-refresh hardcoded month dropdowns to a sliding window
-// ending at the current month. The static HTML option lists
-// were authored in April 2026 and won't update on their own.
-// ============================================================
-(function refreshMonthDropdowns() {
-  try {
-    const today = new Date();
-    const curY = today.getFullYear();
-    const curM = today.getMonth(); // 0-indexed
-    const longMonths  = ['January','February','March','April','May','June',
-                         'July','August','September','October','November','December'];
-    const shortMonths = ['Jan','Feb','Mar','Apr','May','Jun',
-                         'Jul','Aug','Sep','Oct','Nov','Dec'];
-
-    document.querySelectorAll('select').forEach(sel => {
-      const opts = Array.from(sel.options);
-      // Only touch selects whose options use YYYY-MM values
-      const hasMonthOpts = opts.some(o => /^\d{4}-\d{2}$/.test(o.value));
-      if (!hasMonthOpts) return;
-
-      // Preserve any leading non-month options (e.g. "All months", "All time")
-      const preservedHead = [];
-      for (const o of opts) {
-        if (/^\d{4}-\d{2}$/.test(o.value)) break;
-        preservedHead.push(o.cloneNode(true));
-      }
-
-      // Match the original label format (long "April 2026" vs short "Apr 2026")
-      // and capture any trailing suffix like " payroll"
-      const monthOpts = opts.filter(o => /^\d{4}-\d{2}$/.test(o.value));
-      const sample = (monthOpts[0].textContent || '').trim();
-      const m = sample.match(/^([A-Za-z]+)\s+\d{4}(.*)$/);
-      const useShort = m && m[1].length <= 4;
-      const suffix   = m ? m[2] : '';
-
-      const count = monthOpts.length;
-      const prevValue = sel.value;
-
-      // Rebuild option list
-      sel.innerHTML = '';
-      preservedHead.forEach(o => sel.appendChild(o));
-      for (let i = 0; i < count; i++) {
-        const d = new Date(curY, curM - i, 1);
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth()+1).padStart(2, '0');
-        const name = (useShort ? shortMonths : longMonths)[d.getMonth()];
-        const opt = document.createElement('option');
-        opt.value = `${yyyy}-${mm}`;
-        opt.textContent = `${name} ${yyyy}${suffix}`;
-        sel.appendChild(opt);
-      }
-
-      // Restore previous selection if it's still in the new option list
-      if (Array.from(sel.options).some(o => o.value === prevValue)) {
-        sel.value = prevValue;
-      }
-    });
-
-    // Also seed the Start Month input on the recurring-expense modal
-    const recurStart = document.getElementById('recur-start');
-    if (recurStart) {
-      const yyyy = curY;
-      const mm = String(curM + 1).padStart(2, '0');
-      recurStart.defaultValue = `${yyyy}-${mm}`;
-    }
-
-    // Default the dashboard month filter to the current month
-    // (instead of "All time", so KPIs reflect the current period out of the box)
-    const dashMonth = document.getElementById('dash-month');
-    if (dashMonth) {
-      const yyyy = curY;
-      const mm = String(curM + 1).padStart(2, '0');
-      dashMonth.value = `${yyyy}-${mm}`;
-    }
-  } catch (e) {
-    console.warn('Month dropdown refresh failed:', e);
-  }
-})();
-
 _boot();
 
 </script>
