@@ -4264,10 +4264,25 @@ try {
         autoRefreshToken: true,
         detectSessionInUrl: true,   // for password-reset redirect
         storageKey: 'mycobooks_auth',
+        // Use sessionStorage instead of the default localStorage so the
+        // session is wiped when the browser tab is closed. Refreshing the
+        // tab still keeps the user logged in (sessionStorage survives
+        // refresh in the same tab).
+        storage: window.sessionStorage,
       }
     });
   }
 } catch(e) { console.warn('Supabase Auth client init failed:', e); }
+
+// Migrate away from any stale localStorage auth tokens left over from the
+// previous (persistent) auth setup, so closed-tab semantics work cleanly.
+try {
+  Object.keys(localStorage).forEach(k => {
+    if (k === 'mycobooks_auth' || k.startsWith('sb-') && k.endsWith('-auth-token')) {
+      localStorage.removeItem(k);
+    }
+  });
+} catch(e) {}
 
 const SB = {
   async req(method, path, body) {
@@ -5768,6 +5783,7 @@ function _completeLogin(user) {
     if (typeof applyCurrencyLabels === 'function') applyCurrencyLabels();
     if (typeof applyTradingOnlyMode === 'function') applyTradingOnlyMode();
     startAutoSave();
+    startIdleTracking();
   });
 }
 
@@ -5808,14 +5824,66 @@ async function doLogin() {
 }
 
 async function doLogout() {
+  // Set currentUser=null FIRST so the SIGNED_OUT handler in _watchAuthState
+  // doesn't fire its "Session expired" toast on a deliberate logout.
+  DB.currentUser = null;
+  stopIdleTracking();
   try {
     if (sbAuth && !EMERGENCY_BYPASS) await sbAuth.auth.signOut();
   } catch(e) { console.warn('signOut error:', e); }
-  DB.currentUser = null;
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-user').value = '';
   document.getElementById('login-pass').value = '';
+}
+
+// =========================================================
+// IDLE TIMEOUT — auto-logout after 5 min of no user activity
+// =========================================================
+const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+let _idleTimerId = null;
+const _idleEvents = ['mousemove','mousedown','keydown','touchstart','scroll','wheel'];
+
+function _onIdleActivity() {
+  if (!DB.currentUser) return;
+  if (_idleTimerId) clearTimeout(_idleTimerId);
+  _idleTimerId = setTimeout(_idleLogout, IDLE_TIMEOUT_MS);
+}
+
+async function _idleLogout() {
+  if (!DB.currentUser) return;
+  // Show the message FIRST so it's visible while doLogout swaps screens.
+  showToast('Logged out — inactive for 5 minutes', 'error');
+  await doLogout();
+}
+
+function startIdleTracking() {
+  stopIdleTracking(); // ensure no double-binding
+  _idleEvents.forEach(evt => {
+    window.addEventListener(evt, _onIdleActivity, { passive: true });
+  });
+  // Cross-tab sign-in/out propagation: if another tab logs out, this one
+  // does too. (sessionStorage is per-tab, so this only matters for the
+  // legacy localStorage path; harmless to keep.)
+  window.addEventListener('storage', _onStorageEvent);
+  _onIdleActivity(); // start the timer
+}
+
+function stopIdleTracking() {
+  if (_idleTimerId) { clearTimeout(_idleTimerId); _idleTimerId = null; }
+  _idleEvents.forEach(evt => {
+    window.removeEventListener(evt, _onIdleActivity);
+  });
+  window.removeEventListener('storage', _onStorageEvent);
+}
+
+function _onStorageEvent(e) {
+  // If the auth key disappears in another tab while we're logged in here,
+  // mirror the logout. (Best-effort; sessionStorage isn't shared across
+  // tabs, so this primarily catches manual localStorage tampering.)
+  if (e.key === 'mycobooks_auth' && e.newValue === null && DB.currentUser) {
+    doLogout();
+  }
 }
 
 // Forgot password — sends reset email via Supabase Auth
