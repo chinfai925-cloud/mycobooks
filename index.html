@@ -9956,11 +9956,37 @@ function renderBpkRosters() {
     const tagColor = {A:'#fef3c7',B:'#dbeafe',C:'#dcfce7',D:'#fce7f3',E:'#ede9fe'}[t];
     const txtColor = {A:'#92400e',B:'#1e40af',C:'#166534',D:'#9d174d',E:'#5b21b6'}[t];
     return `
-      <div style="background:${tagColor};border-radius:6px;padding:6px 10px;">
-        <div style="font-weight:700;color:${txtColor};font-size:11px;margin-bottom:3px;">Team ${t}</div>
-        <div style="color:var(--text2);font-size:11px;line-height:1.4;">${roster.length ? roster.join(', ') : '<span style="color:var(--text3);font-style:italic;">No roster saved</span>'}</div>
+      <div onclick="openTeamRosterFromBulk('${t}')" title="Click to edit Team ${t} members"
+           style="background:${tagColor};border-radius:6px;padding:6px 10px;cursor:pointer;transition:transform 0.1s, box-shadow 0.1s;"
+           onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 2px 6px rgba(0,0,0,0.08)';"
+           onmouseout="this.style.transform='';this.style.boxShadow='';">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;">
+          <div style="font-weight:700;color:${txtColor};font-size:11px;">Team ${t}</div>
+          <span style="font-size:10px;color:${txtColor};opacity:0.6;">✎ edit</span>
+        </div>
+        <div style="color:var(--text2);font-size:11px;line-height:1.4;">${roster.length ? roster.join(', ') : '<span style="color:var(--text3);font-style:italic;">No roster — click to add</span>'}</div>
       </div>`;
   }).join('');
+}
+
+// Open team roster editor from the bulk packing modal. Creates a packingTeams
+// row on the fly if one doesn't exist yet for that team letter, so users can
+// edit the roster of any team (A–E) regardless of whether it was set up before.
+function openTeamRosterFromBulk(team) {
+  let row = (DB.packingTeams || []).find(r => r.team === team);
+  if (!row) {
+    if (!DB.packingTeams) DB.packingTeams = [];
+    if (!DB.nextIds) DB.nextIds = {};
+    if (!DB.nextIds.packingTeams) DB.nextIds.packingTeams = 1;
+    row = { id: DB.nextIds.packingTeams++, team, members: [], notes: '' };
+    DB.packingTeams.push(row);
+    if (typeof sbPersist === 'function') sbPersist('packingTeams', row);
+  }
+  openPackingTeamModal(row.id);
+  // The bulk packing modal sits later in the DOM than the team edit modal,
+  // so without a z-index bump the team modal would open BEHIND it. Lift it.
+  const tm = document.getElementById('modal-packing-team');
+  if (tm) tm.style.zIndex = '200';
 }
 
 function addBulkPkRow() {
@@ -10057,13 +10083,17 @@ function renderBpkTable() {
   const teamBg = {A:'#fffbeb',B:'#eff6ff',C:'#f0fdf4',D:'#fdf2f8',E:'#f5f3ff'};
 
   tbody.innerHTML = bpkRows.map(r => {
+    // Sort customers and products alphabetically (case-insensitive) — easier to scan when picking
+    const sortedCustomers = [...DB.customers].sort((a,b)=>a.name.localeCompare(b.name, undefined, {sensitivity:'base'}));
+    const sortedProducts  = [...DB.products].sort((a,b)=>a.name.localeCompare(b.name, undefined, {sensitivity:'base'}));
+
     // Customer dropdown
     const custInList = DB.customers.some(c => c.name === r.customer);
     const custControl = (custInList || !r.customer)
       ? `<select style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:#fff;"
            onchange="if(this.value==='__new__'){setBpkField(${r.id},'customer','');renderBpkTable();}else{setBpkField(${r.id},'customer',this.value);}">
            <option value="">— Customer —</option>
-           ${DB.customers.map(c=>`<option value="${c.name}"${c.name===r.customer?' selected':''}>${c.name}</option>`).join('')}
+           ${sortedCustomers.map(c=>`<option value="${c.name}"${c.name===r.customer?' selected':''}>${c.name}</option>`).join('')}
            <option value="__new__"${!r.customer?' selected':''}>+ Type new...</option>
          </select>
          ${!r.customer?`<input type="text" placeholder="New customer" style="width:100%;margin-top:3px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;" oninput="setBpkField(${r.id},'customer',this.value)">`:''}`
@@ -10075,7 +10105,7 @@ function renderBpkTable() {
       ? `<select style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:#fff;"
            onchange="if(this.value==='__new__'){setBpkField(${r.id},'product','');renderBpkTable();}else{setBpkField(${r.id},'product',this.value);}">
            <option value="">— Product —</option>
-           ${DB.products.map(p=>`<option value="${p.name}"${p.name===r.product?' selected':''}>${p.name}</option>`).join('')}
+           ${sortedProducts.map(p=>`<option value="${p.name}"${p.name===r.product?' selected':''}>${p.name}</option>`).join('')}
            <option value="__new__"${!r.product?' selected':''}>+ Type new...</option>
          </select>
          ${!r.product?`<input type="text" placeholder="New product" style="width:100%;margin-top:3px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;" oninput="setBpkField(${r.id},'product',this.value)">`:''}`
@@ -10321,6 +10351,8 @@ function savePackingTeam() {
   closeModal('modal-packing-team');
   editingPackingTeamId = null;
   renderPackingTeams();
+  // If the bulk packing modal is open, refresh its roster preview cards
+  if (typeof renderBpkRosters === 'function') renderBpkRosters();
 }
 
 function renderPackingSummary() {
